@@ -705,7 +705,6 @@ function renderMeta(dashboard) {
   const updatedAt = meta.generated_at ? new Date(meta.generated_at) : null;
   document.getElementById("updatedAt").textContent =
     updatedAt && !Number.isNaN(updatedAt.valueOf()) ? updatedAt.toLocaleString("ja-JP") : "-";
-  document.getElementById("sourceWorkbook").textContent = meta.source_workbook ?? "-";
   document.getElementById("totalRecords").textContent = formatCount(meta.record_count ?? state.records.length);
   document.getElementById("wamMatchedCount").textContent = formatCount(matchSummary.matched_record_count ?? 0);
 }
