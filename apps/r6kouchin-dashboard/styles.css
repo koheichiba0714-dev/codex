@@ -221,7 +221,8 @@ h2[id] {
 }
 
 .panel-main,
-.panel-side,
+.filter-launch-panel,
+.explain-panel,
 .insight-panel,
 .benchmark-panel,
 .detail-panel,
@@ -233,19 +234,12 @@ h2[id] {
   min-width: 0;
 }
 
-.panel-main {
-  grid-column: 1;
-}
-
-.filters-panel {
-  grid-column: 2;
-  position: sticky;
-  top: 20px;
-}
-
+.filter-launch-panel,
+.panel-main,
 .insight-panel,
 .strategy-panel,
 .benchmark-panel,
+.explain-panel,
 .charts-panel,
 .table-panel,
 .notes-panel {
@@ -285,8 +279,9 @@ h2[id] {
   font-size: 0.85rem;
 }
 
+.filter-launch-panel,
 .panel-main,
-.filters-panel,
+.explain-panel,
 .insight-panel,
 .strategy-panel,
 .benchmark-panel,
@@ -298,8 +293,9 @@ h2[id] {
   display: grid;
 }
 
+.filter-launch-panel > :not(.panel-head),
 .panel-main > :not(.panel-head),
-.filters-panel > :not(.panel-head),
+.explain-panel > :not(.panel-head),
 .insight-panel > :not(.panel-head),
 .strategy-panel > :not(.panel-head),
 .benchmark-panel > :not(.panel-head),
@@ -309,6 +305,41 @@ h2[id] {
 .table-panel > :not(.panel-head),
 .notes-panel > :not(.panel-head) {
   padding: 14px 16px 16px;
+}
+
+.panel-head-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.filter-launch-body {
+  display: grid;
+  gap: 12px;
+}
+
+.filter-summary-stack {
+  display: grid;
+  gap: 8px;
+}
+
+.active-filter-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.active-filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: var(--panel-subtle);
+  border: 1px solid var(--line);
+  font-size: 0.82rem;
+  color: var(--text);
 }
 
 .filters-stack {
@@ -391,6 +422,10 @@ th button:focus,
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.dialog-toggle-row {
+  padding-top: 2px;
 }
 
 .toggle,
@@ -485,7 +520,63 @@ th button,
   gap: 12px;
 }
 
+.term-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.filters-dialog {
+  width: min(980px, calc(100vw - 32px));
+  max-height: calc(100vh - 40px);
+  padding: 0;
+  border: none;
+  border-radius: 12px;
+  background: transparent;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.2);
+}
+
+.filters-dialog::backdrop {
+  background: rgba(17, 22, 27, 0.48);
+  backdrop-filter: blur(2px);
+}
+
+.filters-dialog-shell {
+  display: grid;
+  gap: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+}
+
+.dialog-head,
+.dialog-actions {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 18px;
+  background: var(--panel-subtle);
+}
+
+.dialog-head {
+  border-bottom: 1px solid var(--line);
+}
+
+.dialog-actions {
+  border-top: 1px solid var(--line);
+  align-items: center;
+}
+
+.dialog-body {
+  max-height: min(68vh, 760px);
+  overflow: auto;
+  padding: 16px 18px 18px;
+}
+
 .insight-card,
+.term-card,
 .strategy-item,
 .benchmark-item,
 .chart-card,
@@ -502,7 +593,12 @@ th button,
   padding: 14px;
 }
 
+.term-card {
+  padding: 14px;
+}
+
 .insight-card h3,
+.term-card h3,
 .benchmark-item h3,
 .strategy-column h3,
 .chart-card h3,
@@ -513,6 +609,7 @@ th button,
 }
 
 .insight-card p,
+.term-card p,
 .benchmark-item p,
 .strategy-item p,
 .anomaly-card p,
@@ -948,6 +1045,10 @@ td.numeric {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
+  .term-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .chart-grid-primary {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -977,7 +1078,8 @@ td.numeric {
   .anomaly-grid,
   .detail-grid,
   .detail-kpi-grid,
-  .insight-grid {
+  .insight-grid,
+  .term-grid {
     grid-template-columns: 1fr;
   }
 
@@ -986,7 +1088,8 @@ td.numeric {
   }
 
   .panel-main,
-  .filters-panel,
+  .filter-launch-panel,
+  .explain-panel,
   .insight-panel,
   .strategy-panel,
   .benchmark-panel,
@@ -1003,6 +1106,9 @@ td.numeric {
 @media (max-width: 780px) {
   .topbar,
   .panel-head,
+  .panel-head-actions,
+  .dialog-head,
+  .dialog-actions,
   .detail-hero,
   .scatter-meta,
   .pagination-row {
@@ -1018,8 +1124,25 @@ td.numeric {
     width: 100%;
   }
 
+  .panel-head-actions > *,
+  .dialog-actions > * {
+    width: 100%;
+  }
+
   .workspace {
     padding: 12px;
+  }
+
+  .filters-dialog {
+    width: calc(100vw - 16px);
+    max-height: calc(100vh - 16px);
+  }
+
+  .dialog-body,
+  .dialog-head,
+  .dialog-actions {
+    padding-left: 14px;
+    padding-right: 14px;
   }
 
   th,

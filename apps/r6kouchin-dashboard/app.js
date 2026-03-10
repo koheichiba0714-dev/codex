@@ -51,27 +51,26 @@ const FILTER_PRESETS = {
     wamOnly: true,
     staffingOutlier: "high",
   },
+  "work-shortage": {
+    workShortageRisk: "likely",
+  },
   unanswered: {
     responseStatus: "unanswered",
   },
 };
 
-const state = {
-  records: [],
-  filteredRecords: [],
-  dashboard: null,
-  sortKey: "wage_ratio_to_overall_mean",
-  sortDirection: "desc",
-  currentPage: 1,
-  filters: {
+function createDefaultFilters() {
+  return {
     search: "",
     municipality: "all",
+    area: "all",
     corporationType: "all",
     responseStatus: "all",
     outlierFlag: "all",
     capacityBand: "all",
     quadrant: "all",
     wamMatch: "all",
+    workShortageRisk: "all",
     transport: "all",
     staffingOutlier: "all",
     primaryActivity: "all",
@@ -81,7 +80,17 @@ const state = {
     homeUseOnly: false,
     noufukuOnly: false,
     wamOnly: false,
-  },
+  };
+}
+
+const state = {
+  records: [],
+  filteredRecords: [],
+  dashboard: null,
+  sortKey: "wage_ratio_to_overall_mean",
+  sortDirection: "desc",
+  currentPage: 1,
+  filters: createDefaultFilters(),
   selectedOfficeNo: null,
   activePreset: "all",
 };
@@ -94,6 +103,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
 async function init() {
   bindSectionNav();
+  bindFilterDialog();
   const response = await fetch("./data/dashboard-data.json", { cache: "no-store" });
   if (!response.ok) {
     throw new Error("dashboard data could not be loaded");
@@ -157,6 +167,57 @@ function bindSectionNav() {
   sections.forEach(({ target }) => observer.observe(target));
 }
 
+function bindFilterDialog() {
+  const dialog = document.getElementById("filtersDialog");
+  if (!dialog) return;
+
+  ["openFiltersButton", "openFiltersPanelButton"].forEach((id) => {
+    document.getElementById(id)?.addEventListener("click", () => {
+      openFiltersDialog(dialog);
+    });
+  });
+
+  ["closeFiltersButton", "closeFiltersFooterButton"].forEach((id) => {
+    document.getElementById(id)?.addEventListener("click", () => {
+      closeFiltersDialog(dialog);
+    });
+  });
+
+  document.getElementById("resetFiltersDialogButton")?.addEventListener("click", () => {
+    resetFilters();
+    applyFilters();
+  });
+
+  dialog.addEventListener("click", (event) => {
+    if (event.target === dialog) {
+      closeFiltersDialog(dialog);
+    }
+  });
+}
+
+function openFiltersDialog(dialog = document.getElementById("filtersDialog")) {
+  if (!dialog) return;
+  if (typeof dialog.showModal === "function") {
+    if (!dialog.open) {
+      dialog.showModal();
+    }
+  } else {
+    dialog.setAttribute("open", "open");
+  }
+  window.requestAnimationFrame(() => {
+    document.getElementById("searchInput")?.focus();
+  });
+}
+
+function closeFiltersDialog(dialog = document.getElementById("filtersDialog")) {
+  if (!dialog) return;
+  if (typeof dialog.close === "function" && dialog.open) {
+    dialog.close();
+    return;
+  }
+  dialog.removeAttribute("open");
+}
+
 async function loadDashboardRecords(dashboard) {
   if (Array.isArray(dashboard.records) && dashboard.records.length) {
     return dashboard.records;
@@ -186,6 +247,9 @@ function bindEvents() {
   bindInput("municipalitySelect", "change", (value) => {
     state.filters.municipality = value;
   });
+  bindInput("areaSelect", "change", (value) => {
+    state.filters.area = value;
+  });
   bindInput("corporationTypeSelect", "change", (value) => {
     state.filters.corporationType = value;
   });
@@ -203,6 +267,9 @@ function bindEvents() {
   });
   bindInput("wamMatchSelect", "change", (value) => {
     state.filters.wamMatch = value;
+  });
+  bindInput("workShortageRiskSelect", "change", (value) => {
+    state.filters.workShortageRisk = value;
   });
   bindInput("transportSelect", "change", (value) => {
     state.filters.transport = value;
@@ -290,36 +357,20 @@ function bindCheckbox(id, key) {
 }
 
 function resetFilters() {
-  state.filters = {
-    search: "",
-    municipality: "all",
-    corporationType: "all",
-    responseStatus: "all",
-    outlierFlag: "all",
-    capacityBand: "all",
-    quadrant: "all",
-    wamMatch: "all",
-    transport: "all",
-    staffingOutlier: "all",
-    primaryActivity: "all",
-    mealSupport: "all",
-    managerMulti: "all",
-    newOnly: false,
-    homeUseOnly: false,
-    noufukuOnly: false,
-    wamOnly: false,
-  };
+  state.filters = createDefaultFilters();
   state.activePreset = "all";
 
   [
     "searchInput",
     "municipalitySelect",
+    "areaSelect",
     "corporationTypeSelect",
     "responseStatusSelect",
     "outlierFlagSelect",
     "capacityBandSelect",
     "quadrantSelect",
     "wamMatchSelect",
+    "workShortageRiskSelect",
     "transportSelect",
     "staffingOutlierSelect",
     "primaryActivitySelect",
@@ -352,12 +403,14 @@ function applyPreset(preset) {
 function syncFilterControls() {
   document.getElementById("searchInput").value = state.filters.search;
   document.getElementById("municipalitySelect").value = state.filters.municipality;
+  document.getElementById("areaSelect").value = state.filters.area;
   document.getElementById("corporationTypeSelect").value = state.filters.corporationType;
   document.getElementById("responseStatusSelect").value = state.filters.responseStatus;
   document.getElementById("outlierFlagSelect").value = state.filters.outlierFlag;
   document.getElementById("capacityBandSelect").value = state.filters.capacityBand;
   document.getElementById("quadrantSelect").value = state.filters.quadrant;
   document.getElementById("wamMatchSelect").value = state.filters.wamMatch;
+  document.getElementById("workShortageRiskSelect").value = state.filters.workShortageRisk;
   document.getElementById("transportSelect").value = state.filters.transport;
   document.getElementById("staffingOutlierSelect").value = state.filters.staffingOutlier;
   document.getElementById("primaryActivitySelect").value = state.filters.primaryActivity;
@@ -433,12 +486,17 @@ function matchesFilters(record, filters) {
     const haystack = [
       record.office_no,
       record.municipality,
+      getAreaLabel(record),
       record.corporation_name,
       record.office_name,
       record.corporation_type_label,
       record.remarks,
       record.wam_primary_activity_type,
       record.wam_primary_activity_detail,
+      record.wam_office_address_city,
+      record.wam_office_address_line,
+      record.wam_office_number,
+      composeAddress(record),
     ]
       .filter(Boolean)
       .join(" ")
@@ -449,6 +507,7 @@ function matchesFilters(record, filters) {
   }
 
   if (filters.municipality !== "all" && record.municipality !== filters.municipality) return false;
+  if (filters.area !== "all" && getAreaLabel(record) !== filters.area) return false;
   if (filters.corporationType !== "all" && record.corporation_type_label !== filters.corporationType) {
     return false;
   }
@@ -465,6 +524,9 @@ function matchesFilters(record, filters) {
     return false;
   }
   if (filters.wamMatch !== "all" && (record.wam_match_status ?? "unmatched") !== filters.wamMatch) {
+    return false;
+  }
+  if (filters.workShortageRisk === "likely" && !hasWorkShortageRisk(record)) {
     return false;
   }
   if (filters.transport !== "all") {
@@ -538,14 +600,16 @@ function defaultDirection(sortKey) {
 
 function populateFilterOptions(records) {
   populateSelect("municipalitySelect", "all", "すべての市町村", uniqueValues(records, "municipality"));
+  populateSelect("areaSelect", "all", "すべてのエリア", uniqueAreaValues(records));
   populateSelect("corporationTypeSelect", "all", "すべての法人種別", uniqueValues(records, "corporation_type_label"));
   populateSelect("responseStatusSelect", "all", "すべての回答状態", ["answered", "annotated", "unanswered"]);
-  populateSelect("outlierFlagSelect", "all", "すべての工賃異常値", ["high", "low", "none"]);
+  populateSelect("outlierFlagSelect", "all", "すべての工賃水準", ["high", "low", "none"]);
   populateSelect("capacityBandSelect", "all", "すべての定員帯", CAPACITY_BAND_ORDER);
-  populateSelect("quadrantSelect", "all", "すべての運営ポジション", QUADRANT_ORDER);
-  populateSelect("wamMatchSelect", "all", "すべてのWAM状態", ["matched", "unmatched"]);
-  populateSelect("transportSelect", "all", "すべての送迎状態", ["true", "false", "unknown"]);
-  populateSelect("staffingOutlierSelect", "all", "すべての人員異常値", ["high", "low", "none"]);
+  populateSelect("quadrantSelect", "all", "すべての工賃と利用の位置", QUADRANT_ORDER);
+  populateSelect("wamMatchSelect", "all", "すべての人員詳細", ["matched", "unmatched"]);
+  populateSelect("workShortageRiskSelect", "all", "すべての仕事状況", ["likely"]);
+  populateSelect("transportSelect", "all", "すべての送迎", ["true", "false", "unknown"]);
+  populateSelect("staffingOutlierSelect", "all", "すべての人員配置", ["high", "low", "none"]);
   populateSelect("primaryActivitySelect", "all", "すべての主活動", uniqueValues(records, "wam_primary_activity_type"));
   populateSelect("mealSupportSelect", "all", "すべての食事加算", ["true", "false", "unknown"]);
   populateSelect("managerMultiSelect", "all", "すべての管理者兼務", ["true", "false", "unknown"]);
@@ -566,24 +630,43 @@ function uniqueValues(records, key) {
   );
 }
 
+function uniqueAreaValues(records) {
+  return [...new Set(records.map((record) => getAreaLabel(record)).filter(Boolean))].sort((left, right) =>
+    String(left).localeCompare(String(right), "ja")
+  );
+}
+
 function labelForSelect(value) {
   if (value === "answered") return "回答済み";
   if (value === "annotated") return "注記あり";
   if (value === "unanswered") return "未回答";
-  if (value === "high") return "高い";
-  if (value === "low") return "低い";
-  if (value === "none") return "通常範囲";
-  if (value === "matched") return "一致";
-  if (value === "unmatched") return "未一致";
+  if (value === "likely") return "仕事不足の可能性あり";
+  if (value === "high") return "高め";
+  if (value === "low") return "低め";
+  if (value === "none") return "通常";
+  if (value === "matched") return "人員詳細あり";
+  if (value === "unmatched") return "人員詳細なし";
   if (value === "true") return "あり";
   if (value === "false") return "なし";
   if (value === "unknown") return "不明";
+  if (value === "高工賃 × 高稼働") return "工賃高め・利用多め";
+  if (value === "高工賃 × 低稼働") return "工賃高め・利用少なめ";
+  if (value === "低工賃 × 高稼働") return "工賃低め・利用多め";
+  if (value === "低工賃 × 低稼働") return "工賃低め・利用少なめ";
+  if (value === "高工賃 × 厚い人員") return "工賃高め・人員多め";
+  if (value === "高工賃 × 少ない人員") return "工賃高め・人員少なめ";
+  if (value === "低工賃 × 厚い人員") return "工賃低め・人員多め";
+  if (value === "低工賃 × 少ない人員") return "工賃低め・人員少なめ";
   return value;
 }
 
 function renderLoadingState() {
   const loadingCard = `<div class="loading-message">データを読み込み中...</div>`;
   document.getElementById("activeFilterSummary").textContent = "データを読み込み中...";
+  const filterTags = document.getElementById("activeFilterTags");
+  if (filterTags) {
+    filterTags.innerHTML = "";
+  }
   document.getElementById("insightList").innerHTML = loadingCard;
   document.getElementById("growthList").innerHTML = loadingCard;
   document.getElementById("fixList").innerHTML = loadingCard;
@@ -636,12 +719,12 @@ function renderQuality(dashboard) {
   const wamMatchSummary = dashboard.analytics?.wam_match_summary ?? {};
 
   const summaryCards = [
-    `<article class="note-card"><strong>工賃異常値ルール</strong><p>中央値 ${formatMaybeYen(
+    `<article class="note-card"><strong>差が大きい事業所の見つけ方</strong><p>真ん中の集まりから大きく離れた工賃を、確認候補として表示している。今回の中心は ${formatMaybeYen(
       wageStats.median
-    )}。IQR に基づく外れ値判定を使っている。</p></article>`,
-    `<article class="note-card"><strong>WAM一致率</strong><p>大阪市レコード ${formatCount(
+    )} である。</p></article>`,
+    `<article class="note-card"><strong>人員詳細あり とは</strong><p>福祉医療機構の公開情報と結び付いた事業所で、大阪市レコード ${formatCount(
       wamMatchSummary.matched_record_count ?? 0
-    )} / ${formatCount(wamMatchSummary.workbook_osaka_record_count ?? 0)} 件を一致。</p></article>`,
+    )} / ${formatCount(wamMatchSummary.workbook_osaka_record_count ?? 0)} 件が対象である。</p></article>`,
   ];
 
   issuesRoot.innerHTML =
@@ -666,25 +749,34 @@ function renderActiveFilterSummary(records) {
   const filters = [];
   if (state.filters.search) filters.push(`検索: ${state.filters.search}`);
   if (state.filters.municipality !== "all") filters.push(`市町村: ${state.filters.municipality}`);
+  if (state.filters.area !== "all") filters.push(`エリア: ${state.filters.area}`);
   if (state.filters.corporationType !== "all") filters.push(`法人種別: ${state.filters.corporationType}`);
   if (state.filters.responseStatus !== "all") filters.push(`回答状態: ${labelForSelect(state.filters.responseStatus)}`);
-  if (state.filters.outlierFlag !== "all") filters.push(`工賃異常: ${labelForSelect(state.filters.outlierFlag)}`);
+  if (state.filters.outlierFlag !== "all") filters.push(`工賃水準: ${labelForSelect(state.filters.outlierFlag)}`);
   if (state.filters.capacityBand !== "all") filters.push(`定員帯: ${state.filters.capacityBand}`);
-  if (state.filters.quadrant !== "all") filters.push(`工賃象限: ${state.filters.quadrant}`);
-  if (state.filters.wamMatch !== "all") filters.push(`WAM: ${labelForSelect(state.filters.wamMatch)}`);
+  if (state.filters.quadrant !== "all") filters.push(`工賃と利用の位置: ${labelForSelect(state.filters.quadrant)}`);
+  if (state.filters.wamMatch !== "all") filters.push(`人員詳細: ${labelForSelect(state.filters.wamMatch)}`);
+  if (state.filters.workShortageRisk !== "all") filters.push(`仕事状況: ${labelForSelect(state.filters.workShortageRisk)}`);
   if (state.filters.transport !== "all") filters.push(`送迎: ${labelForSelect(state.filters.transport)}`);
-  if (state.filters.staffingOutlier !== "all") filters.push(`人員異常: ${labelForSelect(state.filters.staffingOutlier)}`);
+  if (state.filters.staffingOutlier !== "all") filters.push(`人員配置: ${labelForSelect(state.filters.staffingOutlier)}`);
   if (state.filters.primaryActivity !== "all") filters.push(`主活動: ${state.filters.primaryActivity}`);
   if (state.filters.mealSupport !== "all") filters.push(`食事加算: ${labelForSelect(state.filters.mealSupport)}`);
   if (state.filters.managerMulti !== "all") filters.push(`管理者兼務: ${labelForSelect(state.filters.managerMulti)}`);
   if (state.filters.newOnly) filters.push("新設のみ");
   if (state.filters.homeUseOnly) filters.push("在宅利用あり");
   if (state.filters.noufukuOnly) filters.push("農福連携あり");
-  if (state.filters.wamOnly) filters.push("WAM一致のみ");
+  if (state.filters.wamOnly) filters.push("人員詳細ありのみ");
 
   document.getElementById("activeFilterSummary").textContent = filters.length
-    ? `適用中: ${filters.join(" / ")}`
-    : `${formatCount(records.length)} 件を表示中。フィルタ未指定。`;
+    ? `${formatCount(records.length)} 件を表示中。`
+    : `${formatCount(records.length)} 件を表示中。条件なし。`;
+  const tagsRoot = document.getElementById("activeFilterTags");
+  if (tagsRoot) {
+    const tags = filters.length ? filters : ["条件なし"];
+    tagsRoot.innerHTML = tags
+      .map((filter) => `<span class="active-filter-chip">${escapeHtml(filter)}</span>`)
+      .join("");
+  }
 }
 
 function renderInsights(records) {
@@ -711,20 +803,20 @@ function renderInsights(records) {
 
   const insights = [
     {
-      title: "市場の中心値",
-      body: `中央値 ${formatMaybeYen(wageStats.median)}。上位10%目安は ${formatMaybeYen(wageStats.p90)}。`,
+      title: "よくある工賃水準",
+      body: `真ん中あたりの工賃は ${formatMaybeYen(wageStats.median)}。高い方の目安は ${formatMaybeYen(wageStats.p90)}。`,
     },
     {
-      title: "見えている範囲",
-      body: `現在の条件で WAM 詳細一致は ${formatCount(matched.length)} 件。人員・送迎・運営体制まで比較できる。`,
+      title: "人員まで見える件数",
+      body: `現在の条件で人員詳細ありは ${formatCount(matched.length)} 件。送迎や職員配置まで見比べられる。`,
     },
     {
-      title: "参考になる高工賃",
+      title: "参考にしたい高工賃",
       body: leanHigh
         ? `${leanHigh.office_name ?? "-"} は ${formatWageText(
             leanHigh.average_wage_yen
-          )}、主要支援FTE/定員 ${formatPercent(leanHigh.wam_key_staff_fte_per_capacity)}。`
-        : "高工賃 × 少ない人員の候補がまだ見えていない。",
+          )}、支援職員 / 定員 ${formatPercent(leanHigh.wam_key_staff_fte_per_capacity)}。`
+        : "工賃が高く、人員が少なめの参考候補はまだ見えていない。",
     },
     {
       title: "送迎ありの差",
@@ -736,12 +828,12 @@ function renderInsights(records) {
             )}。差分は ${formatSignedYen(transportDelta)}。`,
     },
     {
-      title: "改善圧力",
+      title: "先に見直したい層",
       body: heavyLow
         ? `${heavyLow.office_name ?? "-"} は ${formatWageText(
             heavyLow.average_wage_yen
-          )}、主要支援FTE/定員 ${formatPercent(heavyLow.wam_key_staff_fte_per_capacity)}。人員設計の再点検余地が大きい。`
-        : `人員異常値は ${formatCount(staffingOutlierCount)} 件。`,
+          )}、支援職員 / 定員 ${formatPercent(heavyLow.wam_key_staff_fte_per_capacity)}。人員配置の見直し余地が大きい。`
+        : `人員配置の差が大きい事業所は ${formatCount(staffingOutlierCount)} 件。`,
     },
   ];
 
@@ -784,7 +876,8 @@ function renderStrategy(records) {
     .filter(
       (record) =>
         isNumber(record.average_wage_yen) &&
-        (record.wam_staffing_efficiency_quadrant === "低工賃 × 厚い人員" ||
+        (hasWorkShortageRisk(record) ||
+          record.wam_staffing_efficiency_quadrant === "低工賃 × 厚い人員" ||
           (record.wam_staffing_outlier_flag === "high" && (record.wage_ratio_to_overall_mean ?? 0) < 0.95) ||
           (isNumber(record.daily_user_capacity_ratio) && record.daily_user_capacity_ratio < 0.55))
     )
@@ -802,13 +895,13 @@ function renderStrategy(records) {
     .sort((left, right) => reviewScore(right) - reviewScore(left))
     .slice(0, 6);
 
-  rootSummary.textContent = `伸ばす ${formatCount(growthCandidates.length)} 件 / 改善 ${formatCount(
+  rootSummary.textContent = `利用者を増やせそう ${formatCount(growthCandidates.length)} 件 / 先に見直したい ${formatCount(
     fixCandidates.length
-  )} 件 / 確認 ${formatCount(reviewCandidates.length)} 件`;
+  )} 件 / まず確認したい ${formatCount(reviewCandidates.length)} 件`;
 
-  renderStrategyList("growthList", growthCandidates, "伸ばす候補がまだない", buildGrowthReason);
-  renderStrategyList("fixList", fixCandidates, "改善優先がまだない", buildFixReason);
-  renderStrategyList("reviewList", reviewCandidates, "確認優先がまだない", buildReviewReason);
+  renderStrategyList("growthList", growthCandidates, "利用者を増やせそうな事業所はまだない", buildGrowthReason);
+  renderStrategyList("fixList", fixCandidates, "先に見直したい事業所はまだない", buildFixReason);
+  renderStrategyList("reviewList", reviewCandidates, "まず確認したい事業所はまだない", buildReviewReason);
 }
 
 function renderStrategyList(id, records, emptyLabel, buildReason) {
@@ -841,18 +934,20 @@ function renderStats(records) {
   const transportRate = ratioOf(matched, (record) => record.wam_transport_available === true);
   const managerMultiRate = ratioOf(matched, (record) => record.wam_manager_multi_post === true);
   const heavyLowCount = matched.filter((record) => record.wam_staffing_efficiency_quadrant === "低工賃 × 厚い人員").length;
+  const workShortageCount = records.filter((record) => hasWorkShortageRisk(record)).length;
 
   const cards = [
     { label: "表示件数", value: formatCount(records.length), hint: `全 ${formatCount(state.records.length)} 件中` },
     { label: "平均工賃", value: formatMaybeYen(wageStats.mean), hint: "未回答を除外" },
-    { label: "中央値", value: formatMaybeYen(wageStats.median), hint: "市場の中心値" },
-    { label: "高工賃異常", value: formatCount(records.filter((record) => record.wage_outlier_flag === "high").length), hint: "上振れ確認" },
-    { label: "WAM一致", value: formatCount(matched.length), hint: "人員詳細あり" },
-    { label: "平均福祉職員FTE", value: formatFte(welfareStaffFte), hint: "一致レコードのみ" },
-    { label: "平均主要支援FTE/定員", value: formatPercent(keyStaffPerCapacity), hint: "サービス管理+就労支援+職業指導+生活支援" },
+    { label: "よくある水準", value: formatMaybeYen(wageStats.median), hint: "真ん中あたりの工賃" },
+    { label: "工賃高め", value: formatCount(records.filter((record) => record.wage_outlier_flag === "high").length), hint: "平均との差が大きい" },
+    { label: "人員詳細あり", value: formatCount(matched.length), hint: "送迎や職員配置まで見える" },
+    { label: "平均職員数（常勤換算）", value: formatFte(welfareStaffFte), hint: "人員詳細ありの事業所のみ" },
+    { label: "支援職員 / 定員", value: formatPercent(keyStaffPerCapacity), hint: "主な支援職員の人数を定員で割った目安" },
     { label: "送迎実施率", value: formatPercent(transportRate), hint: "一致レコードのみ" },
     { label: "管理者兼務率", value: formatPercent(managerMultiRate), hint: "一致レコードのみ" },
-    { label: "低工賃×厚い人員", value: formatCount(heavyLowCount), hint: "改善優先候補" },
+    { label: "工賃低め・人員多め", value: formatCount(heavyLowCount), hint: "先に見直したい候補" },
+    { label: "仕事不足の可能性", value: formatCount(workShortageCount), hint: "工賃・利用率・人員のバランスで抽出" },
   ];
 
   document.getElementById("statsGrid").innerHTML = cards
@@ -910,10 +1005,10 @@ function renderBenchmarkList(id, records, emptyLabel) {
           <h3>${escapeHtml(record.office_name ?? "-")}</h3>
           <p>${escapeHtml(record.municipality ?? "-")} / ${escapeHtml(record.corporation_name ?? "-")}</p>
           <div class="benchmark-meta">
-            <span class="metric-chip">${escapeHtml(formatWageText(record.average_wage_yen))}</span>
-            <span class="metric-chip">${escapeHtml(formatPercent(record.wam_key_staff_fte_per_capacity))}</span>
-            <span class="metric-chip">${escapeHtml(formatBool(record.wam_transport_available))}</span>
-            <span class="metric-chip">${escapeHtml(record.wam_primary_activity_type ?? "-")}</span>
+            <span class="metric-chip">${escapeHtml(`工賃 ${formatWageText(record.average_wage_yen)}`)}</span>
+            <span class="metric-chip">${escapeHtml(`支援職員 / 定員 ${formatPercent(record.wam_key_staff_fte_per_capacity)}`)}</span>
+            <span class="metric-chip">${escapeHtml(`送迎 ${formatBool(record.wam_transport_available)}`)}</span>
+            <span class="metric-chip">${escapeHtml(`主活動 ${record.wam_primary_activity_type ?? "-"}`)}</span>
           </div>
         </button>
       `
@@ -940,7 +1035,7 @@ function renderCharts(records) {
   renderScatterChart("utilizationScatter", records, {
     xKey: "daily_user_capacity_ratio",
     yKey: "average_wage_yen",
-    xLabel: "稼働率",
+    xLabel: "利用率",
     yLabel: "平均工賃",
     yFormatter: (value) => formatMaybeYen(value),
     xFormatter: (value) => formatPercent(value),
@@ -948,7 +1043,7 @@ function renderCharts(records) {
   renderScatterChart("staffingScatter", matchedRecords(records), {
     xKey: "wam_key_staff_fte_per_capacity",
     yKey: "average_wage_yen",
-    xLabel: "主要支援FTE/定員",
+    xLabel: "支援職員 / 定員",
     yLabel: "平均工賃",
     yFormatter: (value) => formatMaybeYen(value),
     xFormatter: (value) => formatPercent(value),
@@ -967,7 +1062,7 @@ function renderBarChart(id, items, valueFormatter) {
       const width = Math.max((item.value / maxValue) * 100, 3);
       return `
         <div class="bar-row">
-          <span class="bar-label">${escapeHtml(item.label)}</span>
+          <span class="bar-label">${escapeHtml(labelForSelect(item.label))}</span>
           <div class="bar-track"><div class="bar-fill" style="width: ${width}%"></div></div>
           <span class="bar-value">${escapeHtml(valueFormatter(item.value))}</span>
         </div>
@@ -1040,8 +1135,8 @@ function renderAnomalies(records) {
     .slice(0, 12);
 
   summaryRoot.textContent = anomalies.length
-    ? `${formatCount(anomalies.length)} 件を抽出`
-    : "条件に一致する異常値はない";
+    ? `${formatCount(anomalies.length)} 件を確認候補として表示`
+    : "条件に一致する確認候補はない";
 
   if (!anomalies.length) {
     root.innerHTML = document.getElementById("emptyStateTemplate").innerHTML;
@@ -1064,12 +1159,12 @@ function renderAnomalies(records) {
           </div>
           <div class="anomaly-meta">
             ${record.wage_outlier_flag ? `<span class="metric-chip">${escapeHtml(`工賃 ${labelForSelect(record.wage_outlier_flag)}`)}</span>` : ""}
-            ${record.wam_staffing_outlier_flag ? `<span class="metric-chip">${escapeHtml(`人員 ${labelForSelect(record.wam_staffing_outlier_flag)}`)}</span>` : ""}
-            <span class="metric-chip">${escapeHtml(formatWageText(record.average_wage_yen))}</span>
-            <span class="metric-chip">${escapeHtml(formatPercent(record.wam_key_staff_fte_per_capacity))}</span>
+            ${record.wam_staffing_outlier_flag ? `<span class="metric-chip">${escapeHtml(`人員配置 ${staffingLevelLabel(record.wam_staffing_outlier_flag)}`)}</span>` : ""}
+            <span class="metric-chip">${escapeHtml(`工賃 ${formatWageText(record.average_wage_yen)}`)}</span>
+            <span class="metric-chip">${escapeHtml(`支援職員 / 定員 ${formatPercent(record.wam_key_staff_fte_per_capacity)}`)}</span>
           </div>
-          <p>全体平均比 ${escapeHtml(formatRatio(record.wage_ratio_to_overall_mean))} / 主要支援FTE/定員 ${escapeHtml(formatPercent(record.wam_key_staff_fte_per_capacity))}</p>
-          <p>${escapeHtml(record.wam_staffing_efficiency_quadrant ?? "人員象限なし")} / ${escapeHtml(record.wam_primary_activity_type ?? "活動不明")}</p>
+          <p>平均との差 ${escapeHtml(formatRatio(record.wage_ratio_to_overall_mean))} / 支援職員 / 定員 ${escapeHtml(formatPercent(record.wam_key_staff_fte_per_capacity))}</p>
+          <p>${escapeHtml(labelForSelect(record.wam_staffing_efficiency_quadrant ?? "人員配置の分類なし"))} / ${escapeHtml(record.wam_primary_activity_type ?? "活動不明")}</p>
         </button>
       `
     )
@@ -1097,35 +1192,35 @@ function renderDetail(record) {
       </div>
     </div>
     <div class="detail-kpi-grid">
-      ${detailKpi("平均工賃", formatWageText(record.average_wage_yen), `全体平均比 ${formatRatio(record.wage_ratio_to_overall_mean)}`)}
-      ${detailKpi("稼働率", formatPercent(record.daily_user_capacity_ratio), `定員 ${formatNullable(record.capacity)} 名 / 平均利用 ${formatNumber(record.average_daily_users)} 名`)}
+      ${detailKpi("平均工賃", formatWageText(record.average_wage_yen), `平均との差 ${formatRatio(record.wage_ratio_to_overall_mean)}`)}
+      ${detailKpi("利用率", formatPercent(record.daily_user_capacity_ratio), `定員 ${formatNullable(record.capacity)} 名 / 平均利用 ${formatNumber(record.average_daily_users)} 名`)}
       ${detailKpi(
-        "主要支援FTE/定員",
+        "支援職員 / 定員",
         formatPercent(record.wam_key_staff_fte_per_capacity),
-        record.wam_match_status === "matched" ? `人員象限 ${record.wam_staffing_efficiency_quadrant ?? "-"}` : "WAM未一致"
+        record.wam_match_status === "matched" ? `人員配置の分類 ${labelForSelect(record.wam_staffing_efficiency_quadrant ?? "-")}` : "人員詳細なし"
       )}
-      ${detailKpi("WAM月額工賃", formatMaybeYen(record.wam_average_wage_monthly_yen), `Excelとの差 ${formatSignedYen(record.wam_average_wage_gap_yen)}`)}
+      ${detailKpi("公開情報の月額工賃", formatMaybeYen(record.wam_average_wage_monthly_yen), `Excelとの差 ${formatSignedYen(record.wam_average_wage_gap_yen)}`)}
     </div>
     <div class="detail-grid">
       <article class="detail-card">
-        <h3>ベンチマーク</h3>
+        <h3>比べたときの位置</h3>
         <ul class="detail-list">
-          <li>市町村平均比: ${escapeHtml(formatRatio(record.wage_ratio_to_municipality_mean))}</li>
-          <li>法人種別平均比: ${escapeHtml(formatRatio(record.wage_ratio_to_corporation_type_mean))}</li>
-          <li>定員帯平均比: ${escapeHtml(formatRatio(record.wage_ratio_to_capacity_band_mean))}</li>
+          <li>市町村平均との差: ${escapeHtml(formatRatio(record.wage_ratio_to_municipality_mean))}</li>
+          <li>法人種別平均との差: ${escapeHtml(formatRatio(record.wage_ratio_to_corporation_type_mean))}</li>
+          <li>定員帯平均との差: ${escapeHtml(formatRatio(record.wage_ratio_to_capacity_band_mean))}</li>
           <li>工賃帯: ${escapeHtml(record.wage_band_label ?? "-")}</li>
-          <li>運営ポジション: ${escapeHtml(record.market_position_quadrant ?? "-")}</li>
+          <li>工賃と利用の位置: ${escapeHtml(labelForSelect(record.market_position_quadrant ?? "-"))}</li>
         </ul>
       </article>
       <article class="detail-card">
-        <h3>WAM運営体制</h3>
+        <h3>公開情報で見える運営体制</h3>
         <ul class="detail-list">
-          <li>WAM一致: ${escapeHtml(record.wam_match_status === "matched" ? `一致 / ${record.wam_match_confidence ?? "-"}` : "未一致")}</li>
+          <li>人員詳細: ${escapeHtml(record.wam_match_status === "matched" ? `あり / ${matchConfidenceLabel(record.wam_match_confidence)}` : "なし")}</li>
           <li>送迎: ${escapeHtml(formatBool(record.wam_transport_available))}</li>
           <li>食事加算: ${escapeHtml(formatBool(record.wam_meal_support_addon))}</li>
           <li>管理者兼務: ${escapeHtml(formatBool(record.wam_manager_multi_post))}</li>
           <li>主活動: ${escapeHtml(record.wam_primary_activity_type ?? "-")}</li>
-          <li>サービス管理責任者FTE: ${escapeHtml(formatFte(record.wam_service_manager_fte))}</li>
+          <li>サービス管理責任者（常勤換算）: ${escapeHtml(formatFte(record.wam_service_manager_fte))}</li>
         </ul>
       </article>
       <article class="detail-card">
@@ -1140,7 +1235,7 @@ function renderDetail(record) {
           <li>住所: ${escapeHtml(composeAddress(record))}</li>
           <li>電話: ${escapeHtml(record.wam_office_phone ?? "-")}</li>
           <li>事業所番号: ${escapeHtml(record.wam_office_number ?? "-")}</li>
-          <li>WAM定員: ${escapeHtml(formatNullable(record.wam_office_capacity))}</li>
+          <li>公開情報の定員: ${escapeHtml(formatNullable(record.wam_office_capacity))}</li>
           <li>新設: ${escapeHtml(record.is_new_office ? "あり" : "なし")}</li>
           <li>備考: ${escapeHtml(record.remarks ?? "-")}</li>
         </ul>
@@ -1216,6 +1311,9 @@ function attentionBadges(record) {
   }
   if (record.is_new_office) {
     badges.push(`<span class="badge badge-annotated">新設</span>`);
+  }
+  if (hasWorkShortageRisk(record)) {
+    badges.push(`<span class="badge badge-annotated">仕事不足の可能性</span>`);
   }
   if (!badges.length) {
     badges.push(`<span class="badge badge-answered">通常</span>`);
@@ -1322,24 +1420,24 @@ function wamCoverageBreakdown(records) {
   const matched = records.filter((record) => record.wam_match_status === "matched").length;
   const unmatched = records.length - matched;
   return [
-    { label: "WAM一致", value: matched },
-    { label: "WAM未一致", value: unmatched },
+    { label: "人員詳細あり", value: matched },
+    { label: "人員詳細なし", value: unmatched },
   ];
 }
 
 function combinedOutlierBreakdown(records) {
   return [
-    { label: "工賃高", value: records.filter((record) => record.wage_outlier_flag === "high").length },
-    { label: "工賃低", value: records.filter((record) => record.wage_outlier_flag === "low").length },
-    { label: "人員厚い", value: records.filter((record) => record.wam_staffing_outlier_flag === "high").length },
-    { label: "人員薄い", value: records.filter((record) => record.wam_staffing_outlier_flag === "low").length },
+    { label: "工賃高め", value: records.filter((record) => record.wage_outlier_flag === "high").length },
+    { label: "工賃低め", value: records.filter((record) => record.wage_outlier_flag === "low").length },
+    { label: "人員多め", value: records.filter((record) => record.wam_staffing_outlier_flag === "high").length },
+    { label: "人員少なめ", value: records.filter((record) => record.wam_staffing_outlier_flag === "low").length },
   ].filter((item) => item.value > 0);
 }
 
 function staffingRoleAverages(records) {
   const matched = matchedRecords(records);
   const rows = [
-    { label: "サビ管", value: meanFor(matched, "wam_service_manager_fte") },
+    { label: "サービス管理責任者", value: meanFor(matched, "wam_service_manager_fte") },
     { label: "就労支援員", value: meanFor(matched, "wam_employment_support_fte") },
     { label: "職業指導員", value: meanFor(matched, "wam_vocational_instructor_fte") },
     { label: "生活支援員", value: meanFor(matched, "wam_life_support_fte") },
@@ -1404,36 +1502,41 @@ function reviewScore(record) {
 }
 
 function buildGrowthReason(record) {
-  return `工賃 ${formatWageText(record.average_wage_yen)} / 稼働率 ${formatPercent(
+  return `工賃 ${formatWageText(record.average_wage_yen)} / 利用率 ${formatPercent(
     record.daily_user_capacity_ratio
-  )} / 主要支援FTE ${formatPercent(record.wam_key_staff_fte_per_capacity)}`;
+  )} / 支援職員 / 定員 ${formatPercent(record.wam_key_staff_fte_per_capacity)}`;
 }
 
 function buildFixReason(record) {
-  return `平均比 ${formatRatio(record.wage_ratio_to_overall_mean)} / 稼働率 ${formatPercent(
+  const workShortageNote = hasWorkShortageRisk(record) ? " / 仕事不足の可能性" : "";
+  return `平均との差 ${formatRatio(record.wage_ratio_to_overall_mean)} / 利用率 ${formatPercent(
     record.daily_user_capacity_ratio
-  )} / 人員象限 ${record.wam_staffing_efficiency_quadrant ?? "-"}`;
+  )} / 人員配置 ${labelForSelect(record.wam_staffing_efficiency_quadrant ?? "-")}${workShortageNote}`;
 }
 
 function buildReviewReason(record) {
   const flags = [];
   if (record.response_status === "unanswered") flags.push("未回答");
-  if (record.wam_match_status !== "matched") flags.push("WAM未一致");
+  if (record.wam_match_status !== "matched") flags.push("人員詳細なし");
   if (record.is_new_office) flags.push("新設");
   if (record.average_wage_error) flags.push(record.average_wage_error);
+  if (hasWorkShortageRisk(record)) flags.push("仕事不足の可能性");
   return flags.join(" / ") || "確認推奨";
 }
 
 function buildActionNotes(record) {
   const notes = [];
   if (record.wam_match_status !== "matched") {
-    notes.push("WAM未一致で人員分析が欠ける。名称揺れか事業所追加有無を確認したい。");
+    notes.push("公開情報と結び付いていないため、人員配置の見比べができない。名称揺れや事業所登録を確認したい。");
   }
   if ((record.wage_ratio_to_municipality_mean ?? 1) < 0.9) {
-    notes.push(`市町村平均比 ${formatRatio(record.wage_ratio_to_municipality_mean)}。地域内の工賃競争力を点検したい。`);
+    notes.push(`市町村平均との差 ${formatRatio(record.wage_ratio_to_municipality_mean)}。地域内での工賃水準を点検したい。`);
   }
   if (isNumber(record.daily_user_capacity_ratio) && record.daily_user_capacity_ratio < 0.6) {
-    notes.push(`稼働率 ${formatPercent(record.daily_user_capacity_ratio)}。体験導線、紹介元、欠席率を見直す余地が大きい。`);
+    notes.push(`利用率 ${formatPercent(record.daily_user_capacity_ratio)}。体験導線、紹介元、欠席率を見直す余地が大きい。`);
+  }
+  if (hasWorkShortageRisk(record)) {
+    notes.push("工賃と利用率の両方が弱めで、人員もやや先行している。作業量不足か利用者定着のどちらが主因か切り分けたい。");
   }
   if (record.wam_staffing_efficiency_quadrant === "低工賃 × 厚い人員") {
     notes.push("人員が厚い割に工賃が伸びていない。役割配置と作業単価の両面を再点検したい。");
@@ -1445,7 +1548,7 @@ function buildActionNotes(record) {
     notes.push("新設事業所である。立ち上がり期なので単月値ではなく定員充足と工賃立ち上がりを追いたい。");
   }
   if (!notes.length) {
-    notes.push("大きな警戒シグナルは薄い。市平均比、稼働率、支援体制のバランスを定点観測したい。");
+    notes.push("大きな警戒シグナルは薄い。市平均との差、利用率、支援体制のバランスを定点観測したい。");
   }
   return notes.slice(0, 4);
 }
@@ -1458,6 +1561,38 @@ function detailKpi(label, value, hint) {
       <em>${escapeHtml(hint)}</em>
     </article>
   `;
+}
+
+function getAreaLabel(record) {
+  const city = String(record.wam_office_address_city ?? "");
+  const line = String(record.wam_office_address_line ?? "");
+  const addressText = `${city}${line}`;
+  const osakaWardMatch = addressText.match(/大阪市([^\s0-9]+?区)/);
+  if (osakaWardMatch) {
+    return osakaWardMatch[1];
+  }
+  if (city) {
+    const normalizedCity = city.replace(/^大阪府/, "").trim();
+    return normalizedCity === "大阪市" ? "大阪市（区未取得）" : normalizedCity;
+  }
+  return record.municipality === "大阪市" ? "大阪市（区未取得）" : record.municipality ?? null;
+}
+
+function hasWorkShortageRisk(record) {
+  const wageRatio = record.wage_ratio_to_overall_mean;
+  const utilization = record.daily_user_capacity_ratio;
+  const lowWage = isNumber(wageRatio) && wageRatio < 0.9;
+  const lowUtilization = isNumber(utilization) && utilization < 0.7;
+  const veryLowUtilization = isNumber(utilization) && utilization < 0.6;
+  const staffingHeavy =
+    record.wam_staffing_efficiency_quadrant === "低工賃 × 厚い人員" ||
+    record.wam_staffing_outlier_flag === "high";
+
+  return (
+    (lowWage && lowUtilization) ||
+    (lowWage && staffingHeavy) ||
+    (veryLowUtilization && staffingHeavy)
+  );
 }
 
 function composeAddress(record) {
@@ -1473,21 +1608,22 @@ function downloadFilteredCsv() {
     ["corporation_name", "法人名"],
     ["office_name", "事業所名"],
     ["average_wage_yen", "平均工賃"],
-    ["wage_ratio_to_overall_mean", "全体平均比"],
-    ["wage_ratio_to_municipality_mean", "市町村平均比"],
-    ["wage_ratio_to_capacity_band_mean", "定員帯平均比"],
-    ["daily_user_capacity_ratio", "稼働率"],
-    ["wage_outlier_flag", "工賃異常値"],
-    ["wam_match_status", "WAM状態"],
-    ["wam_welfare_staff_fte_total", "福祉職員FTE"],
-    ["wam_key_staff_fte_per_capacity", "主要支援FTE/定員"],
+    ["wage_ratio_to_overall_mean", "平均との差"],
+    ["wage_ratio_to_municipality_mean", "市町村平均との差"],
+    ["wage_ratio_to_capacity_band_mean", "定員帯平均との差"],
+    ["daily_user_capacity_ratio", "利用率"],
+    ["wage_outlier_flag", "工賃水準"],
+    ["wam_match_status", "人員詳細"],
+    ["wam_welfare_staff_fte_total", "福祉職員（常勤換算）"],
+    ["wam_key_staff_fte_per_capacity", "支援職員 / 定員"],
     ["wam_transport_available", "送迎"],
     ["wam_meal_support_addon", "食事加算"],
     ["wam_manager_multi_post", "管理者兼務"],
-    ["wam_staffing_efficiency_quadrant", "人員象限"],
-    ["wam_staffing_outlier_flag", "人員異常値"],
+    ["wam_staffing_efficiency_quadrant", "工賃と人員配置の分類"],
+    ["wam_staffing_outlier_flag", "人員配置"],
+    ["derived_work_shortage_risk", "仕事不足の可能性"],
     ["wam_primary_activity_type", "主活動種別"],
-    ["wam_office_number", "WAM事業所番号"],
+    ["wam_office_number", "公開情報の事業所番号"],
     ["wam_office_url", "事業所URL"],
     ["remarks", "備考"],
   ];
@@ -1505,6 +1641,9 @@ function downloadFilteredCsv() {
       }
       if (key === "wam_match_status") {
         return escapeCsvCell(labelForSelect(value ?? "unmatched"));
+      }
+      if (key === "derived_work_shortage_risk") {
+        return escapeCsvCell(hasWorkShortageRisk(record) ? "あり" : "なし");
       }
       if (typeof value === "boolean") {
         return escapeCsvCell(value ? "あり" : "なし");
@@ -1541,13 +1680,26 @@ function outlierBadge(flag, severity) {
 function staffingOutlierBadge(flag, severity) {
   if (!flag) return `<span class="badge badge-answered">通常範囲</span>`;
   const variant = flag === "high" ? "annotated" : "answered";
-  const label = `人員 ${labelForSelect(flag)}${severity ? ` / ${severity}` : ""}`;
+  const label = `人員 ${staffingLevelLabel(flag)}${severity ? ` / ${severity}` : ""}`;
   return `<span class="badge badge-${variant}">${escapeHtml(label)}</span>`;
 }
 
 function matchBadge(status, confidence) {
-  if (status !== "matched") return `<span class="badge badge-unanswered">未一致</span>`;
-  return `<span class="badge badge-annotated">一致${confidence ? ` / ${escapeHtml(confidence)}` : ""}</span>`;
+  if (status !== "matched") return `<span class="badge badge-unanswered">人員詳細なし</span>`;
+  return `<span class="badge badge-annotated">人員詳細あり${confidence ? ` / ${escapeHtml(matchConfidenceLabel(confidence))}` : ""}</span>`;
+}
+
+function staffingLevelLabel(flag) {
+  if (flag === "high") return "多め";
+  if (flag === "low") return "少なめ";
+  return "通常";
+}
+
+function matchConfidenceLabel(value) {
+  if (value === "high") return "一致しやすい";
+  if (value === "medium") return "おおむね一致";
+  if (value === "low") return "要確認";
+  return value ?? "-";
 }
 
 function quadrantBadge(value) {
@@ -1577,7 +1729,7 @@ function formatWageText(value) {
 }
 
 function formatFte(value) {
-  return isNumber(value) ? `${decimalFormatter.format(value)} FTE` : "-";
+  return isNumber(value) ? `${decimalFormatter.format(value)}人分` : "-";
 }
 
 function formatNumber(value) {
@@ -1585,7 +1737,7 @@ function formatNumber(value) {
 }
 
 function formatRatio(value) {
-  return isNumber(value) ? `${ratioFormatter.format(value)}x` : "-";
+  return isNumber(value) ? `${ratioFormatter.format(value)}倍` : "-";
 }
 
 function formatPercent(value) {
