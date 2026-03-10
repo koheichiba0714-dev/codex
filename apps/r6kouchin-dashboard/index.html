@@ -1,0 +1,350 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>令和6年度 工賃実績ダッシュボード</title>
+    <meta
+      name="description"
+      content="令和6年度 就労継続支援B型の工賃実績を一覧・検索・集計できるダッシュボード"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow">Osaka B-Type Dashboard</p>
+          <h1>令和6年度 工賃実績ダッシュボード</h1>
+          <p class="hero-lead">
+            就労継続支援B型の工賃実績と WAM 詳細を統合し、一覧、外れ値監視、勝ち筋分析、1事業所の深掘りまでできるように再構成した。
+          </p>
+        </div>
+        <div class="hero-meta">
+          <div class="meta-block">
+            <span class="meta-label">データ更新</span>
+            <strong id="updatedAt">-</strong>
+          </div>
+          <div class="meta-block">
+            <span class="meta-label">元ファイル</span>
+            <strong id="sourceWorkbook">-</strong>
+          </div>
+          <div class="meta-block">
+            <span class="meta-label">収録件数</span>
+            <strong id="totalRecords">-</strong>
+          </div>
+          <div class="meta-block">
+            <span class="meta-label">WAM一致</span>
+            <strong id="wamMatchedCount">-</strong>
+          </div>
+        </div>
+      </header>
+
+      <main class="main-grid">
+        <section class="panel filters-panel" aria-labelledby="filtersHeading">
+          <div class="panel-head">
+            <div>
+              <p class="section-kicker">Filters</p>
+              <h2 id="filtersHeading">一覧の絞り込み</h2>
+            </div>
+            <button id="resetFiltersButton" class="ghost-button" type="button">
+              リセット
+            </button>
+          </div>
+          <div class="filters-grid">
+            <label class="field">
+              <span>検索</span>
+              <input
+                id="searchInput"
+                type="search"
+                placeholder="事業所名 / 法人名 / 市町村 / No."
+                autocomplete="off"
+              />
+            </label>
+            <label class="field">
+              <span>市町村</span>
+              <select id="municipalitySelect"></select>
+            </label>
+            <label class="field">
+              <span>法人種別</span>
+              <select id="corporationTypeSelect"></select>
+            </label>
+            <label class="field">
+              <span>回答状態</span>
+              <select id="responseStatusSelect"></select>
+            </label>
+            <label class="field">
+              <span>異常値</span>
+              <select id="outlierFlagSelect"></select>
+            </label>
+            <label class="field">
+              <span>定員帯</span>
+              <select id="capacityBandSelect"></select>
+            </label>
+            <label class="field">
+              <span>運営ポジション</span>
+              <select id="quadrantSelect"></select>
+            </label>
+            <label class="field">
+              <span>WAM一致</span>
+              <select id="wamMatchSelect"></select>
+            </label>
+            <label class="field">
+              <span>送迎</span>
+              <select id="transportSelect"></select>
+            </label>
+            <label class="field">
+              <span>人員異常値</span>
+              <select id="staffingOutlierSelect"></select>
+            </label>
+            <label class="field">
+              <span>主活動</span>
+              <select id="primaryActivitySelect"></select>
+            </label>
+            <label class="field">
+              <span>食事加算</span>
+              <select id="mealSupportSelect"></select>
+            </label>
+            <label class="field">
+              <span>管理者兼務</span>
+              <select id="managerMultiSelect"></select>
+            </label>
+          </div>
+          <div class="toggle-row">
+            <label class="toggle">
+              <input id="newOnlyCheckbox" type="checkbox" />
+              <span>新設のみ</span>
+            </label>
+            <label class="toggle">
+              <input id="homeUseOnlyCheckbox" type="checkbox" />
+              <span>在宅利用あり</span>
+            </label>
+            <label class="toggle">
+              <input id="noufukuOnlyCheckbox" type="checkbox" />
+              <span>農福連携あり</span>
+            </label>
+            <label class="toggle">
+              <input id="wamOnlyCheckbox" type="checkbox" />
+              <span>WAM一致のみ</span>
+            </label>
+          </div>
+          <div class="preset-row" aria-label="クイック切り替え">
+            <button class="preset-chip is-active" data-preset="all" type="button">全体</button>
+            <button class="preset-chip" data-preset="osaka-city" type="button">大阪市</button>
+            <button class="preset-chip" data-preset="osaka-wam" type="button">大阪市 × WAM</button>
+            <button class="preset-chip" data-preset="high-wage" type="button">高工賃異常</button>
+            <button class="preset-chip" data-preset="fix-priority" type="button">改善優先</button>
+            <button class="preset-chip" data-preset="unanswered" type="button">未回答</button>
+          </div>
+          <p id="activeFilterSummary" class="filter-summary"></p>
+        </section>
+
+        <section class="panel insight-panel" aria-labelledby="insightHeading">
+          <div class="panel-head">
+            <div>
+              <p class="section-kicker">Insights</p>
+              <h2 id="insightHeading">市場の読み解き</h2>
+            </div>
+          </div>
+          <div id="insightList" class="insight-grid"></div>
+        </section>
+
+        <section class="panel strategy-panel" aria-labelledby="strategyHeading">
+          <div class="panel-head">
+            <div>
+              <p class="section-kicker">Action Board</p>
+              <h2 id="strategyHeading">見るべき事業所を先に出す</h2>
+            </div>
+            <p id="strategySummary" class="table-summary"></p>
+          </div>
+          <div class="strategy-grid">
+            <article class="strategy-column">
+              <h3>伸ばす候補</h3>
+              <div id="growthList" class="strategy-list"></div>
+            </article>
+            <article class="strategy-column">
+              <h3>改善優先</h3>
+              <div id="fixList" class="strategy-list"></div>
+            </article>
+            <article class="strategy-column">
+              <h3>確認優先</h3>
+              <div id="reviewList" class="strategy-list"></div>
+            </article>
+          </div>
+        </section>
+
+        <section class="stats-grid" id="statsGrid" aria-label="集計カード"></section>
+
+        <section class="panel benchmark-panel" aria-labelledby="benchmarkHeading">
+          <div class="panel-head">
+            <div>
+              <p class="section-kicker">Benchmark</p>
+              <h2 id="benchmarkHeading">工賃と人員設計の勝ち筋</h2>
+            </div>
+          </div>
+          <div class="benchmark-grid">
+            <article class="benchmark-column">
+              <h3>高工賃 × 少ない人員</h3>
+              <div id="leaderboardList" class="benchmark-list"></div>
+            </article>
+            <article class="benchmark-column">
+              <h3>低工賃 × 厚い人員</h3>
+              <div id="watchlistList" class="benchmark-list"></div>
+            </article>
+          </div>
+        </section>
+
+        <section class="panel charts-panel" aria-labelledby="chartsHeading">
+          <div class="panel-head">
+            <div>
+              <p class="section-kicker">Overview</p>
+              <h2 id="chartsHeading">分布と比較</h2>
+            </div>
+            <button id="downloadCsvButton" class="solid-button" type="button">
+              絞り込み結果をCSV出力
+            </button>
+          </div>
+          <div class="chart-grid">
+            <article class="chart-card">
+              <h3>市町村別 件数</h3>
+              <div id="municipalityChart" class="bar-chart"></div>
+            </article>
+            <article class="chart-card">
+              <h3>市町村別 平均工賃</h3>
+              <div id="wageChart" class="bar-chart"></div>
+            </article>
+            <article class="chart-card">
+              <h3>法人種別 件数</h3>
+              <div id="corporationChart" class="bar-chart"></div>
+            </article>
+            <article class="chart-card">
+              <h3>定員帯別 平均工賃</h3>
+              <div id="capacityChart" class="bar-chart"></div>
+            </article>
+            <article class="chart-card">
+              <h3>運営ポジション 4象限</h3>
+              <div id="quadrantChart" class="bar-chart compact-chart"></div>
+            </article>
+            <article class="chart-card">
+              <h3>WAM一致 / 未一致</h3>
+              <div id="wamCoverageChart" class="bar-chart compact-chart"></div>
+            </article>
+            <article class="chart-card">
+              <h3>主要支援人員 4象限</h3>
+              <div id="staffingQuadrantChart" class="bar-chart compact-chart"></div>
+            </article>
+            <article class="chart-card">
+              <h3>異常値の分布</h3>
+              <div id="outlierChart" class="bar-chart compact-chart"></div>
+            </article>
+            <article class="chart-card">
+              <h3>主要職種の平均FTE</h3>
+              <div id="staffingRoleChart" class="bar-chart"></div>
+            </article>
+            <article class="chart-card">
+              <h3>送迎・食事・地域協働の平均工賃</h3>
+              <div id="featureChart" class="bar-chart"></div>
+            </article>
+            <article class="chart-card">
+              <h3>平均工賃帯</h3>
+              <div id="wageBandChart" class="bar-chart compact-chart"></div>
+            </article>
+            <article class="chart-card">
+              <h3>工賃 × 稼働率マップ</h3>
+              <div id="utilizationScatter" class="scatter-chart"></div>
+            </article>
+            <article class="chart-card">
+              <h3>工賃 × 主要支援FTE/定員マップ</h3>
+              <div id="staffingScatter" class="scatter-chart"></div>
+            </article>
+          </div>
+        </section>
+
+        <section class="panel anomaly-panel" aria-labelledby="anomalyHeading">
+          <div class="panel-head">
+            <div>
+              <p class="section-kicker">Anomalies</p>
+              <h2 id="anomalyHeading">工賃・人員の外れ値</h2>
+            </div>
+            <p id="anomalySummary" class="table-summary"></p>
+          </div>
+          <div id="anomalyList" class="anomaly-grid"></div>
+        </section>
+
+        <section class="panel detail-panel" aria-labelledby="detailHeading">
+          <div class="panel-head">
+            <div>
+              <p class="section-kicker">Office Detail</p>
+              <h2 id="detailHeading">事業所の深掘り</h2>
+            </div>
+            <button id="focusSelectedButton" class="ghost-button" type="button">選択中を先頭へ</button>
+          </div>
+          <div id="detailContent"></div>
+        </section>
+
+        <section class="panel table-panel" aria-labelledby="tableHeading">
+          <div class="panel-head">
+            <div>
+              <p class="section-kicker">Records</p>
+              <h2 id="tableHeading">事業所一覧</h2>
+            </div>
+            <p id="tableSummary" class="table-summary"></p>
+          </div>
+          <div class="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th><button type="button" data-sort-key="office_no">No.</button></th>
+                  <th><button type="button" data-sort-key="municipality">市町村</button></th>
+                  <th><button type="button" data-sort-key="corporation_type_label">法人種別</button></th>
+                  <th><button type="button" data-sort-key="corporation_name">法人名</button></th>
+                  <th><button type="button" data-sort-key="office_name">事業所名</button></th>
+                  <th><button type="button" data-sort-key="average_wage_yen">平均工賃</button></th>
+                  <th><button type="button" data-sort-key="wage_ratio_to_overall_mean">平均比</button></th>
+                  <th><button type="button" data-sort-key="wage_outlier_flag">異常値</button></th>
+                  <th><button type="button" data-sort-key="daily_user_capacity_ratio">稼働率</button></th>
+                  <th><button type="button" data-sort-key="wam_match_status">WAM</button></th>
+                  <th><button type="button" data-sort-key="wam_welfare_staff_fte_total">福祉職員FTE</button></th>
+                  <th><button type="button" data-sort-key="wam_key_staff_fte_per_capacity">主要支援FTE/定員</button></th>
+                  <th><button type="button" data-sort-key="wam_transport_available">送迎</button></th>
+                  <th><button type="button" data-sort-key="wam_staffing_efficiency_quadrant">人員象限</button></th>
+                  <th><button type="button" data-sort-key="wam_staffing_outlier_flag">人員異常</button></th>
+                  <th><button type="button" data-sort-key="response_status">回答状態</button></th>
+                  <th><button type="button" data-sort-key="is_new_office">新設</button></th>
+                  <th>備考</th>
+                  <th>詳細</th>
+                </tr>
+              </thead>
+              <tbody id="recordsTableBody"></tbody>
+            </table>
+          </div>
+          <div class="pagination-row">
+            <button id="prevPageButton" class="ghost-button" type="button">前へ</button>
+            <p id="pageSummary"></p>
+            <button id="nextPageButton" class="ghost-button" type="button">次へ</button>
+          </div>
+        </section>
+
+        <section class="panel notes-panel" aria-labelledby="notesHeading">
+          <div class="panel-head">
+            <div>
+              <p class="section-kicker">Quality</p>
+              <h2 id="notesHeading">注記とデータ品質</h2>
+            </div>
+          </div>
+          <div id="issuesList" class="notes-list"></div>
+          <div id="notesList" class="notes-list"></div>
+        </section>
+      </main>
+    </div>
+
+    <template id="emptyStateTemplate">
+      <div class="empty-state">
+        <h3>条件に一致するデータがない</h3>
+        <p>絞り込み条件を緩めると一覧が表示される。</p>
+      </div>
+    </template>
+
+    <script src="./app.js" defer></script>
+  </body>
+</html>

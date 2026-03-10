@@ -1,0 +1,299 @@
+{
+  "meta": {
+    "source_workbook": "/Users/chibakohei/Downloads/r6kouchinjissekib.xlsx",
+    "generated_at": "2026-03-10T09:23:29+09:00",
+    "record_count": 1976,
+    "wam_generated_at": "2026-03-10T09:23:29+09:00",
+    "wam_directory_count": 783,
+    "wam_matched_record_count": 763,
+    "app_record_field_count": 48,
+    "app_record_chunk_size": 250
+  },
+  "summary": {
+    "record_count": 1976,
+    "note_row_count": 2,
+    "response_breakdown": {
+      "answered": 1715,
+      "annotated": 9,
+      "unanswered": 252
+    },
+    "answered_average_wage_yen_mean": 19909.523,
+    "answered_average_wage_yen_median": 16407.704,
+    "municipality_count": 42,
+    "new_office_count": 270,
+    "formula_error_rows": 262,
+    "high_outlier_count": 129,
+    "low_outlier_count": 11,
+    "duplicate_office_no_count": 0,
+    "service_counts": {
+      "noufuku_active": 86,
+      "suifuku_active": 3,
+      "rinfuku_active": 2,
+      "home_use_active": 765
+    },
+    "corporation_type_breakdown": {
+      "社会福祉法人（社会福祉協議会以外）": 311,
+      "株式・合名・合資・合同会社": 942,
+      "特定非営利活動法人（NPO）": 244,
+      "その他（社団・財団・農協・生協等": 148,
+      "社会福祉協議会": 63,
+      "医療法人": 16,
+      "unknown": 252
+    },
+    "missing_counts": {
+      "prefecture": 0,
+      "office_no": 0,
+      "municipality": 0,
+      "corporation_type_code": 252,
+      "corporation_type_label": 252,
+      "corporation_number": 253,
+      "corporation_name": 0,
+      "office_name": 0,
+      "capacity": 257,
+      "wage_payment_total_yen": 252,
+      "user_days_total": 252,
+      "annual_open_days": 252,
+      "average_daily_users": 262,
+      "average_daily_users_error": 1714,
+      "annual_open_months": 252,
+      "average_wage_yen": 262,
+      "average_wage_error": 1714,
+      "is_new_office": 0,
+      "remarks": 1715,
+      "noufuku_active": 0,
+      "noufuku_new": 0,
+      "noufuku_income_ratio_decimal": 1890,
+      "noufuku_income_ratio_pct": 1890,
+      "suifuku_active": 0,
+      "suifuku_new": 0,
+      "suifuku_income_ratio_decimal": 1973,
+      "suifuku_income_ratio_pct": 1973,
+      "rinfuku_active": 0,
+      "rinfuku_new": 0,
+      "rinfuku_income_ratio_decimal": 1974,
+      "rinfuku_income_ratio_pct": 1974,
+      "home_use_active": 0,
+      "home_use_user_ratio_decimal": 1170,
+      "home_use_user_ratio_pct": 1170,
+      "daily_user_capacity_ratio": 268,
+      "wage_payment_per_user_day_yen": 272,
+      "annual_payment_per_capacity_yen": 261,
+      "capacity_band_label": 257,
+      "utilization_band_label": 268,
+      "wage_deviation_from_overall_mean_yen": 262,
+      "wage_ratio_to_overall_mean": 262,
+      "wage_z_score": 262,
+      "wage_percentile": 262,
+      "wage_band_label": 262,
+      "wage_outlier_flag": 1836,
+      "wage_outlier_severity": 1836,
+      "municipality_average_wage_yen": 262,
+      "wage_ratio_to_municipality_mean": 262,
+      "corporation_type_average_wage_yen": 262,
+      "wage_ratio_to_corporation_type_mean": 262,
+      "capacity_band_average_wage_yen": 267,
+      "wage_ratio_to_capacity_band_mean": 267,
+      "market_position_quadrant": 268
+    },
+    "overall_wage_stats": {
+      "count": 1714,
+      "mean": 19909.523,
+      "median": 16407.704,
+      "std_dev": 12595.268,
+      "q1": 12520.811,
+      "q3": 23063.74,
+      "iqr": 10542.929,
+      "p90": 34898.139,
+      "lower_fence": 0,
+      "upper_fence": 38878.133,
+      "extreme_lower_fence": 0,
+      "extreme_upper_fence": 54692.527
+    },
+    "overall_utilization_stats": {
+      "count": 1708,
+      "mean": 0.73,
+      "median": 0.71,
+      "std_dev": 0.401,
+      "q1": 0.47,
+      "q3": 0.948,
+      "iqr": 0.478,
+      "p90": 1.16,
+      "lower_fence": 0,
+      "upper_fence": 1.666,
+      "extreme_lower_fence": 0,
+      "extreme_upper_fence": 2.384
+    },
+    "wam_match_summary": {
+      "wam_directory_count": 783,
+      "workbook_osaka_record_count": 885,
+      "matched_record_count": 763,
+      "unmatched_record_count": 122,
+      "matched_wam_count": 763,
+      "unmatched_wam_count": 20,
+      "confidence_breakdown": {
+        "high": 742,
+        "medium": 21
+      },
+      "method_breakdown": {
+        "corp_exact_name_strict": 576,
+        "corp_name_exact_name_strict": 166,
+        "corp_name_exact_name_relaxed": 1,
+        "unique_name_strict": 5,
+        "corp_exact_suffix_match": 6,
+        "corp_exact_name_relaxed": 5,
+        "corp_exact_name_fuzzy": 2,
+        "corp_name_exact_suffix_match": 2
+      },
+      "manual_override_count": 0
+    },
+    "wam_staffing_summary": {
+      "matched_record_count": 763,
+      "staffing_stats": {
+        "count": 539,
+        "mean": 0.127,
+        "median": 0.025,
+        "q1": 0.0,
+        "q3": 0.237,
+        "p90": 0.326,
+        "iqr": 0.237,
+        "lower_fence": 0,
+        "upper_fence": 0.591,
+        "extreme_lower_fence": 0,
+        "extreme_upper_fence": 0.946
+      },
+      "feature_summary": [
+        {
+          "feature_label": "送迎あり",
+          "true_count": 295,
+          "false_count": 327,
+          "true_average_wage_yen": 18461.42,
+          "false_average_wage_yen": 22667.346,
+          "true_average_key_staff_fte_per_capacity": 0.163
+        },
+        {
+          "feature_label": "食事提供体制加算あり",
+          "true_count": 301,
+          "false_count": 321,
+          "true_average_wage_yen": 21373.714,
+          "false_average_wage_yen": 20087.423,
+          "true_average_key_staff_fte_per_capacity": 0.166
+        },
+        {
+          "feature_label": "地域協働加算あり",
+          "true_count": 5,
+          "false_count": 617,
+          "true_average_wage_yen": 17048.01,
+          "false_average_wage_yen": 20764.363,
+          "true_average_key_staff_fte_per_capacity": 0.062
+        },
+        {
+          "feature_label": "管理者兼務あり",
+          "true_count": 398,
+          "false_count": 224,
+          "true_average_wage_yen": 20976.803,
+          "false_average_wage_yen": 20269.505,
+          "true_average_key_staff_fte_per_capacity": 0.164
+        }
+      ]
+    }
+  },
+  "issues": [
+    {
+      "sheet": "平均工賃（時間額）",
+      "kind": "excel_error_cells",
+      "count": 5
+    },
+    {
+      "sheet": "就労B型",
+      "kind": "excel_error_cells",
+      "count": 524
+    },
+    {
+      "sheet": "平均工賃（時間額）",
+      "kind": "broken_reference",
+      "detail": "5 行目が #REF! で構成され、分析値としては利用不可。"
+    },
+    {
+      "sheet": "WAM 大阪市B型統合",
+      "kind": "wam_match_coverage",
+      "detail": "大阪市レコード 763 / 885 件を WAM 詳細へ一致させた。"
+    }
+  ],
+  "notes": [
+    {
+      "source_row": 1981,
+      "note_text": "未回答：期日までに未回答の事業所。または、回答内容の欠損値、異常値等の確認に対し、期日までに修正未回答の事業所。"
+    },
+    {
+      "source_row": 1982,
+      "note_text": "※No.1665を公表後、追加。"
+    }
+  ],
+  "analytics": {
+    "overall_wage_stats": {
+      "count": 1714,
+      "mean": 19909.523,
+      "median": 16407.704,
+      "std_dev": 12595.268,
+      "q1": 12520.811,
+      "q3": 23063.74,
+      "iqr": 10542.929,
+      "p90": 34898.139,
+      "lower_fence": 0,
+      "upper_fence": 38878.133,
+      "extreme_lower_fence": 0,
+      "extreme_upper_fence": 54692.527
+    },
+    "overall_utilization_stats": {
+      "count": 1708,
+      "mean": 0.73,
+      "median": 0.71,
+      "std_dev": 0.401,
+      "q1": 0.47,
+      "q3": 0.948,
+      "iqr": 0.478,
+      "p90": 1.16,
+      "lower_fence": 0,
+      "upper_fence": 1.666,
+      "extreme_lower_fence": 0,
+      "extreme_upper_fence": 2.384
+    },
+    "wam_match_summary": {
+      "wam_directory_count": 783,
+      "workbook_osaka_record_count": 885,
+      "matched_record_count": 763,
+      "unmatched_record_count": 122,
+      "matched_wam_count": 763,
+      "unmatched_wam_count": 20,
+      "confidence_breakdown": {
+        "high": 742,
+        "medium": 21
+      },
+      "method_breakdown": {
+        "corp_exact_name_strict": 576,
+        "corp_name_exact_name_strict": 166,
+        "corp_name_exact_name_relaxed": 1,
+        "unique_name_strict": 5,
+        "corp_exact_suffix_match": 6,
+        "corp_exact_name_relaxed": 5,
+        "corp_exact_name_fuzzy": 2,
+        "corp_name_exact_suffix_match": 2
+      },
+      "manual_override_count": 0
+    }
+  },
+  "records": [],
+  "data_files": {
+    "record_chunks": [
+      "data/records/dashboard-records-001.json",
+      "data/records/dashboard-records-002.json",
+      "data/records/dashboard-records-003.json",
+      "data/records/dashboard-records-004.json",
+      "data/records/dashboard-records-005.json",
+      "data/records/dashboard-records-006.json",
+      "data/records/dashboard-records-007.json",
+      "data/records/dashboard-records-008.json"
+    ],
+    "record_count": 1976
+  }
+}
