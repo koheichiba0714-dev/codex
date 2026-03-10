@@ -703,7 +703,7 @@ function renderLoadingState() {
       element.innerHTML = loadingCard;
     }
   });
-  document.getElementById("recordsTableBody").innerHTML = `<tr><td colspan="12">${loadingCard}</td></tr>`;
+  document.getElementById("recordsTableBody").innerHTML = `<tr><td colspan="13">${loadingCard}</td></tr>`;
 }
 
 function renderMeta(dashboard) {
@@ -937,6 +937,7 @@ function renderStats(records) {
   const wageStats = computeLocalStats(wages);
   const welfareStaffFte = meanFor(matched, "wam_welfare_staff_fte_total");
   const keyStaffPerCapacity = meanFor(matched, "wam_key_staff_fte_per_capacity");
+  const homeUseRate = meanFor(records, "home_use_user_ratio_decimal");
   const transportRate = ratioOf(matched, (record) => record.wam_transport_available === true);
   const managerMultiRate = ratioOf(matched, (record) => record.wam_manager_multi_post === true);
   const heavyLowCount = matched.filter((record) => record.wam_staffing_efficiency_quadrant === "低工賃 × 厚い人員").length;
@@ -949,6 +950,7 @@ function renderStats(records) {
     { label: "工賃高め", value: formatCount(records.filter((record) => record.wage_outlier_flag === "high").length), hint: "平均との差が大きい" },
     { label: "人員詳細あり", value: formatCount(matched.length), hint: "送迎や職員配置まで見える" },
     { label: "平均職員数（常勤換算）", value: formatFte(welfareStaffFte), hint: "人員詳細ありの事業所のみ" },
+    { label: "平均在宅率", value: formatPercent(homeUseRate), hint: "在宅率データありの事業所のみ" },
     { label: "支援職員 / 定員", value: formatPercent(keyStaffPerCapacity), hint: "主な支援職員の人数を定員で割った目安" },
     { label: "送迎実施率", value: formatPercent(transportRate), hint: "一致レコードのみ" },
     { label: "管理者兼務率", value: formatPercent(managerMultiRate), hint: "一致レコードのみ" },
@@ -1201,6 +1203,13 @@ function renderDetail(record) {
       ${detailKpi("平均工賃", formatWageText(record.average_wage_yen), `平均との差 ${formatRatio(record.wage_ratio_to_overall_mean)}`)}
       ${detailKpi("利用率", formatPercent(record.daily_user_capacity_ratio), `定員 ${formatNullable(record.capacity)} 名 / 平均利用 ${formatNumber(record.average_daily_users)} 名`)}
       ${detailKpi(
+        "在宅率",
+        formatPercent(record.home_use_user_ratio_decimal),
+        isNumber(record.home_use_user_ratio_decimal)
+          ? `在宅利用 ${formatBool(record.home_use_active)} / 平均利用者のうち在宅利用の割合`
+          : "在宅率データなし"
+      )}
+      ${detailKpi(
         "支援職員 / 定員",
         formatPercent(record.wam_key_staff_fte_per_capacity),
         record.wam_match_status === "matched" ? `人員配置の分類 ${labelForSelect(record.wam_staffing_efficiency_quadrant ?? "-")}` : "人員詳細なし"
@@ -1216,6 +1225,7 @@ function renderDetail(record) {
           <li>定員帯平均との差: ${escapeHtml(formatRatio(record.wage_ratio_to_capacity_band_mean))}</li>
           <li>工賃帯: ${escapeHtml(record.wage_band_label ?? "-")}</li>
           <li>工賃と利用の位置: ${escapeHtml(labelForSelect(record.market_position_quadrant ?? "-"))}</li>
+          <li>在宅率: ${escapeHtml(formatPercent(record.home_use_user_ratio_decimal))}</li>
         </ul>
       </article>
       <article class="detail-card">
@@ -1242,6 +1252,7 @@ function renderDetail(record) {
           <li>電話: ${escapeHtml(record.wam_office_phone ?? "-")}</li>
           <li>事業所番号: ${escapeHtml(record.wam_office_number ?? "-")}</li>
           <li>公開情報の定員: ${escapeHtml(formatNullable(record.wam_office_capacity))}</li>
+          <li>在宅利用: ${escapeHtml(formatBool(record.home_use_active))}</li>
           <li>新設: ${escapeHtml(record.is_new_office ? "あり" : "なし")}</li>
           <li>備考: ${escapeHtml(record.remarks ?? "-")}</li>
         </ul>
@@ -1262,7 +1273,7 @@ function renderTable(records) {
   document.getElementById("nextPageButton").disabled = state.currentPage >= pageCount;
 
   if (!pagedRecords.length) {
-    tableBody.innerHTML = `<tr><td colspan="12">${document.getElementById("emptyStateTemplate").innerHTML}</td></tr>`;
+    tableBody.innerHTML = `<tr><td colspan="13">${document.getElementById("emptyStateTemplate").innerHTML}</td></tr>`;
     return;
   }
 
@@ -1277,6 +1288,7 @@ function renderTable(records) {
           <td class="numeric">${formatWage(record.average_wage_yen, record.average_wage_error)}</td>
           <td class="numeric">${formatRatio(record.wage_ratio_to_overall_mean)}</td>
           <td class="numeric">${formatPercent(record.daily_user_capacity_ratio)}</td>
+          <td class="numeric">${formatPercent(record.home_use_user_ratio_decimal)}</td>
           <td>${matchBadge(record.wam_match_status, record.wam_match_confidence)}</td>
           <td class="numeric">${formatPercent(record.wam_key_staff_fte_per_capacity)}</td>
           <td>${escapeHtml(record.wam_primary_activity_type ?? "-")}</td>
@@ -1618,6 +1630,8 @@ function downloadFilteredCsv() {
     ["wage_ratio_to_municipality_mean", "市町村平均との差"],
     ["wage_ratio_to_capacity_band_mean", "定員帯平均との差"],
     ["daily_user_capacity_ratio", "利用率"],
+    ["home_use_active", "在宅利用あり"],
+    ["home_use_user_ratio_pct", "在宅率"],
     ["wage_outlier_flag", "工賃水準"],
     ["wam_match_status", "人員詳細"],
     ["wam_welfare_staff_fte_total", "福祉職員（常勤換算）"],

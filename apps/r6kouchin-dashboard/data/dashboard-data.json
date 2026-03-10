@@ -1,12 +1,11 @@
 {
   "meta": {
-    "source_workbook": "/Users/chibakohei/Downloads/r6kouchinjissekib.xlsx",
-    "generated_at": "2026-03-10T09:23:29+09:00",
+    "generated_at": "2026-03-10T10:49:58+09:00",
     "record_count": 1976,
-    "wam_generated_at": "2026-03-10T09:23:29+09:00",
+    "wam_generated_at": "2026-03-10T10:49:58+09:00",
     "wam_directory_count": 783,
     "wam_matched_record_count": 763,
-    "app_record_field_count": 48,
+    "app_record_field_count": 50,
     "app_record_chunk_size": 250
   },
   "summary": {
