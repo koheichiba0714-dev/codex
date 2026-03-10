@@ -93,6 +93,7 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 
 async function init() {
+  bindSectionNav();
   const response = await fetch("./data/dashboard-data.json", { cache: "no-store" });
   if (!response.ok) {
     throw new Error("dashboard data could not be loaded");
@@ -108,6 +109,52 @@ async function init() {
   bindEvents();
   syncPresetButtons();
   applyFilters();
+}
+
+function bindSectionNav() {
+  const links = Array.from(document.querySelectorAll(".sidebar .nav-link[href^='#']"));
+  if (!links.length) return;
+
+  const sections = links
+    .map((link) => {
+      const target = document.querySelector(link.getAttribute("href"));
+      return target ? { id: target.id, link, target } : null;
+    })
+    .filter(Boolean);
+
+  if (!sections.length) return;
+
+  const activate = (id) => {
+    sections.forEach(({ id: sectionId, link }) => {
+      link.classList.toggle("is-active", sectionId === id);
+    });
+  };
+
+  links.forEach((link) => {
+    link.addEventListener("click", () => {
+      const targetId = link.getAttribute("href")?.slice(1);
+      if (targetId) activate(targetId);
+    });
+  });
+
+  if (!("IntersectionObserver" in window)) return;
+
+  const observer = new IntersectionObserver(
+    (entries) => {
+      const visible = entries
+        .filter((entry) => entry.isIntersecting)
+        .sort((left, right) => left.boundingClientRect.top - right.boundingClientRect.top)[0];
+      if (visible) {
+        activate(visible.target.id);
+      }
+    },
+    {
+      rootMargin: "-18% 0px -66% 0px",
+      threshold: [0, 0.3, 0.8],
+    }
+  );
+
+  sections.forEach(({ target }) => observer.observe(target));
 }
 
 async function loadDashboardRecords(dashboard) {
@@ -566,7 +613,7 @@ function renderLoadingState() {
       element.innerHTML = loadingCard;
     }
   });
-  document.getElementById("recordsTableBody").innerHTML = `<tr><td colspan="19">${loadingCard}</td></tr>`;
+  document.getElementById("recordsTableBody").innerHTML = `<tr><td colspan="12">${loadingCard}</td></tr>`;
 }
 
 function renderMeta(dashboard) {
@@ -664,15 +711,15 @@ function renderInsights(records) {
 
   const insights = [
     {
-      title: "市場基準",
+      title: "市場の中心値",
       body: `中央値 ${formatMaybeYen(wageStats.median)}。上位10%目安は ${formatMaybeYen(wageStats.p90)}。`,
     },
     {
-      title: "WAM一致率",
+      title: "見えている範囲",
       body: `現在の条件で WAM 詳細一致は ${formatCount(matched.length)} 件。人員・送迎・運営体制まで比較できる。`,
     },
     {
-      title: "省人で高工賃",
+      title: "参考になる高工賃",
       body: leanHigh
         ? `${leanHigh.office_name ?? "-"} は ${formatWageText(
             leanHigh.average_wage_yen
@@ -680,7 +727,7 @@ function renderInsights(records) {
         : "高工賃 × 少ない人員の候補がまだ見えていない。",
     },
     {
-      title: "送迎の影響",
+      title: "送迎ありの差",
       body:
         transportDelta == null
           ? "送迎あり/なしの比較に十分な一致件数がない。"
@@ -689,7 +736,7 @@ function renderInsights(records) {
             )}。差分は ${formatSignedYen(transportDelta)}。`,
     },
     {
-      title: "改善優先候補",
+      title: "改善圧力",
       body: heavyLow
         ? `${heavyLow.office_name ?? "-"} は ${formatWageText(
             heavyLow.average_wage_yen
@@ -1114,7 +1161,7 @@ function renderTable(records) {
   document.getElementById("nextPageButton").disabled = state.currentPage >= pageCount;
 
   if (!pagedRecords.length) {
-    tableBody.innerHTML = `<tr><td colspan="19">${document.getElementById("emptyStateTemplate").innerHTML}</td></tr>`;
+    tableBody.innerHTML = `<tr><td colspan="12">${document.getElementById("emptyStateTemplate").innerHTML}</td></tr>`;
     return;
   }
 
@@ -1124,22 +1171,15 @@ function renderTable(records) {
         <tr class="${rowClass(record)}">
           <td class="numeric">${formatNullable(record.office_no)}</td>
           <td>${escapeHtml(record.municipality ?? "-")}</td>
-          <td>${escapeHtml(record.corporation_type_label ?? "-")}</td>
           <td>${escapeHtml(record.corporation_name ?? "-")}</td>
           <td>${escapeHtml(record.office_name ?? "-")}</td>
           <td class="numeric">${formatWage(record.average_wage_yen, record.average_wage_error)}</td>
           <td class="numeric">${formatRatio(record.wage_ratio_to_overall_mean)}</td>
-          <td>${outlierBadge(record.wage_outlier_flag, record.wage_outlier_severity)}</td>
           <td class="numeric">${formatPercent(record.daily_user_capacity_ratio)}</td>
           <td>${matchBadge(record.wam_match_status, record.wam_match_confidence)}</td>
-          <td class="numeric">${formatFte(record.wam_welfare_staff_fte_total)}</td>
           <td class="numeric">${formatPercent(record.wam_key_staff_fte_per_capacity)}</td>
-          <td>${booleanFlag(record.wam_transport_available)}</td>
-          <td>${quadrantBadge(record.wam_staffing_efficiency_quadrant)}</td>
-          <td>${staffingOutlierBadge(record.wam_staffing_outlier_flag, record.wam_staffing_outlier_severity)}</td>
-          <td>${statusBadge(record.response_status)}</td>
-          <td>${booleanFlag(record.is_new_office)}</td>
-          <td>${escapeHtml(record.remarks ?? "-")}</td>
+          <td>${escapeHtml(record.wam_primary_activity_type ?? "-")}</td>
+          <td><div class="attention-cell">${attentionBadges(record)}</div></td>
           <td><button class="table-link" data-select-office="${escapeHtml(record.office_no)}" type="button">表示</button></td>
         </tr>
       `
@@ -1161,6 +1201,26 @@ function rowClass(record) {
   if (record.wage_outlier_flag === "high" || record.wam_staffing_outlier_flag === "high") classes.push("row-high-outlier");
   if (record.wage_outlier_flag === "low" || record.wam_staffing_outlier_flag === "low") classes.push("row-low-outlier");
   return classes.join(" ");
+}
+
+function attentionBadges(record) {
+  const badges = [];
+  if (record.wage_outlier_flag) {
+    badges.push(outlierBadge(record.wage_outlier_flag, record.wage_outlier_severity));
+  }
+  if (record.wam_staffing_outlier_flag) {
+    badges.push(staffingOutlierBadge(record.wam_staffing_outlier_flag, record.wam_staffing_outlier_severity));
+  }
+  if (record.response_status && record.response_status !== "answered") {
+    badges.push(statusBadge(record.response_status));
+  }
+  if (record.is_new_office) {
+    badges.push(`<span class="badge badge-annotated">新設</span>`);
+  }
+  if (!badges.length) {
+    badges.push(`<span class="badge badge-answered">通常</span>`);
+  }
+  return badges.join("");
 }
 
 function matchedRecords(records) {
