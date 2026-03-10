@@ -636,6 +636,19 @@ th button,
   box-shadow: 0 12px 24px rgba(34, 113, 177, 0.18);
 }
 
+.filter-search-button {
+  font-weight: 700;
+  background: linear-gradient(135deg, #2271b1 0%, #2f8ed8 100%);
+  border-color: #2271b1;
+  color: #fff;
+  box-shadow: 0 16px 30px rgba(34, 113, 177, 0.24);
+}
+
+.filter-search-button:hover,
+.filter-search-button:focus-visible {
+  filter: brightness(1.03);
+}
+
 .ghost-button:disabled,
 .solid-button:disabled,
 .table-link:disabled {

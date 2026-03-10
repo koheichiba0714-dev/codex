@@ -41,8 +41,8 @@
             </p>
           </div>
           <div class="topbar-actions">
-            <button id="openFiltersButton" class="ghost-button" type="button">条件を絞る</button>
-            <button id="downloadCsvButton" class="solid-button" type="button">絞り込み結果をCSV出力</button>
+            <button id="openFiltersButton" class="solid-button filter-search-button" type="button">絞り込み検索</button>
+            <button id="downloadCsvButton" class="ghost-button" type="button">絞り込み結果をCSV出力</button>
           </div>
         </header>
 
@@ -70,7 +70,7 @@
                 <p class="panel-note">詳細条件はポップアップで開く。ここでは今の条件とよく使う切り替えだけを見る。</p>
               </div>
               <div class="panel-head-actions">
-                <button id="openFiltersPanelButton" class="ghost-button" type="button">条件を開く</button>
+                <button id="openFiltersPanelButton" class="solid-button filter-search-button" type="button">絞り込み検索</button>
                 <button id="resetFiltersButton" class="ghost-button" type="button">条件を初期化</button>
               </div>
             </div>
@@ -364,7 +364,7 @@
           <div>
             <p class="section-kicker">条件を絞る</p>
             <h2 id="filtersDialogHeading">検索と絞り込み</h2>
-            <p class="panel-note">条件を選ぶとすぐに反映される。閉じると一覧へ戻る。</p>
+            <p class="panel-note">条件を調整して保存すると、一覧に反映して自動で閉じる。</p>
           </div>
           <button id="closeFiltersButton" class="ghost-button" type="button">閉じる</button>
         </div>
@@ -465,7 +465,7 @@
         </div>
         <div class="dialog-actions">
           <button id="resetFiltersDialogButton" class="ghost-button" type="button">条件を初期化</button>
-          <button id="closeFiltersFooterButton" class="solid-button" type="button">一覧へ戻る</button>
+          <button id="saveFiltersButton" class="solid-button filter-search-button" type="button">保存</button>
         </div>
       </div>
     </dialog>

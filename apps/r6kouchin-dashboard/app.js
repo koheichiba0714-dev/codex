@@ -83,6 +83,10 @@ function createDefaultFilters() {
   };
 }
 
+function cloneFilters(filters) {
+  return { ...filters };
+}
+
 const state = {
   records: [],
   filteredRecords: [],
@@ -91,6 +95,7 @@ const state = {
   sortDirection: "desc",
   currentPage: 1,
   filters: createDefaultFilters(),
+  draftFilters: createDefaultFilters(),
   selectedOfficeNo: null,
   activePreset: "all",
 };
@@ -177,15 +182,16 @@ function bindFilterDialog() {
     });
   });
 
-  ["closeFiltersButton", "closeFiltersFooterButton"].forEach((id) => {
-    document.getElementById(id)?.addEventListener("click", () => {
-      closeFiltersDialog(dialog);
-    });
+  document.getElementById("closeFiltersButton")?.addEventListener("click", () => {
+    closeFiltersDialog(dialog);
   });
 
   document.getElementById("resetFiltersDialogButton")?.addEventListener("click", () => {
-    resetFilters();
-    applyFilters();
+    resetDraftFilters();
+  });
+
+  document.getElementById("saveFiltersButton")?.addEventListener("click", () => {
+    saveDraftFilters(dialog);
   });
 
   dialog.addEventListener("click", (event) => {
@@ -197,6 +203,8 @@ function bindFilterDialog() {
 
 function openFiltersDialog(dialog = document.getElementById("filtersDialog")) {
   if (!dialog) return;
+  state.draftFilters = cloneFilters(state.filters);
+  syncFilterControls(state.draftFilters);
   if (typeof dialog.showModal === "function") {
     if (!dialog.open) {
       dialog.showModal();
@@ -241,50 +249,50 @@ async function loadDashboardRecords(dashboard) {
 }
 
 function bindEvents() {
-  bindInput("searchInput", "input", (value) => {
-    state.filters.search = value.trim();
+  bindInput("searchInput", "input", (filters, value) => {
+    filters.search = value.trim();
   });
-  bindInput("municipalitySelect", "change", (value) => {
-    state.filters.municipality = value;
+  bindInput("municipalitySelect", "change", (filters, value) => {
+    filters.municipality = value;
   });
-  bindInput("areaSelect", "change", (value) => {
-    state.filters.area = value;
+  bindInput("areaSelect", "change", (filters, value) => {
+    filters.area = value;
   });
-  bindInput("corporationTypeSelect", "change", (value) => {
-    state.filters.corporationType = value;
+  bindInput("corporationTypeSelect", "change", (filters, value) => {
+    filters.corporationType = value;
   });
-  bindInput("responseStatusSelect", "change", (value) => {
-    state.filters.responseStatus = value;
+  bindInput("responseStatusSelect", "change", (filters, value) => {
+    filters.responseStatus = value;
   });
-  bindInput("outlierFlagSelect", "change", (value) => {
-    state.filters.outlierFlag = value;
+  bindInput("outlierFlagSelect", "change", (filters, value) => {
+    filters.outlierFlag = value;
   });
-  bindInput("capacityBandSelect", "change", (value) => {
-    state.filters.capacityBand = value;
+  bindInput("capacityBandSelect", "change", (filters, value) => {
+    filters.capacityBand = value;
   });
-  bindInput("quadrantSelect", "change", (value) => {
-    state.filters.quadrant = value;
+  bindInput("quadrantSelect", "change", (filters, value) => {
+    filters.quadrant = value;
   });
-  bindInput("wamMatchSelect", "change", (value) => {
-    state.filters.wamMatch = value;
+  bindInput("wamMatchSelect", "change", (filters, value) => {
+    filters.wamMatch = value;
   });
-  bindInput("workShortageRiskSelect", "change", (value) => {
-    state.filters.workShortageRisk = value;
+  bindInput("workShortageRiskSelect", "change", (filters, value) => {
+    filters.workShortageRisk = value;
   });
-  bindInput("transportSelect", "change", (value) => {
-    state.filters.transport = value;
+  bindInput("transportSelect", "change", (filters, value) => {
+    filters.transport = value;
   });
-  bindInput("staffingOutlierSelect", "change", (value) => {
-    state.filters.staffingOutlier = value;
+  bindInput("staffingOutlierSelect", "change", (filters, value) => {
+    filters.staffingOutlier = value;
   });
-  bindInput("primaryActivitySelect", "change", (value) => {
-    state.filters.primaryActivity = value;
+  bindInput("primaryActivitySelect", "change", (filters, value) => {
+    filters.primaryActivity = value;
   });
-  bindInput("mealSupportSelect", "change", (value) => {
-    state.filters.mealSupport = value;
+  bindInput("mealSupportSelect", "change", (filters, value) => {
+    filters.mealSupport = value;
   });
-  bindInput("managerMultiSelect", "change", (value) => {
-    state.filters.managerMulti = value;
+  bindInput("managerMultiSelect", "change", (filters, value) => {
+    filters.managerMulti = value;
   });
   bindCheckbox("newOnlyCheckbox", "newOnly");
   bindCheckbox("homeUseOnlyCheckbox", "homeUseOnly");
@@ -338,88 +346,87 @@ function bindEvents() {
 
 function bindInput(id, eventName, setter) {
   document.getElementById(id).addEventListener(eventName, (event) => {
-    setter(event.target.value);
-    state.activePreset = null;
-    syncPresetButtons();
-    state.currentPage = 1;
-    applyFilters();
+    const draftFilters = state.draftFilters ?? state.filters;
+    setter(draftFilters, event.target.value);
   });
 }
 
 function bindCheckbox(id, key) {
   document.getElementById(id).addEventListener("change", (event) => {
-    state.filters[key] = event.target.checked;
-    state.activePreset = null;
-    syncPresetButtons();
-    state.currentPage = 1;
-    applyFilters();
+    const draftFilters = state.draftFilters ?? state.filters;
+    draftFilters[key] = event.target.checked;
   });
+}
+
+function resetDraftFilters() {
+  state.draftFilters = createDefaultFilters();
+  syncFilterControls(state.draftFilters);
 }
 
 function resetFilters() {
   state.filters = createDefaultFilters();
+  state.draftFilters = cloneFilters(state.filters);
   state.activePreset = "all";
-
-  [
-    "searchInput",
-    "municipalitySelect",
-    "areaSelect",
-    "corporationTypeSelect",
-    "responseStatusSelect",
-    "outlierFlagSelect",
-    "capacityBandSelect",
-    "quadrantSelect",
-    "wamMatchSelect",
-    "workShortageRiskSelect",
-    "transportSelect",
-    "staffingOutlierSelect",
-    "primaryActivitySelect",
-    "mealSupportSelect",
-    "managerMultiSelect",
-  ].forEach((id) => {
-    document.getElementById(id).value = id === "searchInput" ? "" : "all";
-  });
-  [
-    "newOnlyCheckbox",
-    "homeUseOnlyCheckbox",
-    "noufukuOnlyCheckbox",
-    "wamOnlyCheckbox",
-  ].forEach((id) => {
-    document.getElementById(id).checked = false;
-  });
+  syncFilterControls(state.draftFilters);
   syncPresetButtons();
   state.currentPage = 1;
 }
 
-function applyPreset(preset) {
-  resetFilters();
-  state.activePreset = preset;
-  Object.assign(state.filters, FILTER_PRESETS[preset] ?? {});
-  syncFilterControls();
+function saveDraftFilters(dialog = document.getElementById("filtersDialog")) {
+  state.filters = cloneFilters(state.draftFilters ?? createDefaultFilters());
+  state.activePreset = detectActivePreset(state.filters);
   syncPresetButtons();
+  state.currentPage = 1;
+  applyFilters();
+  closeFiltersDialog(dialog);
+}
+
+function detectActivePreset(filters) {
+  const defaults = createDefaultFilters();
+  if (areFiltersEqual(filters, defaults)) {
+    return "all";
+  }
+  return (
+    Object.entries(FILTER_PRESETS).find(([, presetFilters]) =>
+      areFiltersEqual(filters, { ...defaults, ...presetFilters })
+    )?.[0] ?? null
+  );
+}
+
+function areFiltersEqual(left, right) {
+  return Object.keys(createDefaultFilters()).every((key) => left[key] === right[key]);
+}
+
+function applyPreset(preset) {
+  state.filters = { ...createDefaultFilters(), ...(FILTER_PRESETS[preset] ?? {}) };
+  state.draftFilters = cloneFilters(state.filters);
+  state.activePreset = preset;
+  syncFilterControls(state.draftFilters);
+  syncPresetButtons();
+  state.currentPage = 1;
   applyFilters();
 }
 
-function syncFilterControls() {
-  document.getElementById("searchInput").value = state.filters.search;
-  document.getElementById("municipalitySelect").value = state.filters.municipality;
-  document.getElementById("areaSelect").value = state.filters.area;
-  document.getElementById("corporationTypeSelect").value = state.filters.corporationType;
-  document.getElementById("responseStatusSelect").value = state.filters.responseStatus;
-  document.getElementById("outlierFlagSelect").value = state.filters.outlierFlag;
-  document.getElementById("capacityBandSelect").value = state.filters.capacityBand;
-  document.getElementById("quadrantSelect").value = state.filters.quadrant;
-  document.getElementById("wamMatchSelect").value = state.filters.wamMatch;
-  document.getElementById("workShortageRiskSelect").value = state.filters.workShortageRisk;
-  document.getElementById("transportSelect").value = state.filters.transport;
-  document.getElementById("staffingOutlierSelect").value = state.filters.staffingOutlier;
-  document.getElementById("primaryActivitySelect").value = state.filters.primaryActivity;
-  document.getElementById("mealSupportSelect").value = state.filters.mealSupport;
-  document.getElementById("managerMultiSelect").value = state.filters.managerMulti;
-  document.getElementById("newOnlyCheckbox").checked = state.filters.newOnly;
-  document.getElementById("homeUseOnlyCheckbox").checked = state.filters.homeUseOnly;
-  document.getElementById("noufukuOnlyCheckbox").checked = state.filters.noufukuOnly;
-  document.getElementById("wamOnlyCheckbox").checked = state.filters.wamOnly;
+function syncFilterControls(filters = state.filters) {
+  document.getElementById("searchInput").value = filters.search;
+  document.getElementById("municipalitySelect").value = filters.municipality;
+  document.getElementById("areaSelect").value = filters.area;
+  document.getElementById("corporationTypeSelect").value = filters.corporationType;
+  document.getElementById("responseStatusSelect").value = filters.responseStatus;
+  document.getElementById("outlierFlagSelect").value = filters.outlierFlag;
+  document.getElementById("capacityBandSelect").value = filters.capacityBand;
+  document.getElementById("quadrantSelect").value = filters.quadrant;
+  document.getElementById("wamMatchSelect").value = filters.wamMatch;
+  document.getElementById("workShortageRiskSelect").value = filters.workShortageRisk;
+  document.getElementById("transportSelect").value = filters.transport;
+  document.getElementById("staffingOutlierSelect").value = filters.staffingOutlier;
+  document.getElementById("primaryActivitySelect").value = filters.primaryActivity;
+  document.getElementById("mealSupportSelect").value = filters.mealSupport;
+  document.getElementById("managerMultiSelect").value = filters.managerMulti;
+  document.getElementById("newOnlyCheckbox").checked = filters.newOnly;
+  document.getElementById("homeUseOnlyCheckbox").checked = filters.homeUseOnly;
+  document.getElementById("noufukuOnlyCheckbox").checked = filters.noufukuOnly;
+  document.getElementById("wamOnlyCheckbox").checked = filters.wamOnly;
 }
 
 function syncPresetButtons() {
