@@ -828,7 +828,7 @@ function renderInsights(records) {
             )}。差分は ${formatSignedYen(transportDelta)}。`,
     },
     {
-      title: "先に見直したい層",
+      title: "工賃低め・利用率低め・人員先行",
       body: heavyLow
         ? `${heavyLow.office_name ?? "-"} は ${formatWageText(
             heavyLow.average_wage_yen
@@ -895,12 +895,12 @@ function renderStrategy(records) {
     .sort((left, right) => reviewScore(right) - reviewScore(left))
     .slice(0, 6);
 
-  rootSummary.textContent = `利用者を増やせそう ${formatCount(growthCandidates.length)} 件 / 先に見直したい ${formatCount(
+  rootSummary.textContent = `利用者を増やせそう ${formatCount(growthCandidates.length)} 件 / 工賃低め・利用率低め・人員先行 ${formatCount(
     fixCandidates.length
   )} 件 / まず確認したい ${formatCount(reviewCandidates.length)} 件`;
 
   renderStrategyList("growthList", growthCandidates, "利用者を増やせそうな事業所はまだない", buildGrowthReason);
-  renderStrategyList("fixList", fixCandidates, "先に見直したい事業所はまだない", buildFixReason);
+  renderStrategyList("fixList", fixCandidates, "工賃低め・利用率低め・人員先行の事業所はまだない", buildFixReason);
   renderStrategyList("reviewList", reviewCandidates, "まず確認したい事業所はまだない", buildReviewReason);
 }
 
@@ -946,7 +946,7 @@ function renderStats(records) {
     { label: "支援職員 / 定員", value: formatPercent(keyStaffPerCapacity), hint: "主な支援職員の人数を定員で割った目安" },
     { label: "送迎実施率", value: formatPercent(transportRate), hint: "一致レコードのみ" },
     { label: "管理者兼務率", value: formatPercent(managerMultiRate), hint: "一致レコードのみ" },
-    { label: "工賃低め・人員多め", value: formatCount(heavyLowCount), hint: "先に見直したい候補" },
+    { label: "工賃低め・人員多め", value: formatCount(heavyLowCount), hint: "工賃低め・利用率低め・人員先行の候補" },
     { label: "仕事不足の可能性", value: formatCount(workShortageCount), hint: "工賃・利用率・人員のバランスで抽出" },
   ];
 
