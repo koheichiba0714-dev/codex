@@ -937,7 +937,12 @@ function renderStats(records) {
   const wageStats = computeLocalStats(wages);
   const welfareStaffFte = meanFor(matched, "wam_welfare_staff_fte_total");
   const keyStaffPerCapacity = meanFor(matched, "wam_key_staff_fte_per_capacity");
-  const homeUseRate = meanFor(records, "home_use_user_ratio_decimal");
+  const homeUseActiveCount = records.filter((record) => record.home_use_active === true).length;
+  const homeUseActiveRate = ratioOf(records, (record) => record.home_use_active === true);
+  const homeUseRateAmongActive = meanFor(
+    records.filter((record) => record.home_use_active === true && isNumber(record.home_use_user_ratio_decimal)),
+    "home_use_user_ratio_decimal"
+  );
   const transportRate = ratioOf(matched, (record) => record.wam_transport_available === true);
   const managerMultiRate = ratioOf(matched, (record) => record.wam_manager_multi_post === true);
   const heavyLowCount = matched.filter((record) => record.wam_staffing_efficiency_quadrant === "低工賃 × 厚い人員").length;
@@ -950,7 +955,8 @@ function renderStats(records) {
     { label: "工賃高め", value: formatCount(records.filter((record) => record.wage_outlier_flag === "high").length), hint: "平均との差が大きい" },
     { label: "人員詳細あり", value: formatCount(matched.length), hint: "送迎や職員配置まで見える" },
     { label: "平均職員数（常勤換算）", value: formatFte(welfareStaffFte), hint: "人員詳細ありの事業所のみ" },
-    { label: "平均在宅率", value: formatPercent(homeUseRate), hint: "在宅率データありの事業所のみ" },
+    { label: "在宅利用あり", value: formatCount(homeUseActiveCount), hint: `表示中の ${formatPercent(homeUseActiveRate)}` },
+    { label: "在宅利用ありの平均在宅率", value: formatPercent(homeUseRateAmongActive), hint: "在宅利用ありの事業所のみ" },
     { label: "支援職員 / 定員", value: formatPercent(keyStaffPerCapacity), hint: "主な支援職員の人数を定員で割った目安" },
     { label: "送迎実施率", value: formatPercent(transportRate), hint: "一致レコードのみ" },
     { label: "管理者兼務率", value: formatPercent(managerMultiRate), hint: "一致レコードのみ" },
