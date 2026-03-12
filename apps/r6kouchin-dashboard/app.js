@@ -64,6 +64,7 @@ const FILTER_PRESETS = {
     responseStatus: "unanswered",
   },
 };
+const INITIAL_PRESET = "osaka-city";
 
 function createDefaultFilters() {
   return {
@@ -93,6 +94,10 @@ function cloneFilters(filters) {
   return { ...filters };
 }
 
+function createPresetFilters(preset) {
+  return { ...createDefaultFilters(), ...(FILTER_PRESETS[preset] ?? {}) };
+}
+
 const state = {
   records: [],
   filteredRecords: [],
@@ -100,10 +105,10 @@ const state = {
   sortKey: "wage_ratio_to_overall_mean",
   sortDirection: "desc",
   currentPage: 1,
-  filters: createDefaultFilters(),
-  draftFilters: createDefaultFilters(),
+  filters: createPresetFilters(INITIAL_PRESET),
+  draftFilters: createPresetFilters(INITIAL_PRESET),
   selectedOfficeNo: null,
-  activePreset: "all",
+  activePreset: INITIAL_PRESET,
 };
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -435,14 +440,14 @@ function bindCheckbox(id, key) {
 }
 
 function resetDraftFilters() {
-  state.draftFilters = createDefaultFilters();
+  state.draftFilters = createPresetFilters(INITIAL_PRESET);
   syncFilterControls(state.draftFilters);
 }
 
 function resetFilters() {
-  state.filters = createDefaultFilters();
+  state.filters = createPresetFilters(INITIAL_PRESET);
   state.draftFilters = cloneFilters(state.filters);
-  state.activePreset = "all";
+  state.activePreset = INITIAL_PRESET;
   syncFilterControls(state.draftFilters);
   syncPresetButtons();
   state.currentPage = 1;
@@ -1360,9 +1365,9 @@ function renderTable(records) {
       (record) => `
         <tr class="${rowClass(record)}">
           <td class="numeric">${formatNullable(record.office_no)}</td>
+          <td>${escapeHtml(record.office_name ?? "-")}</td>
           <td>${escapeHtml(record.municipality ?? "-")}</td>
           <td>${escapeHtml(record.corporation_name ?? "-")}</td>
-          <td>${escapeHtml(record.office_name ?? "-")}</td>
           <td class="numeric">${formatWage(record.average_wage_yen, record.average_wage_error)}</td>
           <td class="numeric">${formatRatio(record.wage_ratio_to_overall_mean)}</td>
           <td class="numeric">${formatPercent(record.daily_user_capacity_ratio)}</td>

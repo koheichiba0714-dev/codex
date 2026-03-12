@@ -23,10 +23,11 @@
         <nav class="sidebar-nav">
           <a href="#overviewHeading" class="nav-link is-active">ダッシュボード</a>
           <a href="#filtersHeading" class="nav-link">絞り込み</a>
-          <a href="#strategyHeading" class="nav-link">優先順位</a>
-          <a href="#detailHeading" class="nav-link">事業所詳細</a>
-          <a href="#chartsHeading" class="nav-link">比較グラフ</a>
           <a href="#tableHeading" class="nav-link">一覧比較</a>
+          <a href="#detailHeading" class="nav-link">事業所詳細</a>
+          <a href="#summaryHeading" class="nav-link">主要指標</a>
+          <a href="#strategyHeading" class="nav-link">優先順位</a>
+          <a href="#chartsHeading" class="nav-link">比較グラフ</a>
           <a href="#notesHeading" class="nav-link">注記と品質</a>
         </nav>
       </aside>
@@ -68,7 +69,7 @@
               <div>
                 <p class="section-kicker">条件を絞る</p>
                 <h2 id="filtersHeading">対象を絞り込む</h2>
-                <p class="panel-note">詳細条件はポップアップで開く。ここでは今の条件とよく使う切り替えだけを見る。</p>
+                <p class="panel-note">初期表示は大阪市。詳細条件はポップアップで開き、ここでは今の条件とよく使う切り替えだけを見る。</p>
               </div>
               <div class="panel-head-actions">
                 <button id="openFiltersPanelButton" class="solid-button filter-search-button" type="button">絞り込み検索</button>
@@ -77,8 +78,8 @@
             </div>
             <div class="filter-launch-body">
               <div class="preset-row" aria-label="クイック切り替え">
-                <button class="preset-chip is-active" data-preset="all" type="button">全体</button>
-                <button class="preset-chip" data-preset="osaka-city" type="button">大阪市</button>
+                <button class="preset-chip" data-preset="all" type="button">全体</button>
+                <button class="preset-chip is-active" data-preset="osaka-city" type="button">大阪市</button>
                 <button class="preset-chip" data-preset="osaka-wam" type="button">人員詳細あり</button>
                 <button class="preset-chip" data-preset="high-wage" type="button">工賃高め</button>
                 <button class="preset-chip" data-preset="high-wage-low-util" type="button">高工賃・低利用率</button>
@@ -284,7 +285,7 @@
               <div>
                 <p class="section-kicker">一覧比較</p>
                 <h2 id="tableHeading">要点だけで横比較する</h2>
-                <p class="panel-note">細かい項目はモーダルへ寄せ、一覧は比較に必要な列へ絞った。</p>
+                <p class="panel-note">絞り込み後はまずここを見る。先頭列を固定し、事業所名から横に比較しやすくした。</p>
               </div>
               <p id="tableSummary" class="table-summary"></p>
             </div>
@@ -293,9 +294,9 @@
                 <thead>
                   <tr>
                     <th><button type="button" data-sort-key="office_no">No.</button></th>
+                    <th><button type="button" data-sort-key="office_name">事業所名</button></th>
                     <th><button type="button" data-sort-key="municipality">地域</button></th>
                     <th><button type="button" data-sort-key="corporation_name">法人名</button></th>
-                    <th><button type="button" data-sort-key="office_name">事業所名</button></th>
                     <th><button type="button" data-sort-key="average_wage_yen">平均工賃</button></th>
                     <th><button type="button" data-sort-key="wage_ratio_to_overall_mean">平均との差</button></th>
                     <th><button type="button" data-sort-key="daily_user_capacity_ratio">利用率</button></th>
