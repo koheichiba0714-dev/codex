@@ -2197,6 +2197,8 @@ function downloadFilteredCsv() {
     ["wam_office_url", "WAM掲載URL"],
     ["homepage_url", "ホームページ"],
     ["instagram_url", "Instagram"],
+    ["derived_website_search_url", "ホームページ検索URL"],
+    ["derived_instagram_search_url", "Instagram検索URL"],
     ["remarks", "備考"],
   ];
 
@@ -2216,6 +2218,12 @@ function downloadFilteredCsv() {
       }
       if (key === "derived_work_shortage_risk") {
         return escapeCsvCell(hasWorkShortageRisk(record) ? "あり" : "なし");
+      }
+      if (key === "derived_website_search_url") {
+        return escapeCsvCell(buildWebsiteSearchUrl(record));
+      }
+      if (key === "derived_instagram_search_url") {
+        return escapeCsvCell(buildInstagramSearchUrl(record));
       }
       if (typeof value === "boolean") {
         return escapeCsvCell(value ? "あり" : "なし");
