@@ -161,6 +161,12 @@ APP_RECORD_FIELD_ORDER = [
     "wam_fetch_status",
     "wam_office_number",
     "wam_office_url",
+    "homepage_url",
+    "homepage_source",
+    "homepage_confidence",
+    "instagram_url",
+    "instagram_source",
+    "instagram_confidence",
     "wam_office_phone",
     "wam_office_address_city",
     "wam_office_address_line",
@@ -182,6 +188,14 @@ APP_RECORD_FIELD_ORDER = [
 ]
 
 APP_RECORD_CHUNK_SIZE = 250
+LINK_FIELD_ORDER = [
+    "homepage_url",
+    "homepage_source",
+    "homepage_confidence",
+    "instagram_url",
+    "instagram_source",
+    "instagram_confidence",
+]
 
 
 def parse_args() -> argparse.Namespace:
@@ -202,6 +216,11 @@ def parse_args() -> argparse.Namespace:
         "--wam-match-override-input",
         default="data/inputs/wam/osakashi_shuro_b_match_overrides.csv",
         help="manual workbook office_no to WAM office_number overrides",
+    )
+    parser.add_argument(
+        "--link-enrichment-input",
+        default="data/inputs/web_links/osakashi_shuro_b_office_links.csv",
+        help="office homepage / instagram enrichment csv",
     )
     parser.add_argument(
         "--integrated-output",
@@ -228,6 +247,16 @@ def parse_args() -> argparse.Namespace:
         default="apps/r6kouchin-dashboard/data/dashboard-data.json",
         help="dashboard app data output path",
     )
+    parser.add_argument(
+        "--wam-focus-municipalities",
+        default="大阪市",
+        help="comma-separated municipalities eligible for WAM detail matching",
+    )
+    parser.add_argument(
+        "--wam-focus-label",
+        default="大阪市",
+        help="human-readable label for the WAM detail focus area",
+    )
     return parser.parse_args()
 
 
@@ -240,6 +269,13 @@ def resolve_path(path_str: str) -> Path:
     if path.is_absolute():
         return path.resolve()
     return (repo_root() / path).resolve()
+
+
+def path_for_summary(path: Path) -> str:
+    try:
+        return str(path.relative_to(repo_root()))
+    except ValueError:
+        return str(path)
 
 
 def load_json(path: Path) -> Any:
@@ -256,6 +292,54 @@ def load_csv_rows(path: Path) -> list[dict[str, str]]:
 def write_json(path: Path, payload: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def canonical_external_url(value: Any) -> str | None:
+    if not value:
+        return None
+    candidate = str(value).strip()
+    if not candidate:
+        return None
+    if not candidate.startswith(("http://", "https://")):
+        return None
+    return candidate
+
+
+def default_link_fields(record: dict[str, Any]) -> dict[str, Any]:
+    link_fields = {field: None for field in LINK_FIELD_ORDER}
+    office_url = canonical_external_url(record.get("wam_office_url"))
+    if not office_url:
+        return link_fields
+    if "instagram.com" in office_url.lower():
+        link_fields["instagram_url"] = office_url
+        link_fields["instagram_source"] = "wam_url"
+        link_fields["instagram_confidence"] = "high"
+        return link_fields
+    link_fields["homepage_url"] = office_url
+    link_fields["homepage_source"] = "wam_url"
+    link_fields["homepage_confidence"] = "high"
+    return link_fields
+
+
+def link_lookup_by_office(rows: list[dict[str, str]]) -> dict[str, dict[str, str]]:
+    return {
+        str(row.get("office_no") or "").strip(): row
+        for row in rows
+        if str(row.get("office_no") or "").strip()
+    }
+
+
+def merge_link_fields(record: dict[str, Any], link_row: dict[str, str] | None) -> dict[str, Any]:
+    merged = deepcopy(record)
+    merged.update(default_link_fields(merged))
+    if not link_row:
+        return merged
+
+    for field in LINK_FIELD_ORDER:
+        value = link_row.get(field)
+        if value:
+            merged[field] = value
+    return merged
 
 
 def write_dict_csv(path: Path, fieldnames: list[str], rows: list[dict[str, Any]]) -> None:
@@ -412,6 +496,14 @@ def dedupe_wam_rows(wam_rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return deduped
 
 
+def wam_row_matches_record_municipality(record: dict[str, Any], wam_row: dict[str, Any]) -> bool:
+    municipality = str(record.get("municipality") or "").strip()
+    wam_city = str(wam_row.get("office_address_city") or "").strip()
+    if not municipality or not wam_city:
+        return True
+    return municipality in wam_city
+
+
 def staffing_quadrant(
     wage_value: float | None,
     staffing_value: float | None,
@@ -432,6 +524,7 @@ def staffing_quadrant(
 def build_match_proposals(
     records: list[dict[str, Any]],
     wam_rows: list[dict[str, Any]],
+    focus_municipalities: set[str],
 ) -> list[dict[str, Any]]:
     wam_by_corporation: dict[str, list[tuple[int, dict[str, Any]]]] = defaultdict(list)
     wam_by_corporation_name: dict[str, list[tuple[int, dict[str, Any]]]] = defaultdict(list)
@@ -448,7 +541,7 @@ def build_match_proposals(
 
     proposals: list[dict[str, Any]] = []
     for record_index, record in enumerate(records):
-        if record.get("municipality") != "大阪市":
+        if str(record.get("municipality") or "") not in focus_municipalities:
             continue
 
         strict_record_name = normalize_name(record.get("office_name"))
@@ -492,6 +585,14 @@ def build_match_proposals(
             ]
             search_space = strict_unique_matches or relaxed_unique_matches
             corporation_mode = "name_only"
+
+        same_municipality_space = [
+            (wam_index, wam_row)
+            for wam_index, wam_row in search_space
+            if wam_row_matches_record_municipality(record, wam_row)
+        ]
+        if same_municipality_space:
+            search_space = same_municipality_space
 
         for wam_index, wam_row in search_space:
             strict_wam_name = normalize_name(wam_row.get("office_name"))
@@ -602,11 +703,12 @@ def build_override_proposals(
     records: list[dict[str, Any]],
     wam_rows: list[dict[str, Any]],
     override_rows: list[dict[str, str]],
+    focus_municipalities: set[str],
 ) -> list[dict[str, Any]]:
     record_index_by_office_no = {
         str(record.get("office_no")): record_index
         for record_index, record in enumerate(records)
-        if record.get("municipality") == "大阪市"
+        if str(record.get("municipality") or "") in focus_municipalities
     }
     wam_index_by_office_number = {
         str(wam_row.get("office_number")): wam_index
@@ -644,10 +746,11 @@ def build_override_proposals(
 def assign_matches(
     records: list[dict[str, Any]],
     wam_rows: list[dict[str, Any]],
+    focus_municipalities: set[str],
     override_rows: list[dict[str, str]] | None = None,
 ) -> tuple[dict[int, dict[str, Any]], list[dict[str, Any]]]:
-    proposals = build_match_proposals(records, wam_rows)
-    proposals.extend(build_override_proposals(records, wam_rows, override_rows or []))
+    proposals = build_match_proposals(records, wam_rows, focus_municipalities)
+    proposals.extend(build_override_proposals(records, wam_rows, override_rows or [], focus_municipalities))
     confidence_priority = {"high": 3, "medium": 2, "low": 1}
     proposals_by_record: dict[int, list[dict[str, Any]]] = defaultdict(list)
     for proposal in proposals:
@@ -1002,9 +1105,15 @@ def enrich_staffing_analytics(records: list[dict[str, Any]]) -> dict[str, Any]:
 
 def main() -> None:
     args = parse_args()
+    focus_municipalities = {
+        value.strip()
+        for value in args.wam_focus_municipalities.split(",")
+        if value.strip()
+    }
     dashboard_input = resolve_path(args.dashboard_input)
     wam_input = resolve_path(args.wam_details_input)
     override_input = resolve_path(args.wam_match_override_input)
+    link_input = resolve_path(args.link_enrichment_input)
     integrated_output = resolve_path(args.integrated_output)
     records_output_json = resolve_path(args.records_output_json)
     records_output_csv = resolve_path(args.records_output_csv)
@@ -1016,9 +1125,11 @@ def main() -> None:
     dashboard_payload = load_json(dashboard_input)
     wam_rows = dedupe_wam_rows(load_json(wam_input))
     override_rows = load_csv_rows(override_input)
+    link_rows = load_csv_rows(link_input)
+    link_lookup = link_lookup_by_office(link_rows)
 
     records = deepcopy(dashboard_payload.get("records", []))
-    chosen_matches, match_rows = assign_matches(records, wam_rows, override_rows)
+    chosen_matches, match_rows = assign_matches(records, wam_rows, focus_municipalities, override_rows)
 
     merged_records: list[dict[str, Any]] = []
     matched_wam_indices = {proposal["wam_index"] for proposal in chosen_matches.values()}
@@ -1026,11 +1137,15 @@ def main() -> None:
         match = chosen_matches.get(index)
         wam_row = wam_rows[match["wam_index"]] if match else None
         merged_records.append(merge_wam_fields(record, wam_row, match))
+    merged_records = [
+        merge_link_fields(record, link_lookup.get(str(record.get("office_no") or "").strip()))
+        for record in merged_records
+    ]
 
     wam_analytics = enrich_staffing_analytics(merged_records)
 
-    workbook_osaka_records = [record for record in merged_records if record.get("municipality") == "大阪市"]
-    unmatched_workbook_osaka_records = [
+    focus_records = [record for record in merged_records if str(record.get("municipality") or "") in focus_municipalities]
+    unmatched_focus_records = [
         {
             "office_no": record.get("office_no"),
             "corporation_name": record.get("corporation_name"),
@@ -1038,7 +1153,7 @@ def main() -> None:
             "capacity": record.get("capacity"),
             "average_wage_yen": record.get("average_wage_yen"),
         }
-        for record in workbook_osaka_records
+        for record in focus_records
         if record.get("wam_match_status") != "matched"
     ]
     unmatched_wam_rows = [
@@ -1055,27 +1170,30 @@ def main() -> None:
 
     match_summary = {
         "wam_directory_count": len(wam_rows),
-        "workbook_osaka_record_count": len(workbook_osaka_records),
-        "matched_record_count": sum(1 for record in workbook_osaka_records if record.get("wam_match_status") == "matched"),
-        "unmatched_record_count": len(unmatched_workbook_osaka_records),
+        "focus_record_count": len(focus_records),
+        "focus_label": args.wam_focus_label,
+        "focus_municipalities": sorted(focus_municipalities),
+        "workbook_osaka_record_count": len(focus_records),
+        "matched_record_count": sum(1 for record in focus_records if record.get("wam_match_status") == "matched"),
+        "unmatched_record_count": len(unmatched_focus_records),
         "matched_wam_count": len(matched_wam_indices),
         "unmatched_wam_count": len(unmatched_wam_rows),
         "confidence_breakdown": dict(
             Counter(
                 record["wam_match_confidence"]
-                for record in workbook_osaka_records
+                for record in focus_records
                 if record.get("wam_match_confidence")
             )
         ),
         "method_breakdown": dict(
             Counter(
                 record["wam_match_method"]
-                for record in workbook_osaka_records
+                for record in focus_records
                 if record.get("wam_match_method")
             )
         ),
         "manual_override_count": sum(
-            1 for record in workbook_osaka_records if record.get("wam_match_method") == "manual_override"
+            1 for record in focus_records if record.get("wam_match_method") == "manual_override"
         ),
     }
 
@@ -1098,14 +1216,15 @@ def main() -> None:
     }
     integrated_payload["analytics"]["wam_match_summary"] = match_summary
     integrated_payload["analytics"]["wam_staffing"] = wam_analytics
-    integrated_payload["analytics"]["wam_unmatched_workbook_osaka_records"] = unmatched_workbook_osaka_records[:120]
+    integrated_payload["analytics"]["wam_unmatched_focus_records"] = unmatched_focus_records[:120]
+    integrated_payload["analytics"]["wam_unmatched_workbook_osaka_records"] = unmatched_focus_records[:120]
     integrated_payload["analytics"]["wam_unmatched_directory"] = unmatched_wam_rows[:120]
     integrated_payload["issues"] = list(integrated_payload.get("issues", []))
     integrated_payload["issues"].append(
         {
-            "sheet": "WAM 大阪市B型統合",
+            "sheet": f"WAM {args.wam_focus_label}B型統合",
             "kind": "wam_match_coverage",
-            "detail": f"大阪市レコード {match_summary['matched_record_count']} / {match_summary['workbook_osaka_record_count']} 件を WAM 詳細へ一致させた。",
+            "detail": f"{args.wam_focus_label}レコード {match_summary['matched_record_count']} / {match_summary['focus_record_count']} 件を WAM 詳細へ一致させた。",
         }
     )
     integrated_payload["records"] = merged_records
@@ -1151,16 +1270,17 @@ def main() -> None:
         "generated_at": generated_at,
         "dashboard_input": str(dashboard_input),
         "wam_input": str(wam_input),
+        "link_input": str(link_input),
         "matched_record_count": match_summary["matched_record_count"],
         "unmatched_record_count": match_summary["unmatched_record_count"],
         "matched_wam_count": match_summary["matched_wam_count"],
         "unmatched_wam_count": match_summary["unmatched_wam_count"],
         "files": {
-            "integrated_dashboard_json": str(integrated_output.relative_to(repo_root())),
-            "integrated_records_json": str(records_output_json.relative_to(repo_root())),
-            "integrated_records_csv": str(records_output_csv.relative_to(repo_root())),
-            "match_report_csv": str(match_report_output.relative_to(repo_root())),
-            "app_dashboard_json": str(app_output.relative_to(repo_root())),
+            "integrated_dashboard_json": path_for_summary(integrated_output),
+            "integrated_records_json": path_for_summary(records_output_json),
+            "integrated_records_csv": path_for_summary(records_output_csv),
+            "match_report_csv": path_for_summary(match_report_output),
+            "app_dashboard_json": path_for_summary(app_output),
             "app_record_chunk_count": len(record_chunk_files),
         },
     }

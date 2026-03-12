@@ -1,11 +1,11 @@
 {
   "meta": {
-    "generated_at": "2026-03-10T10:49:58+09:00",
+    "generated_at": "2026-03-12T16:13:17+09:00",
     "record_count": 1976,
-    "wam_generated_at": "2026-03-10T10:49:58+09:00",
+    "wam_generated_at": "2026-03-12T16:13:17+09:00",
     "wam_directory_count": 783,
     "wam_matched_record_count": 763,
-    "app_record_field_count": 50,
+    "app_record_field_count": 56,
     "app_record_chunk_size": 250
   },
   "summary": {
@@ -124,6 +124,11 @@
     },
     "wam_match_summary": {
       "wam_directory_count": 783,
+      "focus_record_count": 885,
+      "focus_label": "大阪市",
+      "focus_municipalities": [
+        "大阪市"
+      ],
       "workbook_osaka_record_count": 885,
       "matched_record_count": 763,
       "unmatched_record_count": 122,
@@ -259,6 +264,11 @@
     },
     "wam_match_summary": {
       "wam_directory_count": 783,
+      "focus_record_count": 885,
+      "focus_label": "大阪市",
+      "focus_municipalities": [
+        "大阪市"
+      ],
       "workbook_osaka_record_count": 885,
       "matched_record_count": 763,
       "unmatched_record_count": 122,

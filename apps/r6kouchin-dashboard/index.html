@@ -11,8 +11,9 @@
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
+    <button class="mobile-menu-toggle" id="mobileMenuToggle" type="button" aria-label="メニュー">☰</button>
     <div class="admin-layout">
-      <aside class="sidebar" aria-label="ナビゲーション">
+      <aside class="sidebar" id="sidebar" aria-label="ナビゲーション">
         <div class="sidebar-brand">
           <span class="brand-mark">工</span>
           <div>
@@ -31,6 +32,7 @@
           <a href="#notesHeading" class="nav-link">注記と品質</a>
         </nav>
       </aside>
+      <div class="sidebar-overlay" id="sidebarOverlay"></div>
 
       <div class="workspace">
         <header class="topbar">
@@ -288,6 +290,10 @@
                 <article class="chart-card">
                   <h3>平均工賃帯</h3>
                   <div id="wageBandChart" class="bar-chart compact-chart"></div>
+                </article>
+                <article class="chart-card">
+                  <h3>報酬算定区分（R6年度）</h3>
+                  <div id="tierChart" class="bar-chart compact-chart"></div>
                 </article>
               </div>
             </details>
