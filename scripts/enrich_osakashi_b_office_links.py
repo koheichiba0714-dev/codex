@@ -67,6 +67,72 @@ SOCIAL_DOMAINS = {
     "youtube.com",
     "www.youtube.com",
 }
+PROFILE_BRIDGE_DOMAINS = {
+    "linktr.ee",
+    "www.linktr.ee",
+    "lit.link",
+    "www.lit.link",
+    "lit.link",
+    "bio.site",
+    "www.bio.site",
+    "carrd.co",
+    "www.carrd.co",
+    "instabio.cc",
+    "www.instabio.cc",
+    "taplink.cc",
+    "www.taplink.cc",
+}
+NON_HTML_SUFFIXES = (
+    ".css",
+    ".js",
+    ".json",
+    ".xml",
+    ".rss",
+    ".txt",
+    ".pdf",
+    ".jpg",
+    ".jpeg",
+    ".png",
+    ".gif",
+    ".svg",
+    ".webp",
+    ".ico",
+    ".mp4",
+    ".mov",
+    ".webm",
+    ".mp3",
+    ".wav",
+    ".woff",
+    ".woff2",
+    ".ttf",
+    ".otf",
+    ".zip",
+)
+INTERNAL_PAGE_KEYWORDS = (
+    "/about",
+    "/aboutus",
+    "/company",
+    "/facility",
+    "/office",
+    "/access",
+    "/contact",
+    "/profile",
+    "/service",
+    "/news",
+    "/blog",
+    "/staff",
+    "/guide",
+    "/support",
+    "/works",
+    "/business",
+    "/jigyosyo",
+    "/center",
+    "/shop",
+    "/tenpo",
+    "/day",
+    "/information",
+    "/sns",
+)
 INVALID_INSTAGRAM_SEGMENTS = {"p", "reel", "reels", "stories", "explore", "tv"}
 LEGAL_SUFFIXES = [
     "株式会社",
@@ -275,6 +341,64 @@ def is_homepage_candidate(value: str | None) -> bool:
     return True
 
 
+def decode_embedded_urls(value: str) -> str:
+    decoded = html.unescape(value or "")
+    replacements = (
+        ("\\/", "/"),
+        ("\\u002f", "/"),
+        ("\\u002F", "/"),
+        ("\\x2f", "/"),
+        ("\\x2F", "/"),
+        ("\\u003a", ":"),
+        ("\\u003A", ":"),
+        ("\\x3a", ":"),
+        ("\\x3A", ":"),
+        ("\\u0026", "&"),
+    )
+    for before, after in replacements:
+        decoded = decoded.replace(before, after)
+    return decoded
+
+
+def is_bridge_profile_url(value: str | None) -> bool:
+    return hostname(value) in PROFILE_BRIDGE_DOMAINS
+
+
+def is_probably_html_page(value: str | None) -> bool:
+    if not value:
+        return False
+    try:
+        parsed = urlparse(value)
+    except ValueError:
+        return False
+    path = (parsed.path or "").lower()
+    if path.endswith(NON_HTML_SUFFIXES):
+        return False
+    if path.startswith("/wp-content/") or path.startswith("/wp-includes/"):
+        return False
+    if any(fragment in path for fragment in ("/feed", "/comments/", "/wp-json", "/xmlrpc.php")):
+        return False
+    return True
+
+
+def rank_internal_link(url: str) -> tuple[int, int, str]:
+    lower = url.lower()
+    keyword_score = sum(1 for keyword in INTERNAL_PAGE_KEYWORDS if keyword in lower)
+    return (-keyword_score, len(lower), lower)
+
+
+def fetch_html_page(session: requests.Session, url: str, timeout: float) -> tuple[str, str] | None:
+    try:
+        response = session.get(url, timeout=timeout, headers={"User-Agent": USER_AGENT})
+        response.raise_for_status()
+    except requests.RequestException:
+        return None
+    content_type = (response.headers.get("content-type") or "").lower()
+    if content_type and all(token not in content_type for token in ("text/html", "application/xhtml+xml", "text/plain")):
+        return None
+    return response.url, response.text
+
+
 def build_query(record: dict[str, Any]) -> str:
     office_name = record.get("office_name") or ""
     municipality = record.get("municipality") or ""
@@ -442,12 +566,13 @@ def homepage_from_pdf(
 
 
 def extract_instagram_candidates(base_url: str, html_text: str) -> list[str]:
+    decoded_html = decode_embedded_urls(html_text)
     candidates: list[str] = []
-    for match in re.finditer(r"https?://(?:www\.)?instagram\.com/[^\"'<>\\s]+", html_text, re.I):
+    for match in re.finditer(r"https?://(?:www\.)?instagram\.com/[^\"'<>/\s]+(?:/[^\"'<>/\s]+)?", decoded_html, re.I):
         normalized = normalize_instagram_profile_url(match.group(0))
         if normalized:
             candidates.append(normalized)
-    for href_match in HREF_RE.finditer(html_text):
+    for href_match in HREF_RE.finditer(decoded_html):
         href = href_match.group("href")
         absolute = canonicalize_url(urljoin(base_url, href))
         normalized = normalize_instagram_profile_url(absolute)
@@ -458,37 +583,104 @@ def extract_instagram_candidates(base_url: str, html_text: str) -> list[str]:
 
 def extract_internal_links(base_url: str, html_text: str) -> list[str]:
     base_host = hostname(base_url)
+    decoded_html = decode_embedded_urls(html_text)
     links: list[str] = []
-    for href_match in HREF_RE.finditer(html_text):
+    fallback_links: list[str] = []
+    for href_match in HREF_RE.finditer(decoded_html):
         href = href_match.group("href")
         absolute = canonicalize_url(urljoin(base_url, href))
-        if not absolute or hostname(absolute) != base_host:
+        if (
+            not absolute
+            or hostname(absolute) != base_host
+            or absolute == canonicalize_url(base_url)
+            or not is_probably_html_page(absolute)
+        ):
             continue
         lower = absolute.lower()
-        if any(keyword in lower for keyword in ["/about", "/company", "/facility", "/office", "/access", "/contact", "/profile", "/service", "/news"]):
+        if any(keyword in lower for keyword in INTERNAL_PAGE_KEYWORDS):
             links.append(absolute)
-    return list(dict.fromkeys(links))[:6]
+        else:
+            fallback_links.append(absolute)
+    ordered = sorted(dict.fromkeys(links), key=rank_internal_link)
+    if len(ordered) < 8:
+        ordered.extend(
+            link for link in sorted(dict.fromkeys(fallback_links), key=rank_internal_link) if link not in ordered
+        )
+    return ordered[:10]
+
+
+def extract_bridge_profile_links(base_url: str, html_text: str) -> list[str]:
+    decoded_html = decode_embedded_urls(html_text)
+    links: list[str] = []
+    for href_match in HREF_RE.finditer(decoded_html):
+        href = href_match.group("href")
+        absolute = canonicalize_url(urljoin(base_url, href))
+        if absolute and is_bridge_profile_url(absolute):
+            links.append(absolute)
+    return list(dict.fromkeys(links))[:3]
 
 
 def instagram_from_homepage(session: requests.Session, homepage_url: str) -> str | None:
-    try:
-        response = session.get(homepage_url, timeout=8, headers={"User-Agent": USER_AGENT})
-        response.raise_for_status()
-    except requests.RequestException:
+    root_page = fetch_html_page(session, homepage_url, timeout=8)
+    if not root_page:
         return None
-    html_text = response.text
-    direct_links = extract_instagram_candidates(response.url, html_text)
-    if direct_links:
-        return direct_links[0]
-    for internal_url in extract_internal_links(response.url, html_text)[:3]:
-        try:
-            internal_response = session.get(internal_url, timeout=6, headers={"User-Agent": USER_AGENT})
-            internal_response.raise_for_status()
-        except requests.RequestException:
+    queue: list[str] = []
+    bridge_queue: list[str] = []
+    visited_pages: set[str] = set()
+    visited_bridges: set[str] = set()
+
+    def inspect_page(page_url: str, html_text: str) -> str | None:
+        direct_links = extract_instagram_candidates(page_url, html_text)
+        if direct_links:
+            return direct_links[0]
+        for bridge_url in extract_bridge_profile_links(page_url, html_text):
+            if bridge_url not in visited_bridges and bridge_url not in bridge_queue:
+                bridge_queue.append(bridge_url)
+        for internal_url in extract_internal_links(page_url, html_text):
+            if internal_url not in visited_pages and internal_url not in queue:
+                queue.append(internal_url)
+        return None
+
+    direct = inspect_page(*root_page)
+    if direct:
+        return direct
+
+    while bridge_queue:
+        bridge_url = bridge_queue.pop(0)
+        if bridge_url in visited_bridges:
             continue
-        internal_links = extract_instagram_candidates(internal_response.url, internal_response.text)
-        if internal_links:
-            return internal_links[0]
+        visited_bridges.add(bridge_url)
+        bridge_page = fetch_html_page(session, bridge_url, timeout=6)
+        if not bridge_page:
+            continue
+        bridge_links = extract_instagram_candidates(*bridge_page)
+        if bridge_links:
+            return bridge_links[0]
+
+    internal_checks = 0
+    while queue and internal_checks < 8:
+        internal_url = queue.pop(0)
+        if internal_url in visited_pages:
+            continue
+        visited_pages.add(internal_url)
+        internal_page = fetch_html_page(session, internal_url, timeout=6)
+        if not internal_page:
+            continue
+        internal_checks += 1
+        direct = inspect_page(*internal_page)
+        if direct:
+            return direct
+        while bridge_queue:
+            bridge_url = bridge_queue.pop(0)
+            if bridge_url in visited_bridges:
+                continue
+            visited_bridges.add(bridge_url)
+            bridge_page = fetch_html_page(session, bridge_url, timeout=6)
+            if not bridge_page:
+                continue
+            bridge_links = extract_instagram_candidates(*bridge_page)
+            if bridge_links:
+                return bridge_links[0]
     return None
 
 
