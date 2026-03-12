@@ -1203,6 +1203,23 @@ dialog[open] {
   margin-bottom: 18px;
 }
 
+.corporation-toolbar {
+  display: flex;
+  justify-content: flex-start;
+  margin-bottom: 14px;
+}
+
+.corporation-sort-group {
+  display: grid;
+  gap: 8px;
+}
+
+.corporation-sort-label {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
 .corporation-summary-card {
   padding: 14px 16px;
   border-radius: var(--radius-md);

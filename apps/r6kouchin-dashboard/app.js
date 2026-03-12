@@ -34,6 +34,11 @@ const STAFFING_QUADRANT_ORDER = [
   "低工賃 × 厚い人員",
   "低工賃 × 少ない人員",
 ];
+const CORPORATION_SORT_OPTIONS = [
+  { key: "municipality", label: "市区順" },
+  { key: "wage", label: "工賃順" },
+  { key: "utilization", label: "利用率順" },
+];
 
 /* ─────────────────────────────────────────────
    報酬算定区分（令和6年度 就労継続支援B型）
@@ -369,6 +374,7 @@ const state = {
   selectedOfficeNo: "339",
   selectedCorporationKey: null,
   selectedCorporationLabel: null,
+  selectedCorporationSort: "municipality",
   activePreset: INITIAL_PRESET,
 };
 
@@ -743,6 +749,16 @@ function bindEvents() {
   });
 
   document.body.addEventListener("click", (event) => {
+    const corporationSortTrigger = event.target.closest("[data-corporation-sort]");
+    if (corporationSortTrigger) {
+      const sortKey = corporationSortTrigger.getAttribute("data-corporation-sort");
+      if (sortKey && state.selectedCorporationLabel) {
+        state.selectedCorporationSort = sortKey;
+        renderCorporationDialog(state.selectedCorporationLabel);
+      }
+      return;
+    }
+
     const corporationTrigger = event.target.closest("[data-open-corporation]");
     if (corporationTrigger) {
       const corporationName = corporationTrigger.getAttribute("data-open-corporation");
@@ -892,15 +908,28 @@ function getCorporationKey(value) {
 function corporationRecords(corporationName) {
   const key = getCorporationKey(corporationName);
   if (!key) return [];
-  return state.records
-    .filter((record) => getCorporationKey(record.corporation_name) === key)
-    .sort((left, right) => {
-      const municipalityDiff = String(left.municipality ?? "").localeCompare(String(right.municipality ?? ""), "ja");
-      if (municipalityDiff !== 0) return municipalityDiff;
-      const officeDiff = String(left.office_name ?? "").localeCompare(String(right.office_name ?? ""), "ja");
-      if (officeDiff !== 0) return officeDiff;
-      return Number(left.office_no ?? 0) - Number(right.office_no ?? 0);
-    });
+  return state.records.filter((record) => getCorporationKey(record.corporation_name) === key);
+}
+
+function sortCorporationRecords(records, sortKey = state.selectedCorporationSort) {
+  const list = [...records];
+  return list.sort((left, right) => {
+    if (sortKey === "wage") {
+      const wageDiff = (right.average_wage_yen ?? Number.NEGATIVE_INFINITY) - (left.average_wage_yen ?? Number.NEGATIVE_INFINITY);
+      if (Number.isFinite(wageDiff) && wageDiff !== 0) return wageDiff;
+    }
+    if (sortKey === "utilization") {
+      const utilDiff =
+        (right.daily_user_capacity_ratio ?? Number.NEGATIVE_INFINITY) -
+        (left.daily_user_capacity_ratio ?? Number.NEGATIVE_INFINITY);
+      if (Number.isFinite(utilDiff) && utilDiff !== 0) return utilDiff;
+    }
+    const municipalityDiff = String(left.municipality ?? "").localeCompare(String(right.municipality ?? ""), "ja");
+    if (municipalityDiff !== 0) return municipalityDiff;
+    const officeDiff = String(left.office_name ?? "").localeCompare(String(right.office_name ?? ""), "ja");
+    if (officeDiff !== 0) return officeDiff;
+    return Number(left.office_no ?? 0) - Number(right.office_no ?? 0);
+  });
 }
 
 function corporationLinkButton(corporationName, className = "entity-link-button") {
@@ -1831,7 +1860,7 @@ function renderCorporationDialog(corporationName) {
   const dialogRoot = document.getElementById("corporationDialogContent");
   if (!dialogRoot) return;
 
-  const records = corporationRecords(corporationName);
+  const records = sortCorporationRecords(corporationRecords(corporationName));
   state.selectedCorporationKey = getCorporationKey(corporationName);
   state.selectedCorporationLabel = corporationName;
 
@@ -1857,6 +1886,15 @@ function renderCorporationDialog(corporationName) {
   });
   const corporationTypeLabel =
     [...corporationTypeCounts.entries()].sort((left, right) => right[1] - left[1])[0]?.[0] ?? "-";
+  const sortButtons = CORPORATION_SORT_OPTIONS.map(
+    (option) => `
+      <button
+        class="preset-chip ${state.selectedCorporationSort === option.key ? "is-active" : ""}"
+        type="button"
+        data-corporation-sort="${escapeAttribute(option.key)}"
+      >${escapeHtml(option.label)}</button>
+    `
+  ).join("");
 
   dialogRoot.innerHTML = `
     <div class="corporation-hero">
@@ -1867,6 +1905,12 @@ function renderCorporationDialog(corporationName) {
       </div>
       <div class="selected-office-actions">
         <button class="ghost-button" type="button" data-select-office="${escapeAttribute(records[0].office_no)}">先頭の事業所を開く</button>
+      </div>
+    </div>
+    <div class="corporation-toolbar">
+      <div class="corporation-sort-group">
+        <span class="corporation-sort-label">並び替え</span>
+        <div class="preset-row corporation-sort-row">${sortButtons}</div>
       </div>
     </div>
     <div class="corporation-summary-grid">
