@@ -1,0 +1,287 @@
+{
+  "meta": {
+    "source_pdf": "/Users/chibakohei/Documents/Playground/data/inputs/hokkaido/hokkaido_r6_shuro_b_wages.pdf",
+    "generated_at": "2026-03-12T16:36:02+09:00",
+    "record_count": 1233,
+    "wam_generated_at": "2026-03-12T16:36:02+09:00",
+    "wam_directory_count": 642,
+    "wam_matched_record_count": 422,
+    "app_record_field_count": 56,
+    "app_record_chunk_size": 250
+  },
+  "summary": {
+    "record_count": 1233,
+    "note_row_count": 1,
+    "response_breakdown": {
+      "answered": 1233
+    },
+    "answered_average_wage_yen_mean": 26556.861,
+    "answered_average_wage_yen_median": 22428.9,
+    "municipality_count": 123,
+    "new_office_count": 0,
+    "formula_error_rows": 0,
+    "high_outlier_count": 69,
+    "low_outlier_count": 0,
+    "duplicate_office_no_count": 0,
+    "service_counts": {
+      "noufuku_active": 0,
+      "suifuku_active": 0,
+      "rinfuku_active": 0,
+      "home_use_active": 0
+    },
+    "corporation_type_breakdown": {
+      "unknown": 1233
+    },
+    "missing_counts": {
+      "prefecture": 0,
+      "office_no": 0,
+      "municipality": 0,
+      "corporation_type_code": 1233,
+      "corporation_type_label": 1233,
+      "corporation_number": 392,
+      "corporation_name": 323,
+      "office_name": 0,
+      "capacity": 0,
+      "wage_payment_total_yen": 0,
+      "user_days_total": 0,
+      "annual_open_days": 0,
+      "average_daily_users": 0,
+      "average_daily_users_error": 1233,
+      "annual_open_months": 0,
+      "average_wage_yen": 0,
+      "average_wage_error": 1233,
+      "is_new_office": 0,
+      "remarks": 1233,
+      "noufuku_active": 1233,
+      "noufuku_new": 1233,
+      "noufuku_income_ratio_decimal": 1233,
+      "noufuku_income_ratio_pct": 1233,
+      "suifuku_active": 1233,
+      "suifuku_new": 1233,
+      "suifuku_income_ratio_decimal": 1233,
+      "suifuku_income_ratio_pct": 1233,
+      "rinfuku_active": 1233,
+      "rinfuku_new": 1233,
+      "rinfuku_income_ratio_decimal": 1233,
+      "rinfuku_income_ratio_pct": 1233,
+      "home_use_active": 1233,
+      "home_use_user_ratio_decimal": 1233,
+      "home_use_user_ratio_pct": 1233,
+      "daily_user_capacity_ratio": 0,
+      "wage_payment_per_user_day_yen": 0,
+      "annual_payment_per_capacity_yen": 0,
+      "capacity_band_label": 0,
+      "utilization_band_label": 0,
+      "wage_deviation_from_overall_mean_yen": 0,
+      "wage_ratio_to_overall_mean": 0,
+      "wage_z_score": 0,
+      "wage_percentile": 0,
+      "wage_band_label": 0,
+      "wage_outlier_flag": 1164,
+      "wage_outlier_severity": 1164,
+      "municipality_average_wage_yen": 0,
+      "wage_ratio_to_municipality_mean": 0,
+      "corporation_type_average_wage_yen": 1233,
+      "wage_ratio_to_corporation_type_mean": 1233,
+      "capacity_band_average_wage_yen": 0,
+      "wage_ratio_to_capacity_band_mean": 0,
+      "market_position_quadrant": 0
+    },
+    "overall_wage_stats": {
+      "count": 1233,
+      "mean": 26556.861,
+      "median": 22428.9,
+      "std_dev": 14680.986,
+      "q1": 16591.2,
+      "q3": 32208.5,
+      "iqr": 15617.3,
+      "p90": 46518.76,
+      "lower_fence": 0,
+      "upper_fence": 55634.45,
+      "extreme_lower_fence": 0,
+      "extreme_upper_fence": 79060.4
+    },
+    "overall_utilization_stats": {
+      "count": 1233,
+      "mean": 0.728,
+      "median": 0.724,
+      "std_dev": 0.322,
+      "q1": 0.52,
+      "q3": 0.925,
+      "iqr": 0.405,
+      "p90": 1.078,
+      "lower_fence": 0,
+      "upper_fence": 1.533,
+      "extreme_lower_fence": 0,
+      "extreme_upper_fence": 2.14
+    },
+    "wam_match_summary": {
+      "wam_directory_count": 642,
+      "focus_record_count": 555,
+      "focus_label": "札幌市・小樽市",
+      "focus_municipalities": [
+        "小樽市",
+        "札幌市"
+      ],
+      "workbook_osaka_record_count": 555,
+      "matched_record_count": 422,
+      "unmatched_record_count": 133,
+      "matched_wam_count": 422,
+      "unmatched_wam_count": 220,
+      "confidence_breakdown": {
+        "high": 408,
+        "low": 9,
+        "medium": 5
+      },
+      "method_breakdown": {
+        "corp_exact_name_strict": 376,
+        "corp_name_exact_name_strict": 32,
+        "unique_name_relaxed": 9,
+        "corp_exact_suffix_match": 2,
+        "unique_name_strict": 3
+      },
+      "manual_override_count": 0
+    },
+    "wam_staffing_summary": {
+      "matched_record_count": 422,
+      "staffing_stats": {
+        "count": 377,
+        "mean": 0.15,
+        "median": 0.15,
+        "q1": 0.0,
+        "q3": 0.22,
+        "p90": 0.285,
+        "iqr": 0.22,
+        "lower_fence": 0,
+        "upper_fence": 0.55,
+        "extreme_lower_fence": 0,
+        "extreme_upper_fence": 0.88
+      },
+      "feature_summary": [
+        {
+          "feature_label": "送迎あり",
+          "true_count": 205,
+          "false_count": 127,
+          "true_average_wage_yen": 22664.551,
+          "false_average_wage_yen": 26625.182,
+          "true_average_key_staff_fte_per_capacity": 0.205
+        },
+        {
+          "feature_label": "食事提供体制加算あり",
+          "true_count": 259,
+          "false_count": 73,
+          "true_average_wage_yen": 23614.802,
+          "false_average_wage_yen": 26183.526,
+          "true_average_key_staff_fte_per_capacity": 0.159
+        },
+        {
+          "feature_label": "地域協働加算あり",
+          "true_count": 2,
+          "false_count": 329,
+          "true_average_wage_yen": 15889.55,
+          "false_average_wage_yen": 24093.68,
+          "true_average_key_staff_fte_per_capacity": 0.185
+        },
+        {
+          "feature_label": "管理者兼務あり",
+          "true_count": 285,
+          "false_count": 47,
+          "true_average_wage_yen": 24106.635,
+          "false_average_wage_yen": 24622.128,
+          "true_average_key_staff_fte_per_capacity": 0.201
+        }
+      ]
+    }
+  },
+  "issues": [
+    {
+      "sheet": "北海道 就労継続支援B型 工賃実績一覧PDF",
+      "kind": "source_pdf",
+      "detail": "北海道の公式PDFを行単位で抽出し、ダッシュボード互換JSONへ正規化した。"
+    },
+    {
+      "sheet": "北海道 就労継続支援B型 工賃実績一覧PDF",
+      "kind": "pdf_parse_warnings",
+      "count": 1
+    },
+    {
+      "sheet": "WAM 札幌市・小樽市B型統合",
+      "kind": "wam_match_coverage",
+      "detail": "札幌市・小樽市レコード 422 / 555 件を WAM 詳細へ一致させた。"
+    }
+  ],
+  "notes": [
+    {
+      "source_row": 0,
+      "note_text": "法人名、法人種別、在宅利用、農福連携などPDF非掲載項目は欠損として扱う。"
+    }
+  ],
+  "analytics": {
+    "overall_wage_stats": {
+      "count": 1233,
+      "mean": 26556.861,
+      "median": 22428.9,
+      "std_dev": 14680.986,
+      "q1": 16591.2,
+      "q3": 32208.5,
+      "iqr": 15617.3,
+      "p90": 46518.76,
+      "lower_fence": 0,
+      "upper_fence": 55634.45,
+      "extreme_lower_fence": 0,
+      "extreme_upper_fence": 79060.4
+    },
+    "overall_utilization_stats": {
+      "count": 1233,
+      "mean": 0.728,
+      "median": 0.724,
+      "std_dev": 0.322,
+      "q1": 0.52,
+      "q3": 0.925,
+      "iqr": 0.405,
+      "p90": 1.078,
+      "lower_fence": 0,
+      "upper_fence": 1.533,
+      "extreme_lower_fence": 0,
+      "extreme_upper_fence": 2.14
+    },
+    "wam_match_summary": {
+      "wam_directory_count": 642,
+      "focus_record_count": 555,
+      "focus_label": "札幌市・小樽市",
+      "focus_municipalities": [
+        "小樽市",
+        "札幌市"
+      ],
+      "workbook_osaka_record_count": 555,
+      "matched_record_count": 422,
+      "unmatched_record_count": 133,
+      "matched_wam_count": 422,
+      "unmatched_wam_count": 220,
+      "confidence_breakdown": {
+        "high": 408,
+        "low": 9,
+        "medium": 5
+      },
+      "method_breakdown": {
+        "corp_exact_name_strict": 376,
+        "corp_name_exact_name_strict": 32,
+        "unique_name_relaxed": 9,
+        "corp_exact_suffix_match": 2,
+        "unique_name_strict": 3
+      },
+      "manual_override_count": 0
+    }
+  },
+  "records": [],
+  "data_files": {
+    "record_chunks": [
+      "data/records/dashboard-records-001.json",
+      "data/records/dashboard-records-002.json",
+      "data/records/dashboard-records-003.json",
+      "data/records/dashboard-records-004.json",
+      "data/records/dashboard-records-005.json"
+    ],
+    "record_count": 1233
+  }
+}
