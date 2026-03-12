@@ -133,6 +133,9 @@ INTERNAL_PAGE_KEYWORDS = (
     "/information",
     "/sns",
 )
+SITEMAP_HINT_PATHS = ("/robots.txt", "/sitemap.xml", "/sitemap_index.xml")
+SITEMAP_FETCH_LIMIT = 2
+SITEMAP_PAGE_LIMIT = 6
 INVALID_INSTAGRAM_SEGMENTS = {"p", "reel", "reels", "stories", "explore", "tv"}
 LEGAL_SUFFIXES = [
     "株式会社",
@@ -385,6 +388,87 @@ def rank_internal_link(url: str) -> tuple[int, int, str]:
     lower = url.lower()
     keyword_score = sum(1 for keyword in INTERNAL_PAGE_KEYWORDS if keyword in lower)
     return (-keyword_score, len(lower), lower)
+
+
+def parse_sitemap_locations(xml_text: str) -> list[str]:
+    return [clean_html_fragment(match) for match in re.findall(r"<loc>(.*?)</loc>", xml_text, re.I | re.S)]
+
+
+def discover_sitemap_page_urls(session: requests.Session, homepage_url: str) -> list[str]:
+    try:
+        parsed_homepage = urlparse(homepage_url)
+    except ValueError:
+        return []
+    if not parsed_homepage.scheme or not parsed_homepage.netloc:
+        return []
+    origin = f"{parsed_homepage.scheme}://{parsed_homepage.netloc}"
+    sitemap_urls: list[str] = []
+    checked_hints: set[str] = set()
+    for hint_path in SITEMAP_HINT_PATHS:
+        hint_url = urljoin(origin, hint_path)
+        if hint_url in checked_hints:
+            continue
+        checked_hints.add(hint_url)
+        try:
+            response = session.get(hint_url, timeout=4, headers={"User-Agent": USER_AGENT})
+            response.raise_for_status()
+        except requests.RequestException:
+            continue
+        text = response.text
+        if hint_path == "/robots.txt":
+            for match in re.findall(r"(?im)^sitemap:\s*(\S+)", text):
+                normalized = canonicalize_url(match)
+                if normalized:
+                    sitemap_urls.append(normalized)
+        else:
+            sitemap_urls.append(response.url)
+
+    sitemap_urls = list(dict.fromkeys(sitemap_urls))[:SITEMAP_FETCH_LIMIT]
+    page_urls: list[str] = []
+    checked_sitemaps: set[str] = set()
+    for sitemap_url in sitemap_urls:
+        if sitemap_url in checked_sitemaps:
+            continue
+        checked_sitemaps.add(sitemap_url)
+        try:
+            response = session.get(sitemap_url, timeout=4, headers={"User-Agent": USER_AGENT})
+            response.raise_for_status()
+        except requests.RequestException:
+            continue
+        locations = parse_sitemap_locations(response.text)
+        child_sitemaps: list[str] = []
+        for location in locations:
+            normalized = canonicalize_url(location)
+            if not normalized:
+                continue
+            if normalized.endswith(".xml"):
+                child_sitemaps.append(normalized)
+                continue
+            if hostname(normalized) != parsed_homepage.netloc.lower() or not is_probably_html_page(normalized):
+                continue
+            page_urls.append(normalized)
+        for child_sitemap in child_sitemaps[:1]:
+            if child_sitemap in checked_sitemaps:
+                continue
+            checked_sitemaps.add(child_sitemap)
+            try:
+                child_response = session.get(child_sitemap, timeout=4, headers={"User-Agent": USER_AGENT})
+                child_response.raise_for_status()
+            except requests.RequestException:
+                continue
+            for location in parse_sitemap_locations(child_response.text):
+                normalized = canonicalize_url(location)
+                if (
+                    normalized
+                    and hostname(normalized) == parsed_homepage.netloc.lower()
+                    and not normalized.endswith(".xml")
+                    and is_probably_html_page(normalized)
+                ):
+                    page_urls.append(normalized)
+        if page_urls:
+            break
+    ordered = sorted(dict.fromkeys(page_urls), key=rank_internal_link)
+    return ordered[:SITEMAP_PAGE_LIMIT]
 
 
 def fetch_html_page(session: requests.Session, url: str, timeout: float) -> tuple[str, str] | None:
@@ -668,6 +752,35 @@ def instagram_from_homepage(session: requests.Session, homepage_url: str) -> str
             continue
         internal_checks += 1
         direct = inspect_page(*internal_page)
+        if direct:
+            return direct
+        while bridge_queue:
+            bridge_url = bridge_queue.pop(0)
+            if bridge_url in visited_bridges:
+                continue
+            visited_bridges.add(bridge_url)
+            bridge_page = fetch_html_page(session, bridge_url, timeout=6)
+            if not bridge_page:
+                continue
+            bridge_links = extract_instagram_candidates(*bridge_page)
+            if bridge_links:
+                return bridge_links[0]
+    sitemap_queue = [
+        url
+        for url in discover_sitemap_page_urls(session, homepage_url)
+        if url not in visited_pages and url not in queue
+    ]
+    sitemap_checks = 0
+    while sitemap_queue and sitemap_checks < 4:
+        sitemap_url = sitemap_queue.pop(0)
+        if sitemap_url in visited_pages:
+            continue
+        visited_pages.add(sitemap_url)
+        sitemap_page = fetch_html_page(session, sitemap_url, timeout=5)
+        if not sitemap_page:
+            continue
+        sitemap_checks += 1
+        direct = inspect_page(*sitemap_page)
         if direct:
             return direct
         while bridge_queue:
