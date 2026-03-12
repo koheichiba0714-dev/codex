@@ -1241,6 +1241,7 @@ def main() -> None:
     app_records = slim_records_for_app(merged_records)
     app_payload["records"] = []
     app_payload["meta"].pop("source_workbook", None)
+    app_payload["meta"].pop("source_pdf", None)
     app_payload["meta"]["app_record_field_count"] = len(APP_RECORD_FIELD_ORDER)
     app_payload["meta"]["app_record_chunk_size"] = APP_RECORD_CHUNK_SIZE
 
