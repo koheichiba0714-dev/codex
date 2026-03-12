@@ -41,6 +41,7 @@
             </p>
           </div>
           <div class="topbar-actions">
+            <button id="openGuideButton" class="ghost-button" type="button">用語ガイド</button>
             <button id="openFiltersButton" class="solid-button filter-search-button" type="button">絞り込み検索</button>
             <button id="downloadCsvButton" class="ghost-button" type="button">絞り込み結果をCSV出力</button>
           </div>
@@ -106,43 +107,21 @@
             <div class="panel-head">
               <div>
                 <p class="section-kicker">用語の見方</p>
-                <h2 id="termsHeading">現場向けの読み方</h2>
-                <p class="panel-note">画面内で使う言葉を、業務で判断しやすい言い方にそろえた。</p>
+                <h2 id="termsHeading">迷いやすい言葉だけ先に確認する</h2>
+                <p class="panel-note">詳しい説明はモーダルで開く。ここでは判断に直結する要点だけ残す。</p>
+              </div>
+              <div class="panel-head-actions">
+                <button id="openGuidePanelButton" class="ghost-button" type="button">用語ガイドを開く</button>
               </div>
             </div>
-            <div class="term-grid">
-              <article class="term-card">
-                <h3>人員詳細あり</h3>
-                <p>福祉医療機構の公開情報と結び付いた状態で、送迎や職員数まで見比べられる。</p>
-              </article>
-              <article class="term-card">
-                <h3>常勤換算</h3>
-                <p>常勤1人を 1.0 人分として数えた人数。非常勤の合計も人分で見られる。</p>
-              </article>
-              <article class="term-card">
-                <h3>支援職員 / 定員</h3>
-                <p>主な支援職員の常勤換算人数を、定員で割った目安。人員配置の厚さを見る。</p>
-              </article>
-              <article class="term-card">
-                <h3>利用率</h3>
-                <p>定員に対して、平均で何人使っているか。高いほど空きが少ない。</p>
-              </article>
-              <article class="term-card">
-                <h3>平均との差</h3>
-                <p>1.00倍が平均。1.20倍なら平均より2割高く、0.80倍なら平均より2割低い。</p>
-              </article>
-              <article class="term-card">
-                <h3>差が大きい</h3>
-                <p>多くの事業所から離れた値。良し悪しではなく、先に確認したい目印である。</p>
-              </article>
-              <article class="term-card">
-                <h3>仕事不足の可能性</h3>
-                <p>工賃が低めで、利用率や人員配置のバランスも弱い状態。作業量不足の可能性がある目印である。</p>
-              </article>
-              <article class="term-card">
-                <h3>工賃低め・利用率低め・人員先行</h3>
-                <p>工賃が平均より低め、利用率が低く、人員が先行している状態。仕事量や集客導線を早めに点検したい事業所である。</p>
-              </article>
+            <div class="guide-preview">
+              <div class="guide-pill-row" aria-label="よく使う言葉の要点">
+                <span class="guide-pill">常勤換算 = 常勤1人分に直した人数</span>
+                <span class="guide-pill">支援職員 / 定員 = 人員配置の厚さ</span>
+                <span class="guide-pill">利用率 = 定員に対する平均利用人数</span>
+                <span class="guide-pill">平均との差 = 1.00倍が平均</span>
+              </div>
+              <p class="panel-note">判断に迷ったら、用語ガイドを開くと全部の説明をまとめて確認できる。</p>
             </div>
           </section>
 
@@ -203,11 +182,14 @@
           <section class="panel detail-panel" aria-labelledby="detailHeading">
             <div class="panel-head">
               <div>
-                <p class="section-kicker">事業所詳細</p>
-                <h2 id="detailHeading">選んだ事業所を深掘る</h2>
-                <p class="panel-note">一覧、優先カード、確認候補カードから選ぶとここへ集約する。</p>
+                <p class="section-kicker">選択中の事業所</p>
+                <h2 id="detailHeading">一覧比較の途中で要点だけ確認する</h2>
+                <p class="panel-note">詳しい情報はモーダルで開く。ここでは今選んでいる事業所の要点だけを見る。</p>
               </div>
-              <button id="focusSelectedButton" class="ghost-button" type="button">一覧で同じ事業所を見る</button>
+              <div class="panel-head-actions">
+                <button id="openSelectedDetailButton" class="solid-button" type="button">詳細を開く</button>
+                <button id="focusSelectedButton" class="ghost-button" type="button">一覧で同じ事業所を見る</button>
+              </div>
             </div>
             <div id="detailContent"></div>
           </section>
@@ -305,7 +287,7 @@
               <div>
                 <p class="section-kicker">一覧比較</p>
                 <h2 id="tableHeading">要点だけで横比較する</h2>
-                <p class="panel-note">細かい項目は上の事業所詳細へ寄せ、一覧は比較に必要な列へ絞った。</p>
+                <p class="panel-note">細かい項目はモーダルへ寄せ、一覧は比較に必要な列へ絞った。</p>
               </div>
               <p id="tableSummary" class="table-summary"></p>
             </div>
@@ -468,6 +450,69 @@
           <button id="resetFiltersDialogButton" class="ghost-button" type="button">条件を初期化</button>
           <button id="saveFiltersButton" class="solid-button filter-search-button" type="button">保存</button>
         </div>
+      </div>
+    </dialog>
+
+    <dialog id="guideDialog" class="guide-dialog" aria-labelledby="guideDialogHeading">
+      <div class="guide-dialog-shell">
+        <div class="dialog-head">
+          <div>
+            <p class="section-kicker">用語ガイド</p>
+            <h2 id="guideDialogHeading">現場向けの読み方をまとめて確認する</h2>
+            <p class="panel-note">画面内で使う言葉を、業務で判断しやすい言い方にそろえた。</p>
+          </div>
+          <button id="closeGuideButton" class="ghost-button" type="button">閉じる</button>
+        </div>
+        <div class="dialog-body">
+          <div class="term-grid">
+            <article class="term-card">
+              <h3>人員詳細あり</h3>
+              <p>福祉医療機構の公開情報と結び付いた状態で、送迎や職員数まで見比べられる。</p>
+            </article>
+            <article class="term-card">
+              <h3>常勤換算</h3>
+              <p>常勤1人を 1.0 人分として数えた人数。非常勤の合計も人分で見られる。</p>
+            </article>
+            <article class="term-card">
+              <h3>支援職員 / 定員</h3>
+              <p>主な支援職員の常勤換算人数を、定員で割った目安。人員配置の厚さを見る。</p>
+            </article>
+            <article class="term-card">
+              <h3>利用率</h3>
+              <p>定員に対して、平均で何人使っているか。高いほど空きが少ない。</p>
+            </article>
+            <article class="term-card">
+              <h3>平均との差</h3>
+              <p>1.00倍が平均。1.20倍なら平均より2割高く、0.80倍なら平均より2割低い。</p>
+            </article>
+            <article class="term-card">
+              <h3>差が大きい</h3>
+              <p>多くの事業所から離れた値。良し悪しではなく、先に確認したい目印である。</p>
+            </article>
+            <article class="term-card">
+              <h3>仕事不足の可能性</h3>
+              <p>工賃が低めで、利用率や人員配置のバランスも弱い状態。作業量不足の可能性がある目印である。</p>
+            </article>
+            <article class="term-card">
+              <h3>工賃低め・利用率低め・人員先行</h3>
+              <p>工賃が平均より低め、利用率が低く、人員が先行している状態。仕事量や集客導線を早めに点検したい事業所である。</p>
+            </article>
+          </div>
+        </div>
+      </div>
+    </dialog>
+
+    <dialog id="detailDialog" class="detail-dialog" aria-labelledby="detailDialogHeading">
+      <div class="detail-dialog-shell">
+        <div class="dialog-head">
+          <div>
+            <p class="section-kicker">事業所詳細</p>
+            <h2 id="detailDialogHeading">選んだ事業所を深掘る</h2>
+            <p class="panel-note">一覧、優先カード、確認候補カードから選ぶとここで詳しく読める。</p>
+          </div>
+          <button id="closeDetailButton" class="ghost-button" type="button">閉じる</button>
+        </div>
+        <div id="detailDialogContent" class="detail-dialog-body"></div>
       </div>
     </dialog>
 

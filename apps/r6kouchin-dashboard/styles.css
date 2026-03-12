@@ -700,6 +700,29 @@ th button,
   gap: 12px;
 }
 
+.guide-preview {
+  display: grid;
+  gap: 12px;
+}
+
+.guide-pill-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.guide-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(222, 194, 118, 0.34);
+  color: #7a5a16;
+  font-size: 0.82rem;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.86);
+}
+
 .filters-dialog {
   width: min(980px, calc(100vw - 32px));
   max-height: calc(100vh - 40px);
@@ -715,13 +738,48 @@ th button,
   backdrop-filter: blur(2px);
 }
 
-.filters-dialog-shell {
+.filters-dialog-shell,
+.guide-dialog-shell,
+.detail-dialog-shell {
   display: grid;
   gap: 0;
   overflow: hidden;
   border: 1px solid #d6e0ec;
-  border-radius: 12px;
+  border-radius: 16px;
   background: linear-gradient(180deg, #f6fbff 0%, #ffffff 100%);
+}
+
+.guide-dialog,
+.detail-dialog {
+  padding: 0;
+  border: none;
+  background: transparent;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.2);
+}
+
+.guide-dialog {
+  width: min(960px, calc(100vw - 32px));
+  max-height: calc(100vh - 40px);
+}
+
+.detail-dialog {
+  width: min(860px, calc(100vw - 20px));
+  max-height: calc(100vh - 24px);
+  margin: 12px 12px 12px auto;
+}
+
+.guide-dialog::backdrop,
+.detail-dialog::backdrop {
+  background: rgba(17, 22, 27, 0.48);
+  backdrop-filter: blur(2px);
+}
+
+.guide-dialog-shell {
+  background: linear-gradient(180deg, #fffaf2 0%, #ffffff 100%);
+}
+
+.detail-dialog-shell {
+  background: linear-gradient(180deg, #f4f8fd 0%, #ffffff 100%);
 }
 
 .dialog-head,
@@ -747,6 +805,12 @@ th button,
   max-height: min(68vh, 760px);
   overflow: auto;
   padding: 16px 18px 18px;
+}
+
+.detail-dialog-body {
+  max-height: min(80vh, 920px);
+  overflow: auto;
+  padding: 18px;
 }
 
 .insight-card,
@@ -1001,6 +1065,48 @@ th button,
 .detail-panel #detailContent {
   display: grid;
   gap: 14px;
+}
+
+.selected-office-card {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+  border: 1px solid rgba(205, 218, 233, 0.96);
+  border-radius: var(--radius-md);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(245, 249, 255, 0.96) 100%);
+}
+
+.selected-office-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.selected-office-head h3 {
+  margin: 4px 0 6px;
+  font-size: 1.2rem;
+}
+
+.selected-office-status,
+.selected-office-metrics,
+.selected-office-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.selected-office-status {
+  justify-content: flex-end;
+}
+
+.selected-office-note {
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(208, 220, 233, 0.96);
+  background: rgba(255, 255, 255, 0.86);
+  color: var(--muted);
 }
 
 .detail-hero {
@@ -1403,9 +1509,17 @@ td.numeric {
     max-height: calc(100vh - 16px);
   }
 
+  .guide-dialog,
+  .detail-dialog {
+    width: calc(100vw - 16px);
+    max-height: calc(100vh - 16px);
+    margin: 8px;
+  }
+
   .dialog-body,
   .dialog-head,
-  .dialog-actions {
+  .dialog-actions,
+  .detail-dialog-body {
     padding-left: 14px;
     padding-right: 14px;
   }
@@ -1459,6 +1573,12 @@ td.numeric {
     padding-right: 16px;
   }
 
+  .selected-office-head,
+  .selected-office-status {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
   th,
   td {
     padding: 9px 10px;
@@ -1477,6 +1597,23 @@ td.numeric {
   .stats-grid,
   .detail-kpi-grid {
     grid-template-columns: 1fr;
+  }
+
+  .filters-dialog,
+  .guide-dialog,
+  .detail-dialog {
+    width: 100vw;
+    max-height: 100vh;
+    margin: 0;
+  }
+
+  .filters-dialog-shell,
+  .guide-dialog-shell,
+  .detail-dialog-shell {
+    min-height: 100vh;
+    border-radius: 0;
+    border-left: none;
+    border-right: none;
   }
 
   .panel-head-actions {

@@ -109,6 +109,8 @@ document.addEventListener("DOMContentLoaded", () => {
 async function init() {
   bindSectionNav();
   bindFilterDialog();
+  bindGuideDialog();
+  bindDetailDialog();
   const response = await fetch("./data/dashboard-data.json", { cache: "no-store" });
   if (!response.ok) {
     throw new Error("dashboard data could not be loaded");
@@ -226,6 +228,73 @@ function closeFiltersDialog(dialog = document.getElementById("filtersDialog")) {
   dialog.removeAttribute("open");
 }
 
+function bindGuideDialog() {
+  const dialog = document.getElementById("guideDialog");
+  if (!dialog) return;
+
+  ["openGuideButton", "openGuidePanelButton"].forEach((id) => {
+    document.getElementById(id)?.addEventListener("click", () => {
+      openDialogElement(dialog);
+    });
+  });
+
+  document.getElementById("closeGuideButton")?.addEventListener("click", () => {
+    closeDialogElement(dialog);
+  });
+
+  dialog.addEventListener("click", (event) => {
+    if (event.target === dialog) {
+      closeDialogElement(dialog);
+    }
+  });
+}
+
+function bindDetailDialog() {
+  const dialog = document.getElementById("detailDialog");
+  if (!dialog) return;
+
+  document.getElementById("openSelectedDetailButton")?.addEventListener("click", () => {
+    openDetailDialog();
+  });
+
+  document.getElementById("closeDetailButton")?.addEventListener("click", () => {
+    closeDialogElement(dialog);
+  });
+
+  dialog.addEventListener("click", (event) => {
+    if (event.target === dialog) {
+      closeDialogElement(dialog);
+    }
+  });
+}
+
+function openDialogElement(dialog) {
+  if (!dialog) return;
+  if (typeof dialog.showModal === "function") {
+    if (!dialog.open) {
+      dialog.showModal();
+    }
+  } else {
+    dialog.setAttribute("open", "open");
+  }
+}
+
+function closeDialogElement(dialog) {
+  if (!dialog) return;
+  if (typeof dialog.close === "function" && dialog.open) {
+    dialog.close();
+    return;
+  }
+  dialog.removeAttribute("open");
+}
+
+function openDetailDialog() {
+  const record = getSelectedRecord();
+  if (!record) return;
+  renderDetail(record);
+  openDialogElement(document.getElementById("detailDialog"));
+}
+
 async function loadDashboardRecords(dashboard) {
   if (Array.isArray(dashboard.records) && dashboard.records.length) {
     return dashboard.records;
@@ -309,7 +378,8 @@ function bindEvents() {
   document.getElementById("focusSelectedButton").addEventListener("click", () => {
     const selectedRecord = getSelectedRecord();
     if (!selectedRecord) return;
-    selectRecord(selectedRecord.office_no, { scroll: true });
+    selectRecord(selectedRecord.office_no, { openDetail: false });
+    document.getElementById("tableHeading")?.scrollIntoView({ behavior: "smooth", block: "start" });
   });
 
   document.querySelectorAll(".preset-chip[data-preset]").forEach((button) => {
@@ -340,7 +410,7 @@ function bindEvents() {
     if (!trigger) return;
     const officeNo = trigger.getAttribute("data-select-office");
     if (!officeNo) return;
-    selectRecord(officeNo, { scroll: true });
+    selectRecord(officeNo, { openDetail: true });
   });
 }
 
@@ -462,8 +532,8 @@ function selectRecord(officeNo, options = {}) {
   renderCharts(state.filteredRecords);
   renderDetail(record);
   renderTable(state.filteredRecords);
-  if (options.scroll) {
-    document.getElementById("detailHeading").scrollIntoView({ behavior: "smooth", block: "start" });
+  if (options.openDetail) {
+    openDialogElement(document.getElementById("detailDialog"));
   }
 }
 
@@ -669,6 +739,8 @@ function labelForSelect(value) {
 
 function renderLoadingState() {
   const loadingCard = `<div class="loading-message">データを読み込み中...</div>`;
+  document.getElementById("openSelectedDetailButton").disabled = true;
+  document.getElementById("focusSelectedButton").disabled = true;
   document.getElementById("activeFilterSummary").textContent = "データを読み込み中...";
   const filterTags = document.getElementById("activeFilterTags");
   if (filterTags) {
@@ -697,6 +769,7 @@ function renderLoadingState() {
     "staffingScatter",
     "anomalyList",
     "detailContent",
+    "detailDialogContent",
   ].forEach((id) => {
     const element = document.getElementById(id);
     if (element) {
@@ -1186,15 +1259,60 @@ function renderAnomalies(records) {
 }
 
 function renderDetail(record) {
-  const root = document.getElementById("detailContent");
+  const summaryRoot = document.getElementById("detailContent");
+  const dialogRoot = document.getElementById("detailDialogContent");
+  const openButton = document.getElementById("openSelectedDetailButton");
+  const focusButton = document.getElementById("focusSelectedButton");
+
   if (!record) {
-    root.innerHTML = document.getElementById("emptyStateTemplate").innerHTML;
+    if (summaryRoot) {
+      summaryRoot.innerHTML = document.getElementById("emptyStateTemplate").innerHTML;
+    }
+    if (dialogRoot) {
+      dialogRoot.innerHTML = document.getElementById("emptyStateTemplate").innerHTML;
+    }
+    if (openButton) openButton.disabled = true;
+    if (focusButton) focusButton.disabled = true;
     return;
   }
 
   const actionNotes = buildActionNotes(record);
   const officeUrl = safeExternalUrl(record.wam_office_url);
-  root.innerHTML = `
+
+  if (openButton) openButton.disabled = false;
+  if (focusButton) focusButton.disabled = false;
+
+  if (summaryRoot) {
+    summaryRoot.innerHTML = `
+      <article class="selected-office-card">
+        <div class="selected-office-head">
+          <div>
+            <p class="section-kicker">${escapeHtml(record.municipality ?? "-")} / No.${escapeHtml(record.office_no ?? "-")}</p>
+            <h3>${escapeHtml(record.office_name ?? "-")}</h3>
+            <p class="detail-subtitle">${escapeHtml(record.corporation_name ?? "-")} / ${escapeHtml(record.corporation_type_label ?? "-")}</p>
+          </div>
+          <div class="selected-office-status">
+            ${matchBadge(record.wam_match_status, record.wam_match_confidence)}
+            ${record.wage_outlier_flag ? outlierBadge(record.wage_outlier_flag, record.wage_outlier_severity) : ""}
+          </div>
+        </div>
+        <div class="selected-office-metrics">
+          <span class="metric-chip">${escapeHtml(`平均工賃 ${formatWageText(record.average_wage_yen)}`)}</span>
+          <span class="metric-chip">${escapeHtml(`利用率 ${formatPercent(record.daily_user_capacity_ratio)}`)}</span>
+          <span class="metric-chip">${escapeHtml(`在宅率 ${formatPercent(record.home_use_user_ratio_decimal)}`)}</span>
+          <span class="metric-chip">${escapeHtml(`支援職員 / 定員 ${formatPercent(record.wam_key_staff_fte_per_capacity)}`)}</span>
+        </div>
+        <p class="selected-office-note">${escapeHtml(actionNotes[0] ?? "詳しい内訳は詳細を開いて確認できる。")}</p>
+        <div class="selected-office-actions">
+          ${officeUrl ? `<a class="ghost-button link-button" href="${escapeAttribute(officeUrl)}" target="_blank" rel="noreferrer">事業所ページ</a>` : ""}
+        </div>
+      </article>
+    `;
+  }
+
+  if (!dialogRoot) return;
+
+  dialogRoot.innerHTML = `
     <div class="detail-hero">
       <div>
         <p class="section-kicker">${escapeHtml(record.municipality ?? "-")} / No.${escapeHtml(record.office_no ?? "-")}</p>
@@ -1299,7 +1417,7 @@ function renderTable(records) {
           <td class="numeric">${formatPercent(record.wam_key_staff_fte_per_capacity)}</td>
           <td>${escapeHtml(record.wam_primary_activity_type ?? "-")}</td>
           <td><div class="attention-cell">${attentionBadges(record)}</div></td>
-          <td><button class="table-link" data-select-office="${escapeHtml(record.office_no)}" type="button">表示</button></td>
+          <td><button class="table-link" data-select-office="${escapeHtml(record.office_no)}" type="button">詳細</button></td>
         </tr>
       `
     )
