@@ -122,6 +122,7 @@ async function init() {
   bindFilterDialog();
   bindGuideDialog();
   bindDetailDialog();
+  bindPanelToggles();
   const response = await fetch("./data/dashboard-data.json", { cache: "no-store" });
   if (!response.ok) {
     throw new Error("dashboard data could not be loaded");
@@ -161,7 +162,11 @@ function bindSectionNav() {
   links.forEach((link) => {
     link.addEventListener("click", () => {
       const targetId = link.getAttribute("href")?.slice(1);
-      if (targetId) activate(targetId);
+      if (!targetId) return;
+      const target = document.getElementById(targetId);
+      target?.closest(".panel.is-collapsed")?.classList.remove("is-collapsed");
+      syncPanelToggleButtons();
+      activate(targetId);
     });
   });
 
@@ -276,6 +281,26 @@ function bindDetailDialog() {
     if (event.target === dialog) {
       closeDialogElement(dialog);
     }
+  });
+}
+
+function bindPanelToggles() {
+  document.querySelectorAll(".panel[data-collapsible]").forEach((panel) => {
+    panel.querySelector(".panel-collapse-button")?.addEventListener("click", () => {
+      panel.classList.toggle("is-collapsed");
+      syncPanelToggleButtons();
+    });
+  });
+  syncPanelToggleButtons();
+}
+
+function syncPanelToggleButtons() {
+  document.querySelectorAll(".panel[data-collapsible]").forEach((panel) => {
+    const button = panel.querySelector(".panel-collapse-button");
+    if (!button) return;
+    const expanded = !panel.classList.contains("is-collapsed");
+    button.textContent = expanded ? "閉じる" : "開く";
+    button.setAttribute("aria-expanded", expanded ? "true" : "false");
   });
 }
 
@@ -761,6 +786,7 @@ function renderLoadingState() {
   document.getElementById("fixList").innerHTML = loadingCard;
   document.getElementById("highHighList").innerHTML = loadingCard;
   document.getElementById("statsGrid").innerHTML = loadingCard;
+  document.getElementById("recordsCardList").innerHTML = loadingCard;
   [
     "municipalityChart",
     "wageChart",
@@ -1346,6 +1372,7 @@ function renderDetail(record) {
 
 function renderTable(records) {
   const tableBody = document.getElementById("recordsTableBody");
+  const cardList = document.getElementById("recordsCardList");
   const pageCount = Math.max(1, Math.ceil(records.length / PAGE_SIZE));
   const startIndex = (state.currentPage - 1) * PAGE_SIZE;
   const pagedRecords = records.slice(startIndex, startIndex + PAGE_SIZE);
@@ -1357,6 +1384,9 @@ function renderTable(records) {
 
   if (!pagedRecords.length) {
     tableBody.innerHTML = `<tr><td colspan="13">${document.getElementById("emptyStateTemplate").innerHTML}</td></tr>`;
+    if (cardList) {
+      cardList.innerHTML = document.getElementById("emptyStateTemplate").innerHTML;
+    }
     return;
   }
 
@@ -1381,6 +1411,36 @@ function renderTable(records) {
       `
     )
     .join("");
+
+  if (cardList) {
+    cardList.innerHTML = pagedRecords
+      .map(
+        (record) => `
+          <article class="record-card ${rowClass(record)}">
+            <div class="record-card-head">
+              <div>
+                <p class="section-kicker">${escapeHtml(record.municipality ?? "-")} / No.${escapeHtml(record.office_no ?? "-")}</p>
+                <h3>${escapeHtml(record.office_name ?? "-")}</h3>
+                <p class="detail-subtitle">${escapeHtml(record.corporation_name ?? "-")}</p>
+              </div>
+              <button class="table-link" data-select-office="${escapeHtml(record.office_no)}" type="button">詳細</button>
+            </div>
+            <div class="record-card-metrics">
+              <span class="metric-chip">${escapeHtml(`工賃 ${formatWageText(record.average_wage_yen)}`)}</span>
+              <span class="metric-chip">${escapeHtml(`利用率 ${formatPercent(record.daily_user_capacity_ratio)}`)}</span>
+              <span class="metric-chip">${escapeHtml(`在宅率 ${formatPercent(record.home_use_user_ratio_decimal)}`)}</span>
+              <span class="metric-chip">${escapeHtml(`支援職員 / 定員 ${formatPercent(record.wam_key_staff_fte_per_capacity)}`)}</span>
+            </div>
+            <div class="record-card-status">
+              ${matchBadge(record.wam_match_status, record.wam_match_confidence)}
+              ${attentionBadges(record)}
+            </div>
+            <p class="record-card-note">${escapeHtml(record.wam_primary_activity_type ?? "主活動の記載なし")}</p>
+          </article>
+        `
+      )
+      .join("");
+  }
 }
 
 function changePage(step) {

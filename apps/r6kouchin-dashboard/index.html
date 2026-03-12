@@ -38,13 +38,13 @@
             <p class="section-kicker">大阪府 就労継続支援B型</p>
             <h1 id="overviewHeading">運営ダッシュボード</h1>
             <p class="hero-lead">
-              大阪府全体を参考比較しつつ、大阪市は WAM の人員詳細まで見られる。絞り込み後すぐ一覧で比較できるよう、画面の上から判断順に並べた。
+              まず条件を絞り、次に一覧で比べ、最後に気になる事業所だけ深掘りする。大阪府全体を参考比較しつつ、大阪市は WAM の人員詳細まで見られる。
             </p>
           </div>
           <div class="topbar-actions">
-            <button id="openGuideButton" class="ghost-button" type="button">用語ガイド</button>
             <button id="openFiltersButton" class="solid-button filter-search-button" type="button">絞り込み検索</button>
             <button id="downloadCsvButton" class="ghost-button" type="button">絞り込み結果をCSV出力</button>
+            <button id="openGuideButton" class="ghost-button" type="button">用語ガイド</button>
           </div>
         </header>
 
@@ -120,7 +120,7 @@
             <section class="stats-grid" id="statsGrid" aria-label="集計カード"></section>
           </section>
 
-          <section class="panel explain-panel" aria-labelledby="termsHeading">
+          <section class="panel explain-panel is-collapsed" data-collapsible aria-labelledby="termsHeading">
             <div class="panel-head">
               <div>
                 <p class="section-kicker">用語の見方</p>
@@ -128,6 +128,7 @@
                 <p class="panel-note">詳しい説明はモーダルで開く。ここでは判断に直結する要点だけ残す。</p>
               </div>
               <div class="panel-head-actions">
+                <button class="ghost-button panel-collapse-button" type="button" aria-expanded="false">開く</button>
                 <button id="openGuidePanelButton" class="ghost-button" type="button">用語ガイドを開く</button>
               </div>
             </div>
@@ -142,24 +143,30 @@
             </div>
           </section>
 
-          <section class="panel insight-panel" aria-labelledby="insightHeading">
+          <section class="panel insight-panel" data-collapsible aria-labelledby="insightHeading">
             <div class="panel-head">
               <div>
                 <p class="section-kicker">要点</p>
                 <h2 id="insightHeading">最初に押さえる状況</h2>
               </div>
+              <div class="panel-head-actions">
+                <button class="ghost-button panel-collapse-button" type="button" aria-expanded="true">閉じる</button>
+              </div>
             </div>
             <div id="insightList" class="insight-grid"></div>
           </section>
 
-          <section class="panel strategy-panel" aria-labelledby="strategyHeading">
+          <section class="panel strategy-panel" data-collapsible aria-labelledby="strategyHeading">
             <div class="panel-head">
               <div>
                 <p class="section-kicker">優先順位</p>
                 <h2 id="strategyHeading">先に見るべき事業所</h2>
                 <p class="panel-note">高工賃でまだ伸ばせる候補、低工賃で利用も弱く人員が重い候補、すでに高工賃かつ高利用率の候補、の3つに分けた。</p>
               </div>
-              <p id="strategySummary" class="table-summary"></p>
+              <div class="panel-head-actions">
+                <p id="strategySummary" class="table-summary"></p>
+                <button class="ghost-button panel-collapse-button" type="button" aria-expanded="true">閉じる</button>
+              </div>
             </div>
             <div class="strategy-grid">
               <article class="strategy-column">
@@ -192,23 +199,29 @@
             <div id="detailContent"></div>
           </section>
 
-          <section class="panel anomaly-panel" aria-labelledby="anomalyHeading">
+          <section class="panel anomaly-panel is-collapsed" data-collapsible aria-labelledby="anomalyHeading">
             <div class="panel-head">
               <div>
                 <p class="section-kicker">差が大きい事業所</p>
                 <h2 id="anomalyHeading">工賃と人員配置の確認候補</h2>
               </div>
-              <p id="anomalySummary" class="table-summary"></p>
+              <div class="panel-head-actions">
+                <p id="anomalySummary" class="table-summary"></p>
+                <button class="ghost-button panel-collapse-button" type="button" aria-expanded="false">開く</button>
+              </div>
             </div>
             <div id="anomalyList" class="anomaly-grid"></div>
           </section>
 
-          <section class="panel charts-panel" aria-labelledby="chartsHeading">
+          <section class="panel charts-panel is-collapsed" data-collapsible aria-labelledby="chartsHeading">
             <div class="panel-head">
               <div>
                 <p class="section-kicker">比較グラフ</p>
                 <h2 id="chartsHeading">主要比較から順に見る</h2>
                 <p class="panel-note">まず地域差と工賃差を見て、次に利用状況と人員配置を見る。</p>
+              </div>
+              <div class="panel-head-actions">
+                <button class="ghost-button panel-collapse-button" type="button" aria-expanded="false">開く</button>
               </div>
             </div>
             <div class="chart-section">
@@ -311,6 +324,7 @@
                 <tbody id="recordsTableBody"></tbody>
               </table>
             </div>
+            <div id="recordsCardList" class="records-card-list" aria-label="モバイル一覧"></div>
             <div class="pagination-row">
               <button id="prevPageButton" class="ghost-button" type="button">前へ</button>
               <p id="pageSummary"></p>
@@ -318,11 +332,14 @@
             </div>
           </section>
 
-          <section class="panel notes-panel" aria-labelledby="notesHeading">
+          <section class="panel notes-panel is-collapsed" data-collapsible aria-labelledby="notesHeading">
             <div class="panel-head">
               <div>
                 <p class="section-kicker">注記と補足</p>
                 <h2 id="notesHeading">注記とデータの見方</h2>
+              </div>
+              <div class="panel-head-actions">
+                <button class="ghost-button panel-collapse-button" type="button" aria-expanded="false">開く</button>
               </div>
             </div>
             <div id="issuesList" class="notes-list"></div>
