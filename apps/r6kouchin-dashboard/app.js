@@ -2400,6 +2400,9 @@ function buildSearchUrl(query) {
 
 function linkSourceLabel(source) {
   if (source === "wam_url") return "WAM掲載URL";
+  if (source === "osaka_city_pdf_r6") return "大阪市公式PDF";
+  if (source === "homepage_crawl") return "ホームページ内リンク";
+  if (source === "bing_rss_search") return "Instagram検索";
   if (source === "ddg_search") return "Web検索で補完";
   return source ?? "";
 }

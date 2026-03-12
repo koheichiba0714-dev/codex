@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+from concurrent.futures import ThreadPoolExecutor
 import csv
 from datetime import datetime
 import html
@@ -10,13 +11,17 @@ from pathlib import Path
 import re
 import time
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import urljoin, urlparse
 import unicodedata
+import xml.etree.ElementTree as ET
 
+from pypdf import PdfReader
 import requests
 
 
 SEARCH_URL = "https://html.duckduckgo.com/html/"
+BING_SEARCH_URL = "https://www.bing.com/search"
+OSAKA_CITY_PDF_URL = "https://www.city.osaka.lg.jp/fukushi/cmsfiles/contents/0000603/603679/b_r6_shuurouninnzuuchousa.pdf"
 USER_AGENT = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
     "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36"
@@ -78,7 +83,11 @@ RESULT_RE = re.compile(
     r'(?:<a class="result__snippet" href=".*?">(?P<snippet>.*?)</a>)?',
     re.S,
 )
+HREF_RE = re.compile(r'href=["\'](?P<href>[^"\']+)["\']', re.I)
+PDF_URL_RE = re.compile(r"(?:https?://|https//|http//|hxxps?://|hyyps?://|www\.)[^\s　]+", re.I)
+PDF_ROW_RE = re.compile(r"^(?P<office_number>\d{10})\s+(?P<office_name>.+?)\s+大阪市", re.S)
 SEARCH_DISABLED = False
+INSTAGRAM_SEARCH_DISABLED = False
 
 
 def parse_args() -> argparse.Namespace:
@@ -96,6 +105,11 @@ def parse_args() -> argparse.Namespace:
         help="output csv path",
     )
     parser.add_argument(
+        "--osaka-city-pdf-cache",
+        default="data/inputs/web_links/osaka_city_b_r6_services.pdf",
+        help="cached official Osaka City PDF path",
+    )
+    parser.add_argument(
         "--municipality",
         default="大阪市",
         help="target municipality label",
@@ -109,8 +123,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--sleep-seconds",
         type=float,
-        default=0.55,
+        default=0.2,
         help="sleep between search requests",
+    )
+    parser.add_argument(
+        "--workers",
+        type=int,
+        default=8,
+        help="parallel workers for homepage / instagram fetch",
     )
     parser.add_argument(
         "--refresh",
@@ -160,6 +180,12 @@ def write_rows(path: Path, rows: list[dict[str, Any]]) -> None:
             writer.writerow({field: row.get(field, "") for field in OUTPUT_FIELDS})
 
 
+def build_session() -> requests.Session:
+    session = requests.Session()
+    session.headers.update({"User-Agent": USER_AGENT})
+    return session
+
+
 def normalize_text(value: str | None) -> str:
     text = unicodedata.normalize("NFKC", value or "").lower()
     text = text.replace("　", " ")
@@ -187,8 +213,15 @@ def canonicalize_url(value: str | None) -> str | None:
     candidate = html.unescape(str(value)).strip()
     if not candidate:
         return None
+    candidate = candidate.rstrip(".,、。)>］】")
+    candidate = candidate.replace("hxxps://", "https://").replace("hxxp://", "http://")
+    candidate = candidate.replace("hyyps://", "https://").replace("hyyP://", "https://")
+    if re.match(r"^https?//", candidate, flags=re.I):
+        candidate = re.sub(r"^(https?)//", r"\1://", candidate, flags=re.I)
     if candidate.startswith("//"):
         candidate = f"https:{candidate}"
+    if candidate.startswith("www."):
+        candidate = f"https://{candidate}"
     if not re.match(r"^https?://", candidate, flags=re.I):
         return None
     try:
@@ -255,6 +288,18 @@ def build_query(record: dict[str, Any]) -> str:
     return " ".join(part for part in parts if part).strip()
 
 
+def build_instagram_query(record: dict[str, Any]) -> str:
+    office_name = record.get("office_name") or ""
+    municipality = record.get("municipality") or ""
+    parts = [
+        f'"{office_name}"' if office_name else "",
+        f'"{municipality}"' if municipality else "",
+        strip_legal_suffix(record.get("corporation_name") or ""),
+        "site:instagram.com",
+    ]
+    return " ".join(part for part in parts if part).strip()
+
+
 def search_duckduckgo(session: requests.Session, query: str) -> list[dict[str, str]]:
     global SEARCH_DISABLED
     if SEARCH_DISABLED:
@@ -284,6 +329,167 @@ def search_duckduckgo(session: requests.Session, query: str) -> list[dict[str, s
         if len(results) >= 8:
             break
     return results
+
+
+def search_bing_rss(session: requests.Session, query: str) -> list[dict[str, str]]:
+    response = session.get(
+        BING_SEARCH_URL,
+        params={"q": query, "format": "rss"},
+        timeout=20,
+        headers={"User-Agent": USER_AGENT},
+    )
+    response.raise_for_status()
+    root = ET.fromstring(response.text)
+    results: list[dict[str, str]] = []
+    for item in root.findall("./channel/item")[:8]:
+        url = canonicalize_url(item.findtext("link"))
+        if not url:
+            continue
+        results.append(
+            {
+                "url": url,
+                "title": clean_html_fragment(item.findtext("title")),
+                "snippet": clean_html_fragment(item.findtext("description")),
+            }
+        )
+    return results
+
+
+def ensure_osaka_city_pdf(cache_path: Path) -> Path:
+    if cache_path.exists():
+        return cache_path
+    cache_path.parent.mkdir(parents=True, exist_ok=True)
+    response = requests.get(OSAKA_CITY_PDF_URL, timeout=30, headers={"User-Agent": USER_AGENT})
+    response.raise_for_status()
+    cache_path.write_bytes(response.content)
+    return cache_path
+
+
+def parse_osaka_city_pdf_homepages(pdf_path: Path) -> list[dict[str, str]]:
+    reader = PdfReader(str(pdf_path))
+    rows: list[dict[str, str]] = []
+    current = ""
+    for page in reader.pages:
+        for raw_line in (page.extract_text() or "").splitlines():
+            line = raw_line.strip()
+            if not line:
+                continue
+            if "大阪市 就労継続支援B型事業所でのサービス提供内容について" in line:
+                continue
+            if "事業所ホームページ" in line and "事業所所在地" in line:
+                continue
+            if re.fullmatch(r"\d+/\d+", line):
+                continue
+            if re.match(r"^\d{10}\s+", line):
+                if current:
+                    row = parse_pdf_row(current)
+                    if row:
+                        rows.append(row)
+                current = line
+            elif current:
+                current = f"{current} {line}"
+        if current:
+            row = parse_pdf_row(current)
+            if row:
+                rows.append(row)
+            current = ""
+    return rows
+
+
+def parse_pdf_row(text: str) -> dict[str, str] | None:
+    normalized = re.sub(r"\s+", " ", text).strip()
+    match = PDF_ROW_RE.match(normalized)
+    if not match:
+        return None
+    office_number = match.group("office_number")
+    office_name = match.group("office_name").strip()
+    url_match = PDF_URL_RE.search(normalized)
+    homepage_url = canonicalize_url(url_match.group(0)) if url_match else None
+    return {
+        "office_number": office_number,
+        "office_name": office_name,
+        "homepage_url": homepage_url or "",
+    }
+
+
+def pdf_homepage_lookups(rows: list[dict[str, str]]) -> tuple[dict[str, str], dict[str, str]]:
+    by_number = {
+        row["office_number"]: row["homepage_url"]
+        for row in rows
+        if row.get("office_number") and row.get("homepage_url")
+    }
+    by_name: dict[str, str] = {}
+    name_counts: dict[str, int] = {}
+    for row in rows:
+        name_key = normalize_text(row.get("office_name"))
+        if not name_key or not row.get("homepage_url"):
+            continue
+        name_counts[name_key] = name_counts.get(name_key, 0) + 1
+        by_name[name_key] = row["homepage_url"]
+    by_name = {name: url for name, url in by_name.items() if name_counts.get(name) == 1}
+    return by_number, by_name
+
+
+def homepage_from_pdf(
+    record: dict[str, Any],
+    by_number: dict[str, str],
+    by_name: dict[str, str],
+) -> str | None:
+    office_number = str(record.get("wam_office_number") or "").strip()
+    if office_number and office_number in by_number:
+        return by_number[office_number]
+    return by_name.get(normalize_text(record.get("office_name")))
+
+
+def extract_instagram_candidates(base_url: str, html_text: str) -> list[str]:
+    candidates: list[str] = []
+    for match in re.finditer(r"https?://(?:www\.)?instagram\.com/[^\"'<>\\s]+", html_text, re.I):
+        normalized = normalize_instagram_profile_url(match.group(0))
+        if normalized:
+            candidates.append(normalized)
+    for href_match in HREF_RE.finditer(html_text):
+        href = href_match.group("href")
+        absolute = canonicalize_url(urljoin(base_url, href))
+        normalized = normalize_instagram_profile_url(absolute)
+        if normalized:
+            candidates.append(normalized)
+    return list(dict.fromkeys(candidates))
+
+
+def extract_internal_links(base_url: str, html_text: str) -> list[str]:
+    base_host = hostname(base_url)
+    links: list[str] = []
+    for href_match in HREF_RE.finditer(html_text):
+        href = href_match.group("href")
+        absolute = canonicalize_url(urljoin(base_url, href))
+        if not absolute or hostname(absolute) != base_host:
+            continue
+        lower = absolute.lower()
+        if any(keyword in lower for keyword in ["/about", "/company", "/facility", "/office", "/access", "/contact", "/profile", "/service", "/news"]):
+            links.append(absolute)
+    return list(dict.fromkeys(links))[:6]
+
+
+def instagram_from_homepage(session: requests.Session, homepage_url: str) -> str | None:
+    try:
+        response = session.get(homepage_url, timeout=8, headers={"User-Agent": USER_AGENT})
+        response.raise_for_status()
+    except requests.RequestException:
+        return None
+    html_text = response.text
+    direct_links = extract_instagram_candidates(response.url, html_text)
+    if direct_links:
+        return direct_links[0]
+    for internal_url in extract_internal_links(response.url, html_text)[:3]:
+        try:
+            internal_response = session.get(internal_url, timeout=6, headers={"User-Agent": USER_AGENT})
+            internal_response.raise_for_status()
+        except requests.RequestException:
+            continue
+        internal_links = extract_instagram_candidates(internal_response.url, internal_response.text)
+        if internal_links:
+            return internal_links[0]
+    return None
 
 
 def office_markers(record: dict[str, Any]) -> dict[str, str]:
@@ -380,6 +586,8 @@ def build_row(
     sleep_seconds: float,
     cached_row: dict[str, str] | None,
     refresh: bool,
+    pdf_homepages_by_number: dict[str, str],
+    pdf_homepages_by_name: dict[str, str],
 ) -> dict[str, Any]:
     office_no = str(record.get("office_no") or "").strip()
     wam_office_url = canonicalize_url(record.get("wam_office_url"))
@@ -394,7 +602,18 @@ def build_row(
     instagram_source = None
     instagram_confidence = None
 
-    if is_instagram_url(wam_office_url):
+    pdf_homepage_url = homepage_from_pdf(record, pdf_homepages_by_number, pdf_homepages_by_name)
+    if pdf_homepage_url and is_instagram_url(pdf_homepage_url):
+        normalized_instagram = normalize_instagram_profile_url(pdf_homepage_url)
+        if normalized_instagram:
+            instagram_url = normalized_instagram
+            instagram_source = "osaka_city_pdf_r6"
+            instagram_confidence = "high"
+    elif pdf_homepage_url and is_homepage_candidate(pdf_homepage_url):
+        homepage_url = pdf_homepage_url
+        homepage_source = "osaka_city_pdf_r6"
+        homepage_confidence = "high"
+    elif is_instagram_url(wam_office_url):
         normalized_instagram = normalize_instagram_profile_url(wam_office_url)
         if normalized_instagram:
             instagram_url = normalized_instagram
@@ -406,31 +625,50 @@ def build_row(
         homepage_confidence = "high"
 
     search_query = ""
+    if homepage_url and not instagram_url:
+        instagram_url = instagram_from_homepage(session, homepage_url)
+        if instagram_url:
+            instagram_source = "homepage_crawl"
+            instagram_confidence = "high"
+
     if not homepage_url or not instagram_url:
-        search_query = build_query(record)
-        results: list[dict[str, str]] = []
         searched = False
-        if not SEARCH_DISABLED:
-            searched = True
-            try:
-                results = search_duckduckgo(session, search_query)
-            except requests.RequestException:
-                results = []
         if not homepage_url:
+            search_query = build_query(record)
+            results: list[dict[str, str]] = []
+            if not SEARCH_DISABLED:
+                searched = True
+                try:
+                    results = search_duckduckgo(session, search_query)
+                except requests.RequestException:
+                    results = []
             homepage_url, homepage_source, homepage_confidence = pick_best_result(
                 record,
                 results,
                 score_homepage,
                 6,
             )
+            if homepage_url and not instagram_url:
+                instagram_url = instagram_from_homepage(session, homepage_url)
+                if instagram_url:
+                    instagram_source = "homepage_crawl"
+                    instagram_confidence = "high"
         if not instagram_url:
+            search_query = build_instagram_query(record)
+            insta_results: list[dict[str, str]] = []
+            try:
+                insta_results = search_bing_rss(session, search_query)
+            except (requests.RequestException, ET.ParseError):
+                insta_results = []
             instagram_url, instagram_source, instagram_confidence = pick_best_result(
                 record,
-                results,
+                insta_results,
                 score_instagram,
                 5,
                 url_transformer=normalize_instagram_profile_url,
             )
+            if instagram_source == "ddg_search":
+                instagram_source = "bing_rss_search"
         if searched and not SEARCH_DISABLED:
             time.sleep(sleep_seconds)
 
@@ -455,6 +693,7 @@ def main() -> None:
     args = parse_args()
     dashboard_input = resolve_path(args.dashboard_input)
     output_path = resolve_path(args.output)
+    pdf_cache_path = resolve_path(args.osaka_city_pdf_cache)
 
     records = [
         record
@@ -466,19 +705,31 @@ def main() -> None:
         records = records[: args.limit]
 
     cached = load_existing_rows(output_path)
-    session = requests.Session()
-    session.headers.update({"User-Agent": USER_AGENT})
+    pdf_rows = parse_osaka_city_pdf_homepages(ensure_osaka_city_pdf(pdf_cache_path))
+    pdf_homepages_by_number, pdf_homepages_by_name = pdf_homepage_lookups(pdf_rows)
 
-    rows = [
-        build_row(
-            record,
-            session=session,
-            sleep_seconds=args.sleep_seconds,
-            cached_row=cached.get(str(record.get("office_no") or "").strip()),
-            refresh=args.refresh,
-        )
-        for record in records
-    ]
+    def process_record(record: dict[str, Any]) -> dict[str, Any]:
+        session = build_session()
+        try:
+            return build_row(
+                record,
+                session=session,
+                sleep_seconds=args.sleep_seconds,
+                cached_row=cached.get(str(record.get("office_no") or "").strip()),
+                refresh=args.refresh,
+                pdf_homepages_by_number=pdf_homepages_by_number,
+                pdf_homepages_by_name=pdf_homepages_by_name,
+            )
+        finally:
+            session.close()
+
+    if args.workers <= 1:
+        rows = [process_record(record) for record in records]
+    else:
+        with ThreadPoolExecutor(max_workers=args.workers) as executor:
+            rows = list(executor.map(process_record, records))
+
+    rows.sort(key=lambda row: (str(row.get("office_no") or ""), str(row.get("office_name") or "")))
     write_rows(output_path, rows)
 
     homepage_count = sum(1 for row in rows if row.get("homepage_url"))
@@ -487,6 +738,7 @@ def main() -> None:
         json.dumps(
             {
                 "record_count": len(rows),
+                "pdf_homepage_rows": len(pdf_rows),
                 "homepage_count": homepage_count,
                 "instagram_count": instagram_count,
                 "output": str(output_path),
