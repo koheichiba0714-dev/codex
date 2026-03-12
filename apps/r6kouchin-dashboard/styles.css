@@ -887,7 +887,7 @@ tbody td {
 .selected-office-status { display: flex; gap: 4px; flex-wrap: wrap; }
 .selected-office-metrics { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 10px; }
 .selected-office-note { font-size: 12px; color: var(--text-secondary); line-height: 1.6; margin-bottom: 10px; }
-.selected-office-actions { display: flex; gap: 8px; }
+.selected-office-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .detail-subtitle { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
 
 /* --- Badges --- */
@@ -971,7 +971,8 @@ dialog[open] {
 
 .filters-dialog-shell,
 .guide-dialog-shell,
-.detail-dialog-shell {
+.detail-dialog-shell,
+.corporation-dialog-shell {
   width: min(92vw, 840px);
   max-height: 88vh;
   display: flex;
@@ -986,6 +987,7 @@ dialog[open] {
 }
 
 .detail-dialog-shell { width: min(92vw, 960px); }
+.corporation-dialog-shell { width: min(92vw, 980px); }
 
 .dialog-head {
   display: flex;
@@ -1079,9 +1081,36 @@ dialog[open] {
 /* Focus styles */
 .ghost-button:focus-visible, .solid-button:focus-visible, th button:focus-visible,
 .preset-chip:focus-visible, .strategy-item:focus-visible, .anomaly-card:focus-visible,
-.table-link:focus-visible, .nav-link:focus-visible {
+.table-link:focus-visible, .nav-link:focus-visible, .entity-link-button:focus-visible,
+.corporation-office-item:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
+}
+
+.entity-link-button {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.entity-link-button:hover {
+  color: var(--accent-hover);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.detail-entity-link {
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.detail-entity-link:hover {
+  color: var(--accent-hover);
 }
 
 /* --- Detail Dialog --- */
@@ -1101,7 +1130,13 @@ dialog[open] {
 }
 .detail-hero h3 { font-size: 18px; font-weight: 700; }
 
-.detail-cta { flex-shrink: 0; }
+.detail-cta {
+  flex-shrink: 0;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
 
 .detail-kpi-grid {
   display: grid;
@@ -1139,6 +1174,117 @@ dialog[open] {
 .detail-list { list-style: none; display: grid; gap: 6px; }
 .detail-list li { font-size: 12px; color: var(--text-secondary); line-height: 1.5; padding-left: 12px; position: relative; }
 .detail-list li::before { content: '·'; position: absolute; left: 0; color: var(--text-muted); font-weight: 700; }
+
+/* --- Corporation Dialog --- */
+.corporation-dialog-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px 24px;
+  scrollbar-width: thin;
+}
+
+.corporation-hero {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.corporation-hero h3 {
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.corporation-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+.corporation-summary-card {
+  padding: 14px 16px;
+  border-radius: var(--radius-md);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  display: grid;
+  gap: 4px;
+}
+
+.corporation-summary-card span {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.corporation-summary-card strong {
+  font-size: 20px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.corporation-summary-card em {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-style: normal;
+}
+
+.corporation-office-list {
+  display: grid;
+  gap: 10px;
+}
+
+.corporation-note-list {
+  margin-bottom: 12px;
+}
+
+.corporation-office-item {
+  width: 100%;
+  padding: 14px 16px;
+  border-radius: var(--radius-md);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  text-align: left;
+  cursor: pointer;
+  transition: all var(--duration) var(--ease);
+}
+
+.corporation-office-item:hover {
+  background: var(--bg-card-hover);
+  border-color: var(--border-strong);
+}
+
+.corporation-office-item.is-current {
+  border-color: rgba(37,99,235,0.35);
+  box-shadow: 0 0 0 3px rgba(37,99,235,0.08);
+}
+
+.corporation-office-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.corporation-office-head h3 {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.corporation-office-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.corporation-office-note {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
 
 /* --- Empty / Loading --- */
 .empty-state {
@@ -1193,10 +1339,15 @@ dialog[open] {
   .table-scroll { display: none; }
   .records-card-list { display: block; }
 
-  .filters-dialog-shell, .guide-dialog-shell, .detail-dialog-shell {
+  .filters-dialog-shell, .guide-dialog-shell, .detail-dialog-shell, .corporation-dialog-shell {
     width: 100vw;
     max-height: 100vh;
     border-radius: 0;
+  }
+
+  .corporation-hero {
+    display: grid;
+    grid-template-columns: 1fr;
   }
 
   /* Mobile menu button */

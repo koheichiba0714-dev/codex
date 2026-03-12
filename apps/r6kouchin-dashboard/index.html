@@ -537,6 +537,20 @@
       </div>
     </dialog>
 
+    <dialog id="corporationDialog" class="corporation-dialog" aria-labelledby="corporationDialogHeading">
+      <div class="corporation-dialog-shell">
+        <div class="dialog-head">
+          <div>
+            <p class="section-kicker">法人別の事業所一覧</p>
+            <h2 id="corporationDialogHeading">同じ法人が運営する事業所をまとめて見る</h2>
+            <p class="panel-note">法人名を押すと、大阪府内で同一法人が運営している事業所一覧を表示する。</p>
+          </div>
+          <button id="closeCorporationButton" class="ghost-button" type="button">閉じる</button>
+        </div>
+        <div id="corporationDialogContent" class="corporation-dialog-body"></div>
+      </div>
+    </dialog>
+
     <script src="./app.js" defer></script>
   </body>
 </html>

@@ -367,6 +367,8 @@ const state = {
   filters: createPresetFilters(INITIAL_PRESET),
   draftFilters: createPresetFilters(INITIAL_PRESET),
   selectedOfficeNo: "339",
+  selectedCorporationKey: null,
+  selectedCorporationLabel: null,
   activePreset: INITIAL_PRESET,
 };
 
@@ -381,6 +383,7 @@ async function init() {
   bindFilterDialog();
   bindGuideDialog();
   bindDetailDialog();
+  bindCorporationDialog();
   bindPanelToggles();
   bindMobileSidebar();
   const response = await fetch("./data/dashboard-data.json", { cache: "no-store" });
@@ -544,6 +547,21 @@ function bindDetailDialog() {
   });
 }
 
+function bindCorporationDialog() {
+  const dialog = document.getElementById("corporationDialog");
+  if (!dialog) return;
+
+  document.getElementById("closeCorporationButton")?.addEventListener("click", () => {
+    closeDialogElement(dialog);
+  });
+
+  dialog.addEventListener("click", (event) => {
+    if (event.target === dialog) {
+      closeDialogElement(dialog);
+    }
+  });
+}
+
 function bindPanelToggles() {
   document.querySelectorAll(".panel[data-collapsible]").forEach((panel) => {
     panel.querySelector(".panel-collapse-button")?.addEventListener("click", () => {
@@ -604,6 +622,14 @@ function openDetailDialog() {
   if (!record) return;
   renderDetail(record);
   openDialogElement(document.getElementById("detailDialog"));
+}
+
+function openCorporationDialog(corporationName) {
+  const label = String(corporationName ?? "").trim();
+  if (!label) return;
+  renderCorporationDialog(label);
+  closeDialogElement(document.getElementById("detailDialog"));
+  openDialogElement(document.getElementById("corporationDialog"));
 }
 
 async function loadDashboardRecords(dashboard) {
@@ -717,10 +743,21 @@ function bindEvents() {
   });
 
   document.body.addEventListener("click", (event) => {
+    const corporationTrigger = event.target.closest("[data-open-corporation]");
+    if (corporationTrigger) {
+      const corporationName = corporationTrigger.getAttribute("data-open-corporation");
+      if (!corporationName) return;
+      openCorporationDialog(corporationName);
+      return;
+    }
+
     const trigger = event.target.closest("[data-select-office]");
     if (!trigger) return;
     const officeNo = trigger.getAttribute("data-select-office");
     if (!officeNo) return;
+    if (trigger.closest("#corporationDialog")) {
+      closeDialogElement(document.getElementById("corporationDialog"));
+    }
     selectRecord(officeNo, { openDetail: true });
   });
 }
@@ -839,8 +876,43 @@ function getSelectedRecord() {
   );
 }
 
+function normalizeCorporationName(value) {
+  return String(value ?? "")
+    .normalize("NFKC")
+    .trim()
+    .replace(/\s+/g, "")
+    .toLowerCase();
+}
+
+function getCorporationKey(value) {
+  const key = normalizeCorporationName(value);
+  return key || null;
+}
+
+function corporationRecords(corporationName) {
+  const key = getCorporationKey(corporationName);
+  if (!key) return [];
+  return state.records
+    .filter((record) => getCorporationKey(record.corporation_name) === key)
+    .sort((left, right) => {
+      const municipalityDiff = String(left.municipality ?? "").localeCompare(String(right.municipality ?? ""), "ja");
+      if (municipalityDiff !== 0) return municipalityDiff;
+      const officeDiff = String(left.office_name ?? "").localeCompare(String(right.office_name ?? ""), "ja");
+      if (officeDiff !== 0) return officeDiff;
+      return Number(left.office_no ?? 0) - Number(right.office_no ?? 0);
+    });
+}
+
+function corporationLinkButton(corporationName, className = "entity-link-button") {
+  const label = String(corporationName ?? "").trim();
+  if (!label) return escapeHtml("-");
+  return `<button class="${escapeAttribute(className)}" type="button" data-open-corporation="${escapeAttribute(label)}">${escapeHtml(label)}</button>`;
+}
+
 function selectRecord(officeNo, options = {}) {
-  const record = state.filteredRecords.find((item) => String(item.office_no) === String(officeNo));
+  const record =
+    state.filteredRecords.find((item) => String(item.office_no) === String(officeNo)) ??
+    state.records.find((item) => String(item.office_no) === String(officeNo));
   if (!record) return;
   state.selectedOfficeNo = String(officeNo);
   renderCharts(state.filteredRecords);
@@ -1612,6 +1684,10 @@ function renderDetail(record) {
   const instagramSearchUrl = buildInstagramSearchUrl(record);
   const homepageSource = record.homepage_source ? linkSourceLabel(record.homepage_source) : null;
   const instagramSource = record.instagram_source ? linkSourceLabel(record.instagram_source) : null;
+  const corporationName = String(record.corporation_name ?? "").trim();
+  const corporationActionButton = corporationName
+    ? `<button class="ghost-button" type="button" data-open-corporation="${escapeAttribute(corporationName)}">法人の事業所一覧</button>`
+    : "";
 
   if (openButton) openButton.disabled = false;
   if (focusButton) focusButton.disabled = false;
@@ -1623,7 +1699,7 @@ function renderDetail(record) {
           <div>
             <p class="section-kicker">${escapeHtml(record.municipality ?? "-")} / No.${escapeHtml(record.office_no ?? "-")}</p>
             <h3>${escapeHtml(record.office_name ?? "-")}</h3>
-            <p class="detail-subtitle">${escapeHtml(record.corporation_name ?? "-")} / ${escapeHtml(record.corporation_type_label ?? "-")}</p>
+            <p class="detail-subtitle">${corporationLinkButton(record.corporation_name, "entity-link-button detail-entity-link")} / ${escapeHtml(record.corporation_type_label ?? "-")}</p>
           </div>
           <div class="selected-office-status">
             ${matchBadge(record.wam_match_status, record.wam_match_confidence)}
@@ -1638,6 +1714,7 @@ function renderDetail(record) {
         </div>
         <p class="selected-office-note">${escapeHtml(actionNotes[0] ?? "詳しい内訳は詳細を開いて確認できる。")}</p>
         <div class="selected-office-actions">
+          ${corporationActionButton}
           ${homepageUrl ? `<a class="ghost-button link-button" href="${escapeAttribute(homepageUrl)}" target="_blank" rel="noreferrer">ホームページ</a>` : `<a class="ghost-button link-button" href="${escapeAttribute(websiteSearchUrl)}" target="_blank" rel="noreferrer">Webで探す</a>`}
           ${instagramUrl ? `<a class="ghost-button link-button" href="${escapeAttribute(instagramUrl)}" target="_blank" rel="noreferrer">Instagram</a>` : `<a class="ghost-button link-button" href="${escapeAttribute(instagramSearchUrl)}" target="_blank" rel="noreferrer">Instagramを探す</a>`}
         </div>
@@ -1661,9 +1738,10 @@ function renderDetail(record) {
       <div>
         <p class="section-kicker">${escapeHtml(record.municipality ?? "-")} / No.${escapeHtml(record.office_no ?? "-")}</p>
         <h3>${escapeHtml(record.office_name ?? "-")}</h3>
-        <p class="detail-subtitle">${escapeHtml(record.corporation_name ?? "-")} / ${escapeHtml(record.corporation_type_label ?? "-")}</p>
+        <p class="detail-subtitle">${corporationLinkButton(record.corporation_name, "entity-link-button detail-entity-link")} / ${escapeHtml(record.corporation_type_label ?? "-")}</p>
       </div>
       <div class="detail-cta">
+        ${corporationActionButton}
         ${homepageUrl ? `<a class="solid-button link-button" href="${escapeAttribute(homepageUrl)}" target="_blank" rel="noreferrer">ホームページ</a>` : `<a class="solid-button link-button" href="${escapeAttribute(websiteSearchUrl)}" target="_blank" rel="noreferrer">Webで探す</a>`}
         ${instagramUrl ? `<a class="ghost-button link-button" href="${escapeAttribute(instagramUrl)}" target="_blank" rel="noreferrer">Instagram</a>` : `<a class="ghost-button link-button" href="${escapeAttribute(instagramSearchUrl)}" target="_blank" rel="noreferrer">Instagramを探す</a>`}
       </div>
@@ -1749,6 +1827,116 @@ function renderDetail(record) {
   `;
 }
 
+function renderCorporationDialog(corporationName) {
+  const dialogRoot = document.getElementById("corporationDialogContent");
+  if (!dialogRoot) return;
+
+  const records = corporationRecords(corporationName);
+  state.selectedCorporationKey = getCorporationKey(corporationName);
+  state.selectedCorporationLabel = corporationName;
+
+  if (!records.length) {
+    dialogRoot.innerHTML = document.getElementById("emptyStateTemplate").innerHTML;
+    return;
+  }
+
+  const filteredOfficeNos = new Set(state.filteredRecords.map((record) => String(record.office_no)));
+  const visibleCount = records.filter((record) => filteredOfficeNos.has(String(record.office_no))).length;
+  const municipalityCount = new Set(records.map((record) => record.municipality).filter(Boolean)).size;
+  const osakaCityCount = records.filter((record) => record.municipality === "大阪市").length;
+  const matchedCount = records.filter((record) => record.wam_match_status === "matched").length;
+  const answeredWages = records.map((record) => record.average_wage_yen).filter(isNumber);
+  const averageWage = answeredWages.length
+    ? answeredWages.reduce((sum, value) => sum + value, 0) / answeredWages.length
+    : null;
+  const corporationTypeCounts = new Map();
+  records.forEach((record) => {
+    const label = record.corporation_type_label;
+    if (!label) return;
+    corporationTypeCounts.set(label, (corporationTypeCounts.get(label) ?? 0) + 1);
+  });
+  const corporationTypeLabel =
+    [...corporationTypeCounts.entries()].sort((left, right) => right[1] - left[1])[0]?.[0] ?? "-";
+
+  dialogRoot.innerHTML = `
+    <div class="corporation-hero">
+      <div>
+        <p class="section-kicker">法人名からまとめて確認</p>
+        <h3>${escapeHtml(corporationName)}</h3>
+        <p class="detail-subtitle">${escapeHtml(corporationTypeLabel)} / 大阪府内で ${formatCount(records.length)} 事業所</p>
+      </div>
+      <div class="selected-office-actions">
+        <button class="ghost-button" type="button" data-select-office="${escapeAttribute(records[0].office_no)}">先頭の事業所を開く</button>
+      </div>
+    </div>
+    <div class="corporation-summary-grid">
+      <article class="corporation-summary-card">
+        <span>運営事業所数</span>
+        <strong>${formatCount(records.length)}</strong>
+        <em>大阪府全体</em>
+      </article>
+      <article class="corporation-summary-card">
+        <span>現在の一覧に出ている数</span>
+        <strong>${formatCount(visibleCount)}</strong>
+        <em>今の絞り込み条件に入る事業所</em>
+      </article>
+      <article class="corporation-summary-card">
+        <span>大阪市内</span>
+        <strong>${formatCount(osakaCityCount)}</strong>
+        <em>大阪市の運営事業所</em>
+      </article>
+      <article class="corporation-summary-card">
+        <span>人員詳細あり</span>
+        <strong>${formatCount(matchedCount)}</strong>
+        <em>WAM と突合済み</em>
+      </article>
+      <article class="corporation-summary-card">
+        <span>平均工賃の平均</span>
+        <strong>${escapeHtml(formatWageText(averageWage))}</strong>
+        <em>${formatCount(municipalityCount)} 市区にまたがる</em>
+      </article>
+    </div>
+    <article class="detail-card">
+      <h3>運営している事業所一覧</h3>
+      <ul class="detail-list corporation-note-list">
+        <li>現在の絞り込みに入っている事業所には「一覧内」を付けている。</li>
+        <li>事業所を押すと、そのまま詳細モーダルへ移動する。</li>
+      </ul>
+      <div class="corporation-office-list">
+        ${records
+          .map((record) => {
+            const isVisible = filteredOfficeNos.has(String(record.office_no));
+            const isCurrent = String(record.office_no) === String(state.selectedOfficeNo);
+            return `
+              <button class="corporation-office-item ${isCurrent ? "is-current" : ""}" type="button" data-select-office="${escapeAttribute(record.office_no)}">
+                <div class="corporation-office-head">
+                  <div>
+                    <p class="section-kicker">${escapeHtml(getAreaLabel(record) || record.municipality || "-")} / No.${escapeHtml(record.office_no ?? "-")}</p>
+                    <h3>${escapeHtml(record.office_name ?? "-")}</h3>
+                    <p class="detail-subtitle">${escapeHtml(composeAddress(record))}</p>
+                  </div>
+                  <div class="selected-office-status">
+                    ${isVisible ? `<span class="badge badge-answered">一覧内</span>` : `<span class="badge badge-annotated">一覧外</span>`}
+                    ${matchBadge(record.wam_match_status, record.wam_match_confidence)}
+                  </div>
+                </div>
+                <div class="corporation-office-meta">
+                  <span class="metric-chip">${escapeHtml(`平均工賃 ${formatWageText(record.average_wage_yen)}`)}</span>
+                  <span class="metric-chip">${escapeHtml(`利用率 ${formatPercent(record.daily_user_capacity_ratio)}`)}</span>
+                  <span class="metric-chip">${escapeHtml(`在宅率 ${formatPercent(record.home_use_user_ratio_decimal)}`)}</span>
+                  <span class="metric-chip">${escapeHtml(`支援職員 / 定員 ${formatPercent(record.wam_key_staff_fte_per_capacity)}`)}</span>
+                  ${attentionBadges(record)}
+                </div>
+                <p class="corporation-office-note">${escapeHtml(record.wam_primary_activity_type ?? "主活動の記載なし")} / ${escapeHtml(record.remarks ?? "備考なし")}</p>
+              </button>
+            `;
+          })
+          .join("")}
+      </div>
+    </article>
+  `;
+}
+
 function renderTable(records) {
   const tableBody = document.getElementById("recordsTableBody");
   const cardList = document.getElementById("recordsCardList");
@@ -1776,7 +1964,7 @@ function renderTable(records) {
           <td class="numeric">${formatNullable(record.office_no)}</td>
           <td>${escapeHtml(record.office_name ?? "-")}</td>
           <td>${escapeHtml(getAreaLabel(record) || record.municipality || "-")}</td>
-          <td>${escapeHtml(record.corporation_name ?? "-")}</td>
+          <td>${corporationLinkButton(record.corporation_name, "entity-link-button table-entity-link")}</td>
           <td class="numeric">${formatWage(record.average_wage_yen, record.average_wage_error)}</td>
           <td class="numeric">${formatRatio(record.wage_ratio_to_overall_mean)}</td>
           <td class="numeric">${formatPercent(record.daily_user_capacity_ratio)}</td>
@@ -1800,7 +1988,7 @@ function renderTable(records) {
               <div>
                 <p class="section-kicker">${escapeHtml(record.municipality ?? "-")} / No.${escapeHtml(record.office_no ?? "-")}</p>
                 <h3>${escapeHtml(record.office_name ?? "-")}</h3>
-                <p class="detail-subtitle">${escapeHtml(record.corporation_name ?? "-")}</p>
+                <p class="detail-subtitle">${corporationLinkButton(record.corporation_name, "entity-link-button detail-entity-link")}</p>
               </div>
               <button class="table-link" data-select-office="${escapeHtml(record.office_no)}" type="button">詳細</button>
             </div>
