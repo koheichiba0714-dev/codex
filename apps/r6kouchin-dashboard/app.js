@@ -46,10 +46,16 @@ const FILTER_PRESETS = {
   "high-wage": {
     outlierFlag: "high",
   },
+  "high-wage-low-util": {
+    quadrant: "高工賃 × 低稼働",
+  },
   "fix-priority": {
-    municipality: "大阪市",
     wamOnly: true,
+    quadrant: "低工賃 × 低稼働",
     staffingOutlier: "high",
+  },
+  "high-wage-high-util": {
+    quadrant: "高工賃 × 高稼働",
   },
   "work-shortage": {
     workShortageRisk: "likely",
@@ -118,10 +124,10 @@ async function init() {
 
   const dashboard = await response.json();
   state.dashboard = dashboard;
-  renderMeta(dashboard);
-  renderQuality(dashboard);
   renderLoadingState();
   state.records = await loadDashboardRecords(dashboard);
+  renderMeta(dashboard);
+  renderQuality(dashboard, state.records);
   populateFilterOptions(state.records);
   bindEvents();
   syncPresetButtons();
@@ -551,7 +557,6 @@ function applyFilters() {
   renderInsights(filtered);
   renderStrategy(filtered);
   renderStats(filtered);
-  renderBenchmarks(filtered);
   renderCharts(filtered);
   renderAnomalies(filtered);
   renderDetail(getSelectedRecord());
@@ -730,9 +735,9 @@ function labelForSelect(value) {
   if (value === "高工賃 × 低稼働") return "工賃高め・利用少なめ";
   if (value === "低工賃 × 高稼働") return "工賃低め・利用多め";
   if (value === "低工賃 × 低稼働") return "工賃低め・利用少なめ";
-  if (value === "高工賃 × 厚い人員") return "工賃高め・人員多め";
+  if (value === "高工賃 × 厚い人員") return "工賃高め・人員厚め";
   if (value === "高工賃 × 少ない人員") return "工賃高め・人員少なめ";
-  if (value === "低工賃 × 厚い人員") return "工賃低め・人員多め";
+  if (value === "低工賃 × 厚い人員") return "工賃低め・人員過剰";
   if (value === "低工賃 × 少ない人員") return "工賃低め・人員少なめ";
   return value;
 }
@@ -749,10 +754,8 @@ function renderLoadingState() {
   document.getElementById("insightList").innerHTML = loadingCard;
   document.getElementById("growthList").innerHTML = loadingCard;
   document.getElementById("fixList").innerHTML = loadingCard;
-  document.getElementById("reviewList").innerHTML = loadingCard;
+  document.getElementById("highHighList").innerHTML = loadingCard;
   document.getElementById("statsGrid").innerHTML = loadingCard;
-  document.getElementById("leaderboardList").innerHTML = loadingCard;
-  document.getElementById("watchlistList").innerHTML = loadingCard;
   [
     "municipalityChart",
     "wageChart",
@@ -780,30 +783,32 @@ function renderLoadingState() {
 }
 
 function renderMeta(dashboard) {
-  const meta = dashboard.meta ?? {};
   const matchSummary = dashboard.summary?.wam_match_summary ?? {};
-  const updatedAt = meta.generated_at ? new Date(meta.generated_at) : null;
+  const updatedAt = dashboard.meta?.generated_at ? new Date(dashboard.meta.generated_at) : null;
   document.getElementById("updatedAt").textContent =
     updatedAt && !Number.isNaN(updatedAt.valueOf()) ? updatedAt.toLocaleString("ja-JP") : "-";
-  document.getElementById("totalRecords").textContent = formatCount(meta.record_count ?? state.records.length);
+  document.getElementById("totalRecords").textContent = formatCount(state.records.length);
   document.getElementById("wamMatchedCount").textContent = formatCount(matchSummary.matched_record_count ?? 0);
 }
 
-function renderQuality(dashboard) {
+function renderQuality(dashboard, records = state.records) {
   const issuesRoot = document.getElementById("issuesList");
   const notesRoot = document.getElementById("notesList");
   const issues = dashboard.issues ?? [];
   const notes = dashboard.notes ?? [];
-  const wageStats = dashboard.analytics?.overall_wage_stats ?? {};
+  const wageStats = computeLocalStats(numericValues(records, "average_wage_yen"));
   const wamMatchSummary = dashboard.analytics?.wam_match_summary ?? {};
 
   const summaryCards = [
-    `<article class="note-card"><strong>差が大きい事業所の見つけ方</strong><p>真ん中の集まりから大きく離れた工賃を、確認候補として表示している。今回の中心は ${formatMaybeYen(
-      wageStats.median
-    )} である。</p></article>`,
+    `<article class="note-card"><strong>表示対象</strong><p>工賃データは大阪府全域 ${formatCount(
+      records.length
+    )} 件を表示している。大阪市以外は参考比較で見られる。</p></article>`,
     `<article class="note-card"><strong>人員詳細あり とは</strong><p>福祉医療機構の公開情報と結び付いた事業所で、大阪市レコード ${formatCount(
       wamMatchSummary.matched_record_count ?? 0
     )} / ${formatCount(wamMatchSummary.workbook_osaka_record_count ?? 0)} 件が対象である。</p></article>`,
+    `<article class="note-card"><strong>差が大きい事業所の見つけ方</strong><p>表示中データの真ん中あたりの工賃は ${formatMaybeYen(
+      wageStats.median
+    )}。そこから大きく離れた工賃を確認候補として表示している。</p></article>`,
   ];
 
   issuesRoot.innerHTML =
@@ -848,10 +853,13 @@ function renderActiveFilterSummary(records) {
 
   document.getElementById("activeFilterSummary").textContent = filters.length
     ? `${formatCount(records.length)} 件を表示中。`
-    : `${formatCount(records.length)} 件を表示中。条件なし。`;
+    : `${formatCount(records.length)} 件を表示中。追加条件なし。`;
   const tagsRoot = document.getElementById("activeFilterTags");
   if (tagsRoot) {
-    const tags = filters.length ? filters : ["条件なし"];
+    const tags = [
+      ...(state.filters.municipality === "all" ? ["対象: 大阪府全域"] : []),
+      ...(filters.length ? filters : ["条件なし"]),
+    ];
     tagsRoot.innerHTML = tags
       .map((filter) => `<span class="active-filter-chip">${escapeHtml(filter)}</span>`)
       .join("");
@@ -907,7 +915,7 @@ function renderInsights(records) {
             )}。差分は ${formatSignedYen(transportDelta)}。`,
     },
     {
-      title: "工賃低め・利用率低め・人員先行",
+      title: "低工賃・低利用率・人員過剰",
       body: heavyLow
         ? `${heavyLow.office_name ?? "-"} は ${formatWageText(
             heavyLow.average_wage_yen
@@ -932,7 +940,7 @@ function renderStrategy(records) {
   const rootSummary = document.getElementById("strategySummary");
   if (!records.length) {
     rootSummary.textContent = "条件に合うレコードがない";
-    ["growthList", "fixList", "reviewList"].forEach((id) => {
+    ["growthList", "fixList", "highHighList"].forEach((id) => {
       document.getElementById(id).innerHTML = document.getElementById("emptyStateTemplate").innerHTML;
     });
     return;
@@ -943,10 +951,8 @@ function renderStrategy(records) {
       (record) =>
         isNumber(record.average_wage_yen) &&
         isNumber(record.daily_user_capacity_ratio) &&
-        record.wam_match_status === "matched" &&
-        ((record.wam_staffing_efficiency_quadrant === "高工賃 × 少ない人員" &&
-          record.daily_user_capacity_ratio < 0.9) ||
-          (record.wage_ratio_to_overall_mean >= 1.15 && record.daily_user_capacity_ratio < 0.8))
+        (record.wage_ratio_to_municipality_mean ?? record.wage_ratio_to_overall_mean ?? 0) >= 1.1 &&
+        record.daily_user_capacity_ratio < 0.8
     )
     .sort((left, right) => growthScore(right) - growthScore(left))
     .slice(0, 6);
@@ -955,32 +961,33 @@ function renderStrategy(records) {
     .filter(
       (record) =>
         isNumber(record.average_wage_yen) &&
-        (hasWorkShortageRisk(record) ||
-          record.wam_staffing_efficiency_quadrant === "低工賃 × 厚い人員" ||
-          (record.wam_staffing_outlier_flag === "high" && (record.wage_ratio_to_overall_mean ?? 0) < 0.95) ||
-          (isNumber(record.daily_user_capacity_ratio) && record.daily_user_capacity_ratio < 0.55))
+        isNumber(record.daily_user_capacity_ratio) &&
+        (record.wage_ratio_to_municipality_mean ?? record.wage_ratio_to_overall_mean ?? 1) < 0.9 &&
+        record.daily_user_capacity_ratio < 0.75 &&
+        (record.wam_staffing_efficiency_quadrant === "低工賃 × 厚い人員" ||
+          record.wam_staffing_outlier_flag === "high")
     )
     .sort((left, right) => fixScore(right) - fixScore(left))
     .slice(0, 6);
 
-  const reviewCandidates = records
+  const highHighCandidates = records
     .filter(
       (record) =>
-        record.response_status === "unanswered" ||
-        record.wam_match_status !== "matched" ||
-        record.is_new_office ||
-        Boolean(record.average_wage_error)
+        isNumber(record.average_wage_yen) &&
+        isNumber(record.daily_user_capacity_ratio) &&
+        (record.wage_ratio_to_municipality_mean ?? record.wage_ratio_to_overall_mean ?? 0) >= 1.1 &&
+        record.daily_user_capacity_ratio >= 0.85
     )
-    .sort((left, right) => reviewScore(right) - reviewScore(left))
+    .sort((left, right) => highHighScore(right) - highHighScore(left))
     .slice(0, 6);
 
-  rootSummary.textContent = `利用者を増やせそう ${formatCount(growthCandidates.length)} 件 / 工賃低め・利用率低め・人員先行 ${formatCount(
+  rootSummary.textContent = `高工賃・低利用率 ${formatCount(growthCandidates.length)} 件 / 低工賃・低利用率・人員過剰 ${formatCount(
     fixCandidates.length
-  )} 件 / まず確認したい ${formatCount(reviewCandidates.length)} 件`;
+  )} 件 / 高工賃・高利用率 ${formatCount(highHighCandidates.length)} 件`;
 
-  renderStrategyList("growthList", growthCandidates, "利用者を増やせそうな事業所はまだない", buildGrowthReason);
-  renderStrategyList("fixList", fixCandidates, "工賃低め・利用率低め・人員先行の事業所はまだない", buildFixReason);
-  renderStrategyList("reviewList", reviewCandidates, "まず確認したい事業所はまだない", buildReviewReason);
+  renderStrategyList("growthList", growthCandidates, "高工賃・低利用率の事業所はまだない", buildGrowthReason);
+  renderStrategyList("fixList", fixCandidates, "低工賃・低利用率・人員過剰の事業所はまだない", buildFixReason);
+  renderStrategyList("highHighList", highHighCandidates, "高工賃・高利用率の事業所はまだない", buildHighHighReason);
 }
 
 function renderStrategyList(id, records, emptyLabel, buildReason) {
@@ -1033,7 +1040,7 @@ function renderStats(records) {
     { label: "支援職員 / 定員", value: formatPercent(keyStaffPerCapacity), hint: "主な支援職員の人数を定員で割った目安" },
     { label: "送迎実施率", value: formatPercent(transportRate), hint: "一致レコードのみ" },
     { label: "管理者兼務率", value: formatPercent(managerMultiRate), hint: "一致レコードのみ" },
-    { label: "工賃低め・人員多め", value: formatCount(heavyLowCount), hint: "工賃低め・利用率低め・人員先行の候補" },
+    { label: "低工賃・人員過剰", value: formatCount(heavyLowCount), hint: "低工賃・低利用率・人員過剰の候補" },
     { label: "仕事不足の可能性", value: formatCount(workShortageCount), hint: "工賃・利用率・人員のバランスで抽出" },
   ];
 
@@ -1045,59 +1052,6 @@ function renderStats(records) {
           <strong>${escapeHtml(card.value)}</strong>
           <em>${escapeHtml(card.hint)}</em>
         </article>
-      `
-    )
-    .join("");
-}
-
-function renderBenchmarks(records) {
-  const matched = matchedRecords(records);
-  renderBenchmarkList(
-    "leaderboardList",
-    matched
-      .filter((record) => record.wam_staffing_efficiency_quadrant === "高工賃 × 少ない人員")
-      .sort((left, right) => {
-        const wageDiff = (right.average_wage_yen ?? 0) - (left.average_wage_yen ?? 0);
-        if (wageDiff !== 0) return wageDiff;
-        return (left.wam_key_staff_fte_per_capacity ?? Infinity) - (right.wam_key_staff_fte_per_capacity ?? Infinity);
-      })
-      .slice(0, 8),
-    "候補がまだない"
-  );
-  renderBenchmarkList(
-    "watchlistList",
-    matched
-      .filter((record) => record.wam_staffing_efficiency_quadrant === "低工賃 × 厚い人員")
-      .sort((left, right) => {
-        const wageDiff = (left.average_wage_yen ?? Infinity) - (right.average_wage_yen ?? Infinity);
-        if (wageDiff !== 0) return wageDiff;
-        return (right.wam_key_staff_fte_per_capacity ?? 0) - (left.wam_key_staff_fte_per_capacity ?? 0);
-      })
-      .slice(0, 8),
-    "候補がまだない"
-  );
-}
-
-function renderBenchmarkList(id, records, emptyLabel) {
-  const root = document.getElementById(id);
-  if (!records.length) {
-    root.innerHTML = `<div class="empty-state"><h3>${escapeHtml(emptyLabel)}</h3></div>`;
-    return;
-  }
-
-  root.innerHTML = records
-    .map(
-      (record) => `
-        <button class="benchmark-item" data-select-office="${escapeHtml(record.office_no)}" type="button">
-          <h3>${escapeHtml(record.office_name ?? "-")}</h3>
-          <p>${escapeHtml(record.municipality ?? "-")} / ${escapeHtml(record.corporation_name ?? "-")}</p>
-          <div class="benchmark-meta">
-            <span class="metric-chip">${escapeHtml(`工賃 ${formatWageText(record.average_wage_yen)}`)}</span>
-            <span class="metric-chip">${escapeHtml(`支援職員 / 定員 ${formatPercent(record.wam_key_staff_fte_per_capacity)}`)}</span>
-            <span class="metric-chip">${escapeHtml(`送迎 ${formatBool(record.wam_transport_available)}`)}</span>
-            <span class="metric-chip">${escapeHtml(`主活動 ${record.wam_primary_activity_type ?? "-"}`)}</span>
-          </div>
-        </button>
       `
     )
     .join("");
@@ -1620,7 +1574,7 @@ function anomalyScore(record) {
 
 function growthScore(record) {
   return (
-    (record.wage_ratio_to_overall_mean ?? 0) * 70 +
+    (record.wage_ratio_to_municipality_mean ?? record.wage_ratio_to_overall_mean ?? 0) * 70 +
     (1 - (record.daily_user_capacity_ratio ?? 1)) * 25 +
     (record.wam_staffing_efficiency_quadrant === "高工賃 × 少ない人員" ? 12 : 0)
   );
@@ -1628,42 +1582,36 @@ function growthScore(record) {
 
 function fixScore(record) {
   return (
-    Math.max(1 - (record.wage_ratio_to_overall_mean ?? 1), 0) * 80 +
+    Math.max(1 - (record.wage_ratio_to_municipality_mean ?? record.wage_ratio_to_overall_mean ?? 1), 0) * 80 +
     ((record.wam_key_staff_fte_per_capacity ?? 0) * 100) +
     Math.max(0.7 - (record.daily_user_capacity_ratio ?? 0.7), 0) * 25
   );
 }
 
-function reviewScore(record) {
-  let score = 0;
-  if (record.response_status === "unanswered") score += 50;
-  if (record.wam_match_status !== "matched") score += 30;
-  if (record.is_new_office) score += 20;
-  if (record.average_wage_error) score += 15;
-  return score;
+function highHighScore(record) {
+  return (
+    (record.wage_ratio_to_municipality_mean ?? record.wage_ratio_to_overall_mean ?? 0) * 70 +
+    (record.daily_user_capacity_ratio ?? 0) * 35
+  );
 }
 
 function buildGrowthReason(record) {
-  return `工賃 ${formatWageText(record.average_wage_yen)} / 利用率 ${formatPercent(
+  return `市町村平均との差 ${formatRatio(record.wage_ratio_to_municipality_mean)} / 利用率 ${formatPercent(
     record.daily_user_capacity_ratio
   )} / 支援職員 / 定員 ${formatPercent(record.wam_key_staff_fte_per_capacity)}`;
 }
 
 function buildFixReason(record) {
   const workShortageNote = hasWorkShortageRisk(record) ? " / 仕事不足の可能性" : "";
-  return `平均との差 ${formatRatio(record.wage_ratio_to_overall_mean)} / 利用率 ${formatPercent(
+  return `市町村平均との差 ${formatRatio(record.wage_ratio_to_municipality_mean)} / 利用率 ${formatPercent(
     record.daily_user_capacity_ratio
   )} / 人員配置 ${labelForSelect(record.wam_staffing_efficiency_quadrant ?? "-")}${workShortageNote}`;
 }
 
-function buildReviewReason(record) {
-  const flags = [];
-  if (record.response_status === "unanswered") flags.push("未回答");
-  if (record.wam_match_status !== "matched") flags.push("人員詳細なし");
-  if (record.is_new_office) flags.push("新設");
-  if (record.average_wage_error) flags.push(record.average_wage_error);
-  if (hasWorkShortageRisk(record)) flags.push("仕事不足の可能性");
-  return flags.join(" / ") || "確認推奨";
+function buildHighHighReason(record) {
+  return `市町村平均との差 ${formatRatio(record.wage_ratio_to_municipality_mean)} / 利用率 ${formatPercent(
+    record.daily_user_capacity_ratio
+  )} / 在宅率 ${formatPercent(record.home_use_user_ratio_decimal)}`;
 }
 
 function buildActionNotes(record) {

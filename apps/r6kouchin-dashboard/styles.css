@@ -292,7 +292,6 @@ h2[id] {
 .filter-launch-panel,
 .explain-panel,
 .insight-panel,
-.benchmark-panel,
 .detail-panel,
 .anomaly-panel,
 .strategy-panel,
@@ -304,22 +303,58 @@ h2[id] {
 
 .filter-launch-panel,
 .panel-main,
+.explain-panel,
 .insight-panel,
 .strategy-panel,
-.benchmark-panel,
-.explain-panel,
+.anomaly-panel,
 .charts-panel,
-.table-panel,
 .notes-panel {
   grid-column: 1 / -1;
 }
 
-.detail-panel {
+.table-panel {
   grid-column: 1;
+  order: 3;
+}
+
+.detail-panel {
+  grid-column: 2;
+  order: 4;
+  position: sticky;
+  top: 18px;
+  align-self: start;
+}
+
+.filter-launch-panel {
+  order: 1;
+}
+
+.panel-main {
+  order: 2;
+}
+
+.insight-panel {
+  order: 5;
+}
+
+.strategy-panel {
+  order: 6;
 }
 
 .anomaly-panel {
-  grid-column: 2;
+  order: 7;
+}
+
+.explain-panel {
+  order: 8;
+}
+
+.charts-panel {
+  order: 9;
+}
+
+.notes-panel {
+  order: 10;
 }
 
 .panel-head {
@@ -474,6 +509,31 @@ h2[id] {
 .filter-launch-body {
   display: grid;
   gap: 12px;
+}
+
+.quickstart-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.quickstart-card {
+  display: grid;
+  gap: 4px;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(194, 211, 230, 0.94);
+  background: rgba(255, 255, 255, 0.8);
+}
+
+.quickstart-card strong {
+  font-size: 0.9rem;
+}
+
+.quickstart-card p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.82rem;
 }
 
 .filter-summary-stack {
@@ -1170,6 +1230,7 @@ th button,
 
 .table-scroll {
   overflow: auto;
+  max-height: 62vh;
   border: 1px solid rgba(212, 221, 231, 0.95);
   border-radius: var(--radius-md);
   background: rgba(255, 255, 255, 0.92);
@@ -1409,6 +1470,7 @@ td.numeric {
   .meta-strip,
   .dashboard-grid,
   .stats-grid,
+  .quickstart-row,
   .strategy-grid,
   .benchmark-grid,
   .chart-grid,
@@ -1429,10 +1491,9 @@ td.numeric {
   .filter-launch-panel,
   .explain-panel,
   .insight-panel,
-  .strategy-panel,
-  .benchmark-panel,
   .detail-panel,
   .anomaly-panel,
+  .strategy-panel,
   .charts-panel,
   .table-panel,
   .notes-panel {
@@ -1562,6 +1623,7 @@ td.numeric {
 
   .table-scroll {
     margin: 0 -1px;
+    max-height: none;
     border-left: none;
     border-right: none;
     border-radius: 0;

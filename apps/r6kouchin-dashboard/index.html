@@ -3,10 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>大阪市 就労継続支援B型 ダッシュボード</title>
+    <title>大阪府 就労継続支援B型 ダッシュボード</title>
     <meta
       name="description"
-      content="大阪市の就労継続支援B型データを、工賃、利用状況、人員配置、公開情報まで比較できる運営向けダッシュボード"
+      content="大阪府の就労継続支援B型データを比較しつつ、大阪市は WAM 公開情報の人員詳細まで見られる運営向けダッシュボード"
     />
     <link rel="stylesheet" href="./styles.css" />
   </head>
@@ -17,7 +17,7 @@
           <span class="brand-mark">工</span>
           <div>
             <strong>工賃ダッシュボード</strong>
-            <p>大阪市 就労継続支援B型</p>
+            <p>大阪府比較 / 大阪市WAM詳細</p>
           </div>
         </div>
         <nav class="sidebar-nav">
@@ -34,10 +34,10 @@
       <div class="workspace">
         <header class="topbar">
           <div class="topbar-copy">
-            <p class="section-kicker">大阪市 就労継続支援B型</p>
+            <p class="section-kicker">大阪府 就労継続支援B型</p>
             <h1 id="overviewHeading">運営ダッシュボード</h1>
             <p class="hero-lead">
-              工賃、利用状況、人員配置、平均との差が大きい事業所、公開情報を、現場で判断しやすい順に1画面へ整理した。
+              大阪府全体を参考比較しつつ、大阪市は WAM の人員詳細まで見られる。絞り込み後すぐ一覧で比較できるよう、画面の上から判断順に並べた。
             </p>
           </div>
           <div class="topbar-actions">
@@ -57,7 +57,7 @@
             <strong id="totalRecords">-</strong>
           </article>
           <article class="meta-card">
-            <span class="meta-label">人員詳細あり</span>
+            <span class="meta-label">大阪市WAM詳細あり</span>
             <strong id="wamMatchedCount">-</strong>
           </article>
         </section>
@@ -81,13 +81,29 @@
                 <button class="preset-chip" data-preset="osaka-city" type="button">大阪市</button>
                 <button class="preset-chip" data-preset="osaka-wam" type="button">人員詳細あり</button>
                 <button class="preset-chip" data-preset="high-wage" type="button">工賃高め</button>
-                <button class="preset-chip" data-preset="fix-priority" type="button">工賃低め・利用率低め・人員先行</button>
+                <button class="preset-chip" data-preset="high-wage-low-util" type="button">高工賃・低利用率</button>
+                <button class="preset-chip" data-preset="fix-priority" type="button">低工賃・低利用率・人員過剰</button>
+                <button class="preset-chip" data-preset="high-wage-high-util" type="button">高工賃・高利用率</button>
                 <button class="preset-chip" data-preset="work-shortage" type="button">仕事不足の可能性</button>
                 <button class="preset-chip" data-preset="unanswered" type="button">未回答</button>
               </div>
               <div class="filter-summary-stack">
                 <p id="activeFilterSummary" class="filter-summary"></p>
                 <div id="activeFilterTags" class="active-filter-tags" aria-live="polite"></div>
+              </div>
+              <div class="quickstart-row" aria-label="使い方">
+                <article class="quickstart-card">
+                  <strong>1. 条件を絞る</strong>
+                  <p>市町村、エリア、工賃水準、人員詳細で絞る。</p>
+                </article>
+                <article class="quickstart-card">
+                  <strong>2. 一覧で比べる</strong>
+                  <p>絞った結果をすぐ下の一覧で横比較する。</p>
+                </article>
+                <article class="quickstart-card">
+                  <strong>3. 詳細を開く</strong>
+                  <p>気になる事業所だけモーダルで深掘りする。</p>
+                </article>
               </div>
             </div>
           </section>
@@ -140,41 +156,22 @@
               <div>
                 <p class="section-kicker">優先順位</p>
                 <h2 id="strategyHeading">先に見るべき事業所</h2>
-                <p class="panel-note">利用者を増やせそう、工賃が平均より低めで利用率も低く人員が先行している、まず確認したい、の3つに分けた。</p>
+                <p class="panel-note">高工賃でまだ伸ばせる候補、低工賃で利用も弱く人員が重い候補、すでに高工賃かつ高利用率の候補、の3つに分けた。</p>
               </div>
               <p id="strategySummary" class="table-summary"></p>
             </div>
             <div class="strategy-grid">
               <article class="strategy-column">
-                <h3>利用者を増やせそう</h3>
+                <h3>高工賃・低利用率</h3>
                 <div id="growthList" class="strategy-list"></div>
               </article>
               <article class="strategy-column">
-                <h3>工賃低め・利用率低め・人員先行</h3>
+                <h3>低工賃・低利用率・人員過剰</h3>
                 <div id="fixList" class="strategy-list"></div>
               </article>
               <article class="strategy-column">
-                <h3>まず確認したい</h3>
-                <div id="reviewList" class="strategy-list"></div>
-              </article>
-            </div>
-          </section>
-
-          <section class="panel benchmark-panel" aria-labelledby="benchmarkHeading">
-            <div class="panel-head">
-              <div>
-                <p class="section-kicker">参考パターン</p>
-                <h2 id="benchmarkHeading">似た見方で横比較する</h2>
-              </div>
-            </div>
-            <div class="benchmark-grid">
-              <article class="benchmark-column">
-                <h3>工賃高め・人員少なめ</h3>
-                <div id="leaderboardList" class="benchmark-list"></div>
-              </article>
-              <article class="benchmark-column">
-                <h3>工賃低め・人員多め</h3>
-                <div id="watchlistList" class="benchmark-list"></div>
+                <h3>高工賃・高利用率</h3>
+                <div id="highHighList" class="strategy-list"></div>
               </article>
             </div>
           </section>
@@ -494,8 +491,8 @@
               <p>工賃が低めで、利用率や人員配置のバランスも弱い状態。作業量不足の可能性がある目印である。</p>
             </article>
             <article class="term-card">
-              <h3>工賃低め・利用率低め・人員先行</h3>
-              <p>工賃が平均より低め、利用率が低く、人員が先行している状態。仕事量や集客導線を早めに点検したい事業所である。</p>
+              <h3>低工賃・低利用率・人員過剰</h3>
+              <p>工賃が低めで、利用率も低く、人員が重い状態。仕事量、営業導線、配置の見直しを早めにかけたい事業所である。</p>
             </article>
           </div>
         </div>
