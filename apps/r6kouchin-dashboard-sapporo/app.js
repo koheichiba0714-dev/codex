@@ -1283,6 +1283,11 @@ function openRecordDetailByOfficeNo(officeNo) {
 }
 
 function applyStatsAction(action) {
+  if (action === "history") {
+    document.getElementById("historyHeading")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    return;
+  }
+
   const nextFilters = cloneFilters(state.filters);
   if (action === "work-shortage") {
     nextFilters.workShortageRisk = "likely";
@@ -1965,10 +1970,21 @@ function renderStats(records) {
   const staffingCriticalHint = matched.length
     ? `人員詳細ありの ${formatPercent(staffingCritical / matched.length)} / 10:1に近く欠員に注意`
     : "人員詳細ありの事業所で判定";
+  const historicalTrend = getHistoricalTrendSummary();
 
   const cards = [
     { label: "表示件数", value: formatCount(records.length), hint: `全 ${formatCount(state.records.length)} 件中` },
     { label: "中央の工賃", value: formatMaybeYen(wageStats.median), hint: "半分の事業所がこの金額以上 / 以下" },
+    historicalTrend
+      ? {
+          label: "全道平均の3年推移",
+          value: formatSignedPercent(historicalTrend.totalGrowthRate),
+          hint: `${historicalTrend.baseline.fiscal_year_label}→${historicalTrend.latest.fiscal_year_label} / ${formatOfficialYen(historicalTrend.baseline.average_wage_monthly_yen)}→${formatOfficialYen(historicalTrend.latest.average_wage_monthly_yen)}。令和5から算定方法変更あり`,
+          action: "history",
+          tone: "history",
+          cta: "3年推移を見る",
+        }
+      : null,
     { label: "中央の利用率", value: formatPercent(utilizationStats.median), hint: "定員に対する平均利用人数の真ん中" },
     { label: "1.5万円ライン超え", value: formatPercent(targetRate), hint: `月額 ${formatCount(REFERENCE_WAGE_LINE_YEN)} 円以上。報酬区分4以上の入口` },
     { label: "次の区分が近い", value: formatCount(nearRankUp), hint: "あと3,000円以内で報酬区分アップ" },
@@ -1994,7 +2010,7 @@ function renderStats(records) {
       tone: "good",
       cta: "一覧を見る",
     },
-  ];
+  ].filter(Boolean);
 
   document.getElementById("statsGrid").innerHTML = cards
     .map(
@@ -2008,6 +2024,27 @@ function renderStats(records) {
       `
     )
     .join("");
+}
+
+function getHistoricalTrendSummary(dashboard = state.dashboard) {
+  const history = dashboard?.analytics?.historical_b_type_overview ?? HOKKAIDO_B_TYPE_HISTORY;
+  const years = Array.isArray(history?.years) ? history.years : [];
+  if (!years.length) return null;
+
+  const sortedYears = [...years].sort((left, right) =>
+    String(left.fiscal_year_label ?? "").localeCompare(String(right.fiscal_year_label ?? ""), "ja")
+  );
+  const latest = sortedYears[sortedYears.length - 1];
+  const baseline = sortedYears[0];
+  const totalGrowthRate =
+    isNumber(latest?.average_wage_monthly_yen) &&
+    isNumber(baseline?.average_wage_monthly_yen) &&
+    baseline.average_wage_monthly_yen > 0
+      ? latest.average_wage_monthly_yen / baseline.average_wage_monthly_yen - 1
+      : null;
+  if (totalGrowthRate == null) return null;
+
+  return { history, sortedYears, baseline, latest, totalGrowthRate };
 }
 
 function renderCharts(records) {
@@ -2876,6 +2913,11 @@ function formatRatio(value) {
 
 function formatPercent(value) {
   return isNumber(value) ? `${percentFormatter.format(value * 100)}%` : "-";
+}
+
+function formatSignedPercent(value) {
+  if (!isNumber(value)) return "-";
+  return `${value >= 0 ? "+" : ""}${percentFormatter.format(value * 100)}%`;
 }
 
 function formatMaybeYen(value) {
