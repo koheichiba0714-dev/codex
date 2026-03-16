@@ -1135,8 +1135,8 @@ function labelForSelect(value) {
   if (value === "high") return "高め";
   if (value === "low") return "低め";
   if (value === "none") return "通常";
-  if (value === "matched") return "人員詳細あり";
-  if (value === "unmatched") return "人員詳細なし";
+  if (value === "matched") return "公開データあり";
+  if (value === "unmatched") return "公開データなし";
   if (value === "true") return "あり";
   if (value === "false") return "なし";
   if (value === "unknown") return "不明";
@@ -1179,7 +1179,6 @@ function renderLoadingState() {
     "featureChart",
     "wageBandChart",
     "utilizationScatter",
-    "staffingScatter",
     "anomalyList",
     "detailContent",
     "detailDialogContent",
@@ -1189,7 +1188,7 @@ function renderLoadingState() {
       element.innerHTML = loadingCard;
     }
   });
-  document.getElementById("recordsTableBody").innerHTML = `<tr><td colspan="13">${loadingCard}</td></tr>`;
+  document.getElementById("recordsTableBody").innerHTML = `<tr><td colspan="12">${loadingCard}</td></tr>`;
 }
 
 function renderMeta(dashboard) {
@@ -1213,7 +1212,7 @@ function renderQuality(dashboard, records = state.records) {
     `<article class="note-card"><strong>表示対象</strong><p>工賃データは大阪府全域 ${formatCount(
       records.length
     )} 件を表示している。大阪市以外は参考比較で見られる。</p></article>`,
-    `<article class="note-card"><strong>人員詳細あり とは</strong><p>福祉医療機構の公開情報と結び付いた事業所で、大阪市レコード ${formatCount(
+    `<article class="note-card"><strong>公開データあり とは</strong><p>福祉医療機構の公開情報と結び付いた事業所で、大阪市レコード ${formatCount(
       wamMatchSummary.matched_record_count ?? 0
     )} / ${formatCount(wamMatchSummary.workbook_osaka_record_count ?? 0)} 件が対象である。</p></article>`,
     `<article class="note-card"><strong>差が大きい事業所の見つけ方</strong><p>表示中データの真ん中あたりの工賃は ${formatMaybeYen(
@@ -1259,7 +1258,7 @@ function renderActiveFilterSummary(records) {
   if (state.filters.newOnly) filters.push("新設のみ");
   if (state.filters.homeUseOnly) filters.push("在宅利用あり");
   if (state.filters.noufukuOnly) filters.push("農福連携あり");
-  if (state.filters.wamOnly) filters.push("人員詳細ありのみ");
+  if (state.filters.wamOnly) filters.push("公開データありのみ");
 
   document.getElementById("activeFilterSummary").textContent = filters.length
     ? `${formatCount(records.length)} 件を表示中。`
@@ -1286,19 +1285,10 @@ function renderInsights(records) {
   const matched = matchedRecords(records);
   const wages = numericValues(records, "average_wage_yen");
   const wageStats = computeLocalStats(wages);
-  const sortedWages = [...wages].sort((a, b) => a - b);
 
   // 報酬算定区分の分布
   const tierDist = wageTierDistribution(records);
   const modeTier = tierDist.reduce((best, item) => (item.value > (best?.value ?? 0) ? item : best), null);
-  const nearRankUp = records.filter((r) => {
-    const info = getWageTierUpInfo(r);
-    return info && info.next && info.gapYen > 0 && info.gapYen <= 3000;
-  });
-  const totalRevenueImpact = nearRankUp.reduce((sum, r) => sum + (getWageTierUpInfo(r)?.revenueImpact ?? 0), 0);
-
-  // 大阪府目標
-  const targetRate = osakaTargetRate(records);
 
   // 送迎効果
   const transportTrue = meanFor(matched.filter((r) => r.wam_transport_available === true), "average_wage_yen");
@@ -1322,13 +1312,7 @@ function renderInsights(records) {
     {
       title: "📊 報酬算定区分の分布",
       body: modeTier
-        ? `最多は ${modeTier.label}（${formatCount(modeTier.value)}件）。ランクアップまで3,000円以内の事業所が ${formatCount(nearRankUp.length)} 件あり、全体の潜在増収は月 ${formatMaybeYen(totalRevenueImpact)} と試算される。`
-        : "工賃データが不足しており分析できない。",
-    },
-    {
-      title: "🎯 大阪府工賃向上目標",
-      body: targetRate != null
-        ? `月額 ${formatCount(OSAKA_WAGE_TARGET_YEN)} 円以上の事業所は ${formatPercent(targetRate)}。中央値は ${formatMaybeYen(wageStats.median)} で${wageStats.median && wageStats.median >= OSAKA_WAGE_TARGET_YEN ? "目標を上回っている" : "まだ目標に届いていない"}。`
+        ? `最多は ${modeTier.label}（${formatCount(modeTier.value)}件）。中央値は ${formatMaybeYen(wageStats.median)} で、表示中の工賃水準の中心を把握しやすい。`
         : "工賃データなし。",
     },
     {
@@ -1340,8 +1324,8 @@ function renderInsights(records) {
     {
       title: "👥 人員配置基準（R6新基準対応）",
       body: matched.length
-        ? `6:1達成（最高報酬）: ${formatCount(tier6Count)}件、7.5:1達成: ${formatCount(tier75Count)}件。${tier6Count === 0 ? "6:1に到達している事業所がまだない。人員増強で報酬単価を引き上げる戦略を検討したい。" : ""}`
-        : "人員詳細ありの事業所がない。",
+        ? `手厚い配置: ${formatCount(tier6Count)}件、標準配置: ${formatCount(tier75Count)}件。${tier6Count === 0 ? "手厚い配置まで到達している事業所はまだない。" : ""}`
+        : "職員データが確認できる事業所がない。",
     },
     {
       title: "🏆 高工賃の好事例（作業内容）",
@@ -1450,12 +1434,9 @@ function renderStats(records) {
   const wageStats = computeLocalStats(wages);
   const sortedWages = [...wages].sort((a, b) => a - b);
   const wageStdDev = computeStdDev(wages);
-  const gini = computeGini(wages);
   const p10 = percentile(sortedWages, 0.1);
   const p25 = percentile(sortedWages, 0.25);
   const p75 = percentile(sortedWages, 0.75);
-  const welfareStaffFte = meanFor(matched, "wam_welfare_staff_fte_total");
-  const keyStaffPerCapacity = meanFor(matched, "wam_key_staff_fte_per_capacity");
   const homeUseActiveCount = records.filter((record) => record.home_use_active === true).length;
   const homeUseActiveRate = ratioOf(records, (record) => record.home_use_active === true);
   const homeUseRateAmongActive = meanFor(
@@ -1463,32 +1444,11 @@ function renderStats(records) {
     "home_use_user_ratio_decimal"
   );
   const transportRate = ratioOf(matched, (record) => record.wam_transport_available === true);
-  const managerMultiRate = ratioOf(matched, (record) => record.wam_manager_multi_post === true);
   const heavyLowCount = matched.filter((record) => record.wam_staffing_efficiency_quadrant === "低工賃 × 厚い人員").length;
   const workShortageCount = records.filter((record) => hasWorkShortageRisk(record)).length;
 
-  // 新指標: 報酬算定区分
   const tierDist = wageTierDistribution(records);
   const modeTier = tierDist.reduce((best, item) => (item.value > (best?.value ?? 0) ? item : best), null);
-  const nearRankUp = records.filter((r) => {
-    const info = getWageTierUpInfo(r);
-    return info && info.next && info.gapYen > 0 && info.gapYen <= 3000;
-  }).length;
-  const targetRate = osakaTargetRate(records);
-
-  // 人員配置基準（R6年度 3段階）
-  const staffingCritical = matched.filter((r) => {
-    const c = getStaffingComplianceLevel(r);
-    return c && (c.level === "critical" || c.level === "tier_10_1");
-  }).length;
-  const staffing6to1 = matched.filter((r) => {
-    const c = getStaffingComplianceLevel(r);
-    return c && c.level === "tier_6_1";
-  }).length;
-
-  // 利用者あたり職員
-  const perUserValues = matched.map((r) => staffPerActualUser(r)).filter(isNumber);
-  const avgPerUser = perUserValues.length ? perUserValues.reduce((s, v) => s + v, 0) / perUserValues.length : null;
 
   const cards = [
     { label: "表示件数", value: formatCount(records.length), hint: `全 ${formatCount(state.records.length)} 件中` },
@@ -1496,17 +1456,7 @@ function renderStats(records) {
     { label: "中央値", value: formatMaybeYen(wageStats.median), hint: `P25: ${formatMaybeYen(p25)} / P75: ${formatMaybeYen(p75)}` },
     { label: "上位10%の目安", value: formatMaybeYen(wageStats.p90), hint: `下位10%: ${formatMaybeYen(p10)}` },
     { label: "最多の報酬算定区分", value: modeTier ? `${modeTier.label}（${formatCount(modeTier.value)}件）` : "-", hint: "令和6年度の9区分で最も多い区分" },
-    { label: "ランクアップ接近", value: formatCount(nearRankUp), hint: "あと3,000円以内で次の区分に上がれる" },
-    { label: "大阪府目標達成率", value: formatPercent(targetRate), hint: `月額 ${formatCount(OSAKA_WAGE_TARGET_YEN)} 円以上の事業所` },
-    { label: "工賃の格差（ジニ係数）", value: isNumber(gini) ? ratioFormatter.format(gini) : "-", hint: "0に近いほど均等、1に近いほど格差大" },
-    { label: "人員詳細あり", value: formatCount(matched.length), hint: "WAM公開情報と紐づいた事業所" },
-    { label: "平均職員数（常勤換算）", value: formatFte(welfareStaffFte), hint: "人員詳細ありの事業所のみ" },
-    { label: "利用者1人あたり職員", value: isNumber(avgPerUser) ? `${ratioFormatter.format(avgPerUser)} 人` : "-", hint: "実利用者数ベース（定員ではない）" },
-    { label: "人員基準ギリギリ", value: formatCount(staffingCritical), hint: "10:1最低基準がギリギリ or 未達" },
-    { label: "6:1達成（R6新設）", value: formatCount(staffing6to1), hint: `人員詳細ありの ${formatPercent(matched.length ? staffing6to1 / matched.length : null)}` },
-    { label: "支援職員 / 定員", value: formatPercent(keyStaffPerCapacity), hint: "主な支援職員の人数を定員で割った目安" },
     { label: "送迎実施率", value: formatPercent(transportRate), hint: "一致レコードのみ" },
-    { label: "管理者兼務率", value: formatPercent(managerMultiRate), hint: "一致レコードのみ" },
     { label: "在宅利用あり", value: formatCount(homeUseActiveCount), hint: `表示中の ${formatPercent(homeUseActiveRate)}` },
     { label: "在宅利用ありの平均在宅率", value: formatPercent(homeUseRateAmongActive), hint: "在宅利用ありの事業所のみ" },
     { label: "低工賃・人員過剰", value: formatCount(heavyLowCount), hint: "低工賃・低利用率・人員過剰の候補" },
@@ -1551,14 +1501,6 @@ function renderCharts(records) {
     xKey: "daily_user_capacity_ratio",
     yKey: "average_wage_yen",
     xLabel: "利用率",
-    yLabel: "平均工賃",
-    yFormatter: (value) => formatMaybeYen(value),
-    xFormatter: (value) => formatPercent(value),
-  });
-  renderScatterChart("staffingScatter", matchedRecords(records), {
-    xKey: "wam_key_staff_fte_per_capacity",
-    yKey: "average_wage_yen",
-    xLabel: "支援職員 / 定員",
     yLabel: "平均工賃",
     yFormatter: (value) => formatMaybeYen(value),
     xFormatter: (value) => formatPercent(value),
@@ -1677,9 +1619,8 @@ function renderAnomalies(records) {
             ${record.wam_staffing_outlier_flag ? `<span class="metric-chip">${escapeHtml(`人員配置 ${staffingLevelLabel(record.wam_staffing_outlier_flag)}`)}</span>` : ""}
             ${(record.daily_user_capacity_ratio ?? 0) > 1.5 ? `<span class="metric-chip" style="background:rgba(220,38,38,0.1);color:#dc2626">利用率過大 ${formatPercent(record.daily_user_capacity_ratio)}</span>` : ""}
             <span class="metric-chip">${escapeHtml(`工賃 ${formatWageText(record.average_wage_yen)}`)}</span>
-            <span class="metric-chip">${escapeHtml(`支援職員 / 定員 ${formatPercent(record.wam_key_staff_fte_per_capacity)}`)}</span>
           </div>
-          <p>平均との差 ${escapeHtml(formatRatio(record.wage_ratio_to_overall_mean))} / 支援職員 / 定員 ${escapeHtml(formatPercent(record.wam_key_staff_fte_per_capacity))}</p>
+          <p>平均との差 ${escapeHtml(formatRatio(record.wage_ratio_to_overall_mean))} / 在宅率 ${escapeHtml(formatPercent(record.home_use_user_ratio_decimal))}</p>
           <p>${escapeHtml(labelForSelect(record.wam_staffing_efficiency_quadrant ?? "人員配置の分類なし"))} / ${escapeHtml(record.wam_primary_activity_type ?? "活動不明")}</p>
         </button>
       `
@@ -1730,8 +1671,7 @@ function renderDetail(record) {
             <h3>${escapeHtml(record.office_name ?? "-")}</h3>
             <p class="detail-subtitle">${corporationLinkButton(record.corporation_name, "entity-link-button detail-entity-link")} / ${escapeHtml(record.corporation_type_label ?? "-")}</p>
           </div>
-          <div class="selected-office-status">
-            ${matchBadge(record.wam_match_status, record.wam_match_confidence)}
+        <div class="selected-office-status">
             ${record.wage_outlier_flag ? outlierBadge(record.wage_outlier_flag, record.wage_outlier_severity) : ""}
           </div>
         </div>
@@ -1739,7 +1679,6 @@ function renderDetail(record) {
           <span class="metric-chip">${escapeHtml(`平均工賃 ${formatWageText(record.average_wage_yen)}`)}</span>
           <span class="metric-chip">${escapeHtml(`利用率 ${formatPercent(record.daily_user_capacity_ratio)}`)}</span>
           <span class="metric-chip">${escapeHtml(`在宅率 ${formatPercent(record.home_use_user_ratio_decimal)}`)}</span>
-          <span class="metric-chip">${escapeHtml(`支援職員 / 定員 ${formatPercent(record.wam_key_staff_fte_per_capacity)}`)}</span>
         </div>
         <p class="selected-office-note">${escapeHtml(actionNotes[0] ?? "詳しい内訳は詳細を開いて確認できる。")}</p>
         <div class="selected-office-actions">
@@ -1757,7 +1696,6 @@ function renderDetail(record) {
   const tierInfo = getWageTierUpInfo(record);
   const staffComp = getStaffingComplianceLevel(record);
   const peer = computePeerBenchmark(record, comparisonContext.records);
-  const perUser = staffPerActualUser(record);
   const missedAddons = checkMissedAddons(record);
   const revPerPoint = revenuePerUtilizationPoint(record);
   const sortedWages = numericValues(comparisonContext.records, "average_wage_yen").sort((a, b) => a - b);
@@ -1781,7 +1719,7 @@ function renderDetail(record) {
       ${detailKpi(
         "報酬算定区分",
         tierInfo?.current ? `${tierInfo.current.label}（${formatCount(tierInfo.current.unitYen)}円/日）` : "-",
-        tierInfo?.next ? `次の${tierInfo.next.label}まで あと ${formatCount(tierInfo.gapYen)} 円 → 月 ${formatMaybeYen(tierInfo.revenueImpact)} 増収` : "最上位区分"
+        tierInfo?.current ? `現在の報酬単価 ${formatCount(tierInfo.current.unitYen)}円/日` : "データなし"
       )}
       ${detailKpi("利用率", formatPercent(record.daily_user_capacity_ratio), `定員 ${formatNullable(record.capacity)} 名 / 平均利用 ${formatNumber(record.average_daily_users)} 名`)}
       ${detailKpi(
@@ -1789,12 +1727,6 @@ function renderDetail(record) {
         staffComp ? staffComp.label : record.wam_match_status === "matched" ? "-" : "詳細なし",
         staffComp ? `${staffComp.qualifiedTier} / 職員FTE ${formatFte(staffComp.staffFte)}` : ""
       )}
-      ${detailKpi(
-        "利用者1人あたり職員",
-        isNumber(perUser) ? `${ratioFormatter.format(perUser)} 人` : "-",
-        record.wam_match_status === "matched" ? `支援職員 / 定員 ${formatPercent(record.wam_key_staff_fte_per_capacity)}` : "人員詳細なし"
-      )}
-      ${detailKpi("公開情報の月額工賃", formatMaybeYen(record.wam_average_wage_monthly_yen), `Excelとの差 ${formatSignedYen(record.wam_average_wage_gap_yen)}`)}
     </div>
     <div class="detail-grid">
       <article class="detail-card detail-card-wide detail-comparison-card">
@@ -1804,11 +1736,6 @@ function renderDetail(record) {
             <p class="detail-card-note">比較対象: ${escapeHtml(comparisonContext.label)}</p>
           </div>
           <p class="detail-card-note">${escapeHtml(comparisonContext.note)}</p>
-        </div>
-        <div class="detail-comparison-legend" aria-hidden="true">
-          <span><i class="detail-legend-line is-mean"></i>平均</span>
-          <span><i class="detail-legend-line is-median"></i>中央値</span>
-          <span><i class="detail-legend-dot"></i>この事業所</span>
         </div>
         <div class="detail-comparison-list">
           ${renderDetailComparisonRows(record, comparisonContext)}
@@ -1827,8 +1754,7 @@ function renderDetail(record) {
       <article class="detail-card">
         <h3>経営者向けシミュレーション</h3>
         <ul class="detail-list">
-          ${tierInfo?.next ? `<li>ランクアップに必要な工賃改善: あと ${formatCount(tierInfo.gapYen)} 円</li>` : "<li>最上位の報酬算定区分</li>"}
-          ${tierInfo?.revenueImpact ? `<li>ランクアップ時の増収: 月 ${formatMaybeYen(tierInfo.revenueImpact)}</li>` : ""}
+          ${tierInfo?.current ? `<li>現在の報酬算定区分: ${escapeHtml(tierInfo.current.label)}（${formatCount(tierInfo.current.unitYen)}円/日）</li>` : "<li>報酬算定区分のデータなし</li>"}
           ${revPerPoint ? `<li>利用率1%改善: 月 ${formatMaybeYen(revPerPoint)} の増収</li>` : ""}
           ${missedAddons.length ? missedAddons.map((m) => `<li>💡 ${escapeHtml(m.name)}: ${escapeHtml(m.hint)}</li>`).join("") : "<li>主要加算の取り漏れは確認されない</li>"}
         </ul>
@@ -1836,12 +1762,10 @@ function renderDetail(record) {
       <article class="detail-card">
         <h3>運営体制</h3>
         <ul class="detail-list">
-          <li>人員詳細: ${escapeHtml(record.wam_match_status === "matched" ? `あり / ${matchConfidenceLabel(record.wam_match_confidence)}` : "なし")}</li>
           <li>送迎: ${escapeHtml(formatBool(record.wam_transport_available))}</li>
           <li>食事加算: ${escapeHtml(formatBool(record.wam_meal_support_addon))}</li>
           <li>管理者兼務: ${escapeHtml(formatBool(record.wam_manager_multi_post))}</li>
           <li>主活動: ${escapeHtml(record.wam_primary_activity_type ?? "-")} ${record.wam_primary_activity_detail ? `（${escapeHtml(record.wam_primary_activity_detail)}）` : ""}</li>
-          <li>サービス管理責任者（常勤換算）: ${escapeHtml(formatFte(record.wam_service_manager_fte))}</li>
         </ul>
       </article>
       <article class="detail-card">
@@ -1948,7 +1872,7 @@ function renderCorporationDialog(corporationName) {
         <em>大阪市の運営事業所</em>
       </article>
       <article class="corporation-summary-card">
-        <span>人員詳細あり</span>
+        <span>公開データあり</span>
         <strong>${formatCount(matchedCount)}</strong>
         <em>WAM と突合済み</em>
       </article>
@@ -1986,7 +1910,6 @@ function renderCorporationDialog(corporationName) {
                   <span class="metric-chip">${escapeHtml(`平均工賃 ${formatWageText(record.average_wage_yen)}`)}</span>
                   <span class="metric-chip">${escapeHtml(`利用率 ${formatPercent(record.daily_user_capacity_ratio)}`)}</span>
                   <span class="metric-chip">${escapeHtml(`在宅率 ${formatPercent(record.home_use_user_ratio_decimal)}`)}</span>
-                  <span class="metric-chip">${escapeHtml(`支援職員 / 定員 ${formatPercent(record.wam_key_staff_fte_per_capacity)}`)}</span>
                   ${attentionBadges(record)}
                 </div>
                 <p class="corporation-office-note">${escapeHtml(record.wam_primary_activity_type ?? "主活動の記載なし")} / ${escapeHtml(record.remarks ?? "備考なし")}</p>
@@ -2032,7 +1955,6 @@ function renderTable(records) {
           <td class="numeric">${formatPercent(record.daily_user_capacity_ratio)}</td>
           <td class="numeric">${formatPercent(record.home_use_user_ratio_decimal)}</td>
           <td>${matchBadge(record.wam_match_status, record.wam_match_confidence)}</td>
-          <td class="numeric">${formatPercent(record.wam_key_staff_fte_per_capacity)}</td>
           <td>${escapeHtml(record.wam_primary_activity_type ?? "-")}</td>
           <td><div class="attention-cell">${attentionBadges(record)}</div></td>
           <td><button class="table-link" data-select-office="${escapeHtml(record.office_no)}" type="button">詳細</button></td>
@@ -2058,7 +1980,6 @@ function renderTable(records) {
               <span class="metric-chip">${escapeHtml(`工賃 ${formatWageText(record.average_wage_yen)}`)}</span>
               <span class="metric-chip">${escapeHtml(`利用率 ${formatPercent(record.daily_user_capacity_ratio)}`)}</span>
               <span class="metric-chip">${escapeHtml(`在宅率 ${formatPercent(record.home_use_user_ratio_decimal)}`)}</span>
-              <span class="metric-chip">${escapeHtml(`支援職員 / 定員 ${formatPercent(record.wam_key_staff_fte_per_capacity)}`)}</span>
             </div>
             <div class="record-card-status">
               ${matchBadge(record.wam_match_status, record.wam_match_confidence)}
@@ -2224,8 +2145,8 @@ function wamCoverageBreakdown(records) {
   const matched = records.filter((record) => record.wam_match_status === "matched").length;
   const unmatched = records.length - matched;
   return [
-    { label: "人員詳細あり", value: matched },
-    { label: "人員詳細なし", value: unmatched },
+    { label: "公開データあり", value: matched },
+    { label: "公開データなし", value: unmatched },
   ];
 }
 
@@ -2307,7 +2228,7 @@ function highHighScore(record) {
 function buildGrowthReason(record) {
   return `市町村平均との差 ${formatRatio(record.wage_ratio_to_municipality_mean)} / 利用率 ${formatPercent(
     record.daily_user_capacity_ratio
-  )} / 支援職員 / 定員 ${formatPercent(record.wam_key_staff_fte_per_capacity)}`;
+  )} / 在宅率 ${formatPercent(record.home_use_user_ratio_decimal)}`;
 }
 
 function buildFixReason(record) {
@@ -2329,9 +2250,7 @@ function buildActionNotes(record) {
   // 1. 報酬算定区分とランクアップ
   const tierInfo = getWageTierUpInfo(record);
   if (tierInfo) {
-    if (tierInfo.next && tierInfo.gapYen > 0) {
-      notes.push(`【報酬算定】現在 ${tierInfo.current.label}（単価 ${formatCount(tierInfo.current.unitYen)} 円/日）。次の${tierInfo.next.label}まであと ${formatCount(tierInfo.gapYen)} 円。ランクアップで月 ${formatMaybeYen(tierInfo.revenueImpact)} の増収見込み。`);
-    } else if (tierInfo.current) {
+    if (tierInfo.current) {
       notes.push(`【報酬算定】${tierInfo.current.label}（単価 ${formatCount(tierInfo.current.unitYen)} 円/日）。${tierInfo.current.tierNo >= 8 ? "上位区分を維持できている。工賃水準を落とさないよう作業受注の安定化が重要。" : ""}`);
     }
   }
@@ -2344,37 +2263,29 @@ function buildActionNotes(record) {
     notes.push("【人員配置】公開情報と紐づいていないため人員配置基準の評価ができない。");
   }
 
-  // 3. 大阪府目標
-  if (isNumber(record.average_wage_yen)) {
-    if (record.average_wage_yen < OSAKA_WAGE_TARGET_YEN) {
-      const gap = OSAKA_WAGE_TARGET_YEN - record.average_wage_yen;
-      notes.push(`【工賃向上計画】大阪府目標（月額 ${formatCount(OSAKA_WAGE_TARGET_YEN)} 円）未達。あと ${formatCount(Math.round(gap))} 円の向上が必要。工賃向上計画の見直しを推奨。`);
-    }
-  }
-
-  // 4. 加算取り漏れ
+  // 3. 加算取り漏れ
   const missed = checkMissedAddons(record);
   if (missed.length > 0) {
     notes.push(`【加算の検討】${missed.map((m) => m.name).join("、")}の導入余地あり。${missed[0].hint}`);
   }
 
-  // 5. 利用率
+  // 4. 利用率
   if (isNumber(record.daily_user_capacity_ratio) && record.daily_user_capacity_ratio < 0.6) {
     const revPerPoint = revenuePerUtilizationPoint(record);
     notes.push(`【利用率】${formatPercent(record.daily_user_capacity_ratio)} と低水準。${revPerPoint ? `利用率10%改善で 月 ${formatMaybeYen(revPerPoint * 10)} の増収が見込める。体験利用の導線強化と相談支援事業所への営業強化を検討。` : "体験利用・紹介元の強化を検討したい。"}`);
   }
 
-  // 6. 仕事不足リスク
+  // 5. 仕事不足リスク
   if (hasWorkShortageRisk(record)) {
     notes.push("【仕事不足】工賃と利用率の両方が弱め。企業営業・新規作業種目の開拓・施設外就労の検討を。");
   }
 
-  // 7. 高工賃の好事例
+  // 6. 高工賃の好事例
   if (record.wage_outlier_flag === "high") {
     notes.push("【好事例】高工賃事業所。主活動と取引構造を他事業所への横展開候補として注目。作業内容と品質管理体制の共有を推奨。");
   }
 
-  // 8. 新設
+  // 7. 新設
   if (record.is_new_office) {
     notes.push("【新設】立ち上がり期のため単月値ではなく定員充足の推移を追う。3か月目以降の利用率と工賃のトレンドが重要。");
   }
@@ -2394,8 +2305,8 @@ function getDetailComparisonContext(record) {
       records: state.filteredRecords,
       label: usesAllRecords ? `大阪府全体 ${formatCount(filteredCount)}件` : `現在の絞り込み結果 ${formatCount(filteredCount)}件`,
       note: usesAllRecords
-        ? "平均との差・中央値差は大阪府全体との比較で表示している。"
-        : "平均との差・中央値差は現在の絞り込み結果を母集団にしている。絞り込みを変えると比較値も変わる。",
+        ? "平均との差・中央値差と比較率は大阪府全体との比較で表示している。"
+        : "平均との差・中央値差と比較率は現在の絞り込み結果を母集団にしている。絞り込みを変えると比較値も変わる。",
     };
   }
 
@@ -2448,46 +2359,12 @@ function getDetailComparisonMetricConfigs() {
       formatValue: formatPercent,
       formatDiff: formatSignedPercentPoint,
     },
-    {
-      key: "wam_key_staff_fte_per_capacity",
-      label: "支援職員 / 定員",
-      description: "定員1人あたりの主要支援職員",
-      emptyText: "人員詳細なし",
-      formatValue: formatPercent,
-      formatDiff: formatSignedPercentPoint,
-    },
-    {
-      key: "wam_welfare_staff_fte_total",
-      label: "福祉職員（常勤換算）",
-      description: "就労支援員・職業指導員・生活支援員などの合計",
-      emptyText: "人員詳細なし",
-      formatValue: formatFte,
-      formatDiff: (value) => formatSignedDecimalUnit(value, "人分"),
-    },
-    {
-      key: "wam_service_manager_fte",
-      label: "サービス管理責任者（常勤換算）",
-      description: "公開情報にあるサービス管理責任者の人数",
-      emptyText: "人員詳細なし",
-      formatValue: formatFte,
-      formatDiff: (value) => formatSignedDecimalUnit(value, "人分"),
-    },
-    {
-      key: "wam_average_wage_monthly_yen",
-      label: "公開情報の月額工賃",
-      description: "WAM公開情報に掲載された月額工賃",
-      emptyText: "公開情報なし",
-      formatValue: formatMaybeYen,
-      formatDiff: formatSignedYen,
-    },
   ];
 }
 
-function comparisonTrackPosition(value, min, max) {
-  if (!isNumber(value) || !isNumber(min) || !isNumber(max)) return null;
-  if (max <= min) return 50;
-  const ratio = ((value - min) / (max - min)) * 100;
-  return Math.max(0, Math.min(100, ratio));
+function compareToBaseline(value, baseline) {
+  if (!isNumber(value) || !isNumber(baseline) || baseline === 0) return null;
+  return value / baseline;
 }
 
 function deltaClassName(value) {
@@ -2505,17 +2382,8 @@ function renderDetailComparisonRows(record, comparisonContext) {
       const currentValue = record[metric.key];
       const meanDiff = isNumber(currentValue) && isNumber(stats.mean) ? currentValue - stats.mean : null;
       const medianDiff = isNumber(currentValue) && isNumber(stats.median) ? currentValue - stats.median : null;
-      const trackMin = isNumber(stats.p10) ? stats.p10 : stats.min;
-      const trackMax = isNumber(stats.p90) ? stats.p90 : stats.max;
-      const currentPosition = comparisonTrackPosition(currentValue, trackMin, trackMax);
-      const meanPosition = comparisonTrackPosition(stats.mean, trackMin, trackMax);
-      const medianPosition = comparisonTrackPosition(stats.median, trackMin, trackMax);
-      const hasTrack =
-        isNumber(currentPosition) &&
-        isNumber(meanPosition) &&
-        isNumber(medianPosition) &&
-        isNumber(trackMin) &&
-        isNumber(trackMax);
+      const meanRatio = compareToBaseline(currentValue, stats.mean);
+      const medianRatio = compareToBaseline(currentValue, stats.median);
 
       return `
         <div class="detail-comparison-row">
@@ -2533,25 +2401,19 @@ function renderDetailComparisonRows(record, comparisonContext) {
             <small>平均 ${escapeHtml(metric.formatValue(stats.mean))}</small>
           </div>
           <div class="detail-comparison-cell">
+            <span class="detail-comparison-heading">平均比</span>
+            <strong class="detail-delta ${deltaClassName(isNumber(meanRatio) ? meanRatio - 1 : null)}">${escapeHtml(formatRelativeRatio(meanRatio))}</strong>
+            <small>${escapeHtml(describeRelativeRatio(meanRatio, "平均"))}</small>
+          </div>
+          <div class="detail-comparison-cell">
             <span class="detail-comparison-heading">中央値差</span>
             <strong class="detail-delta ${deltaClassName(medianDiff)}">${escapeHtml(metric.formatDiff(medianDiff))}</strong>
             <small>中央値 ${escapeHtml(metric.formatValue(stats.median))}</small>
           </div>
-          <div class="detail-comparison-cell detail-deviation-cell">
-            <span class="detail-comparison-heading">位置グラフ</span>
-            ${
-              hasTrack
-                ? `
-                  <div class="detail-deviation-track" aria-hidden="true">
-                    <span class="detail-deviation-band"></span>
-                    <span class="detail-deviation-marker is-mean" style="left:${meanPosition}%;"></span>
-                    <span class="detail-deviation-marker is-median" style="left:${medianPosition}%;"></span>
-                    <span class="detail-deviation-point" style="left:${currentPosition}%;"></span>
-                  </div>
-                  <small>左右端は比較対象の下位10%〜上位10%</small>
-                `
-                : `<small>${escapeHtml(metric.emptyText)}のため位置グラフを出せない。</small>`
-            }
+          <div class="detail-comparison-cell">
+            <span class="detail-comparison-heading">中央値比</span>
+            <strong class="detail-delta ${deltaClassName(isNumber(medianRatio) ? medianRatio - 1 : null)}">${escapeHtml(formatRelativeRatio(medianRatio))}</strong>
+            <small>${escapeHtml(describeRelativeRatio(medianRatio, "中央値"))}</small>
           </div>
         </div>
       `;
@@ -2622,8 +2484,6 @@ function downloadFilteredCsv() {
     ["home_use_user_ratio_pct", "在宅率"],
     ["wage_outlier_flag", "工賃水準"],
     ["wam_match_status", "人員詳細"],
-    ["wam_welfare_staff_fte_total", "福祉職員（常勤換算）"],
-    ["wam_key_staff_fte_per_capacity", "支援職員 / 定員"],
     ["wam_transport_available", "送迎"],
     ["wam_meal_support_addon", "食事加算"],
     ["wam_manager_multi_post", "管理者兼務"],
@@ -2703,8 +2563,8 @@ function staffingOutlierBadge(flag, severity) {
 }
 
 function matchBadge(status, confidence) {
-  if (status !== "matched") return `<span class="badge badge-unanswered">人員詳細なし</span>`;
-  return `<span class="badge badge-annotated">人員詳細あり${confidence ? ` / ${escapeHtml(matchConfidenceLabel(confidence))}` : ""}</span>`;
+  if (status !== "matched") return `<span class="badge badge-unanswered">公開データなし</span>`;
+  return `<span class="badge badge-annotated">公開データあり${confidence ? ` / ${escapeHtml(matchConfidenceLabel(confidence))}` : ""}</span>`;
 }
 
 function staffingLevelLabel(flag) {
@@ -2783,6 +2643,17 @@ function formatPercent(value) {
 function formatSignedPercentPoint(value) {
   if (!isNumber(value)) return "-";
   return `${value >= 0 ? "+" : ""}${percentFormatter.format(value * 100)}pt`;
+}
+
+function formatRelativeRatio(value) {
+  return isNumber(value) ? `${ratioFormatter.format(value)}倍` : "-";
+}
+
+function describeRelativeRatio(value, label) {
+  if (!isNumber(value)) return `${label}との比較なし`;
+  const gapPercent = (value - 1) * 100;
+  if (Math.abs(gapPercent) < 0.05) return `${label}とほぼ同水準`;
+  return `${label}を${percentFormatter.format(Math.abs(gapPercent))}% ${gapPercent > 0 ? "上回る" : "下回る"}`;
 }
 
 function formatMaybeYen(value) {

@@ -82,7 +82,7 @@
               <div class="preset-row" aria-label="クイック切り替え">
                 <button class="preset-chip" data-preset="all" type="button">全体</button>
                 <button class="preset-chip is-active" data-preset="osaka-city" type="button">大阪市</button>
-                <button class="preset-chip" data-preset="osaka-wam" type="button">人員詳細あり</button>
+                <button class="preset-chip" data-preset="osaka-wam" type="button">公開データあり</button>
                 <button class="preset-chip" data-preset="high-wage" type="button">工賃高め</button>
                 <button class="preset-chip" data-preset="high-wage-low-util" type="button">高工賃・低利用率</button>
                 <button class="preset-chip" data-preset="fix-priority" type="button">低工賃・低利用率・人員過剰</button>
@@ -137,7 +137,6 @@
             <div class="guide-preview">
               <div class="guide-pill-row" aria-label="よく使う言葉の要点">
                 <span class="guide-pill">常勤換算 = 常勤1人分に直した人数</span>
-                <span class="guide-pill">支援職員 / 定員 = 人員配置の厚さ</span>
                 <span class="guide-pill">利用率 = 定員に対する平均利用人数</span>
                 <span class="guide-pill">平均との差 = 1.00倍が平均</span>
               </div>
@@ -249,10 +248,6 @@
                   <h3>工賃 × 利用率</h3>
                   <div id="utilizationScatter" class="scatter-chart"></div>
                 </article>
-                <article class="chart-card">
-                  <h3>工賃 × 支援職員 / 定員</h3>
-                  <div id="staffingScatter" class="scatter-chart"></div>
-                </article>
               </div>
             </div>
             <details class="chart-group" open>
@@ -263,7 +258,7 @@
                   <div id="quadrantChart" class="bar-chart compact-chart"></div>
                 </article>
                 <article class="chart-card">
-                  <h3>人員詳細あり / なし</h3>
+                  <h3>公開データあり / なし</h3>
                   <div id="wamCoverageChart" class="bar-chart compact-chart"></div>
                 </article>
                 <article class="chart-card">
@@ -321,7 +316,6 @@
                     <th><button type="button" data-sort-key="daily_user_capacity_ratio">利用率</button></th>
                     <th><button type="button" data-sort-key="home_use_user_ratio_decimal">在宅率</button></th>
                     <th><button type="button" data-sort-key="wam_match_status">人員詳細</button></th>
-                    <th><button type="button" data-sort-key="wam_key_staff_fte_per_capacity">支援職員 / 定員</button></th>
                     <th><button type="button" data-sort-key="wam_primary_activity_type">主活動</button></th>
                     <th>注目</th>
                     <th>詳細</th>
@@ -463,7 +457,7 @@
             </label>
             <label class="toggle">
               <input id="wamOnlyCheckbox" type="checkbox" />
-              <span>人員詳細ありのみ</span>
+              <span>公開データありのみ</span>
             </label>
           </div>
         </div>
@@ -487,16 +481,12 @@
         <div class="dialog-body">
           <div class="term-grid">
             <article class="term-card">
-              <h3>人員詳細あり</h3>
+              <h3>公開データあり</h3>
               <p>福祉医療機構の公開情報と結び付いた状態で、送迎や職員数まで見比べられる。</p>
             </article>
             <article class="term-card">
               <h3>常勤換算</h3>
               <p>常勤1人を 1.0 人分として数えた人数。非常勤の合計も人分で見られる。</p>
-            </article>
-            <article class="term-card">
-              <h3>支援職員 / 定員</h3>
-              <p>主な支援職員の常勤換算人数を、定員で割った目安。人員配置の厚さを見る。</p>
             </article>
             <article class="term-card">
               <h3>利用率</h3>
