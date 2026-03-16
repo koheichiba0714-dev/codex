@@ -916,10 +916,16 @@ function bindCorporationDialog() {
   });
 }
 
-function normalizeCorporationName(value) {
+function normalizeSearchText(value) {
   return String(value ?? "")
+    .normalize("NFKC")
+    .toLowerCase()
     .replace(/[\s\u3000]+/g, " ")
     .trim();
+}
+
+function normalizeCorporationName(value) {
+  return normalizeSearchText(value);
 }
 
 function getHosRecords(records = state.records) {
@@ -1308,6 +1314,10 @@ function applyStatsAction(action) {
     document.getElementById("historyHeading")?.scrollIntoView({ behavior: "smooth", block: "start" });
     return;
   }
+  if (action === "hos-corporation") {
+    openCorporationDialog(HOS_CORPORATION_NAME);
+    return;
+  }
   if (action === "hos-detail") {
     openRecordDetailByOfficeNo(HOS_PRIMARY_OFFICE_NO);
     return;
@@ -1356,25 +1366,26 @@ function applyFilters() {
 
 function matchesFilters(record, filters) {
   if (filters.search) {
-    const haystack = [
-      record.office_no,
-      record.municipality,
-      getAreaLabel(record),
-      record.corporation_name,
-      record.office_name,
-      record.corporation_type_label,
-      record.remarks,
-      record.wam_primary_activity_type,
-      record.wam_primary_activity_detail,
-      record.wam_office_address_city,
-      record.wam_office_address_line,
-      record.wam_office_number,
-      composeAddress(record),
-    ]
-      .filter(Boolean)
-      .join(" ")
-      .toLowerCase();
-    if (!haystack.includes(filters.search.toLowerCase())) {
+    const haystack = normalizeSearchText(
+      [
+        record.office_no,
+        record.municipality,
+        getAreaLabel(record),
+        record.corporation_name,
+        record.office_name,
+        record.corporation_type_label,
+        record.remarks,
+        record.wam_primary_activity_type,
+        record.wam_primary_activity_detail,
+        record.wam_office_address_city,
+        record.wam_office_address_line,
+        record.wam_office_number,
+        composeAddress(record),
+      ]
+        .filter(Boolean)
+        .join(" ")
+    );
+    if (!haystack.includes(normalizeSearchText(filters.search))) {
       return false;
     }
   }
@@ -1627,31 +1638,10 @@ function rankOfficeByWage(targetOfficeNo, records) {
   return { rank: rank + 1, total: sorted.length };
 }
 
-function buildHosPeerCandidates(records, hosOffice) {
-  const hosCapacity = hosOffice.capacity ?? hosOffice.wam_office_capacity ?? 0;
-  const hosWage = hosOffice.average_wage_yen ?? 0;
-  return records
-    .filter(
-      (record) =>
-        String(record.office_no) !== String(hosOffice.office_no) &&
-        record.municipality === hosOffice.municipality &&
-        isNumber(record.average_wage_yen)
-    )
-    .sort((left, right) => {
-      const leftIsAbove = left.average_wage_yen >= hosWage ? 1 : 0;
-      const rightIsAbove = right.average_wage_yen >= hosWage ? 1 : 0;
-      if (leftIsAbove !== rightIsAbove) return rightIsAbove - leftIsAbove;
-
-      const leftCapacityGap = Math.abs((left.capacity ?? left.wam_office_capacity ?? 0) - hosCapacity);
-      const rightCapacityGap = Math.abs((right.capacity ?? right.wam_office_capacity ?? 0) - hosCapacity);
-      if (leftCapacityGap !== rightCapacityGap) return leftCapacityGap - rightCapacityGap;
-
-      const leftWageGap = Math.abs(left.average_wage_yen - hosWage);
-      const rightWageGap = Math.abs(right.average_wage_yen - hosWage);
-      if (leftWageGap !== rightWageGap) return leftWageGap - rightWageGap;
-
-      return (right.daily_user_capacity_ratio ?? -1) - (left.daily_user_capacity_ratio ?? -1);
-    })
+function buildHosAttentionCandidates(hosRecords) {
+  return hosRecords
+    .slice()
+    .sort((left, right) => fixScore(right) - fixScore(left))
     .slice(0, 4);
 }
 
@@ -1679,17 +1669,20 @@ function buildHosBenchmarkCandidates(records, hosOffice) {
     .slice(0, 4);
 }
 
-function buildHosPeerReason(record, hosOffice) {
-  const wageGap =
-    isNumber(record.average_wage_yen) && isNumber(hosOffice.average_wage_yen)
-      ? record.average_wage_yen - hosOffice.average_wage_yen
-      : null;
+function buildHosPeerReason(record) {
   const parts = [];
-  if (wageGap != null) {
-    parts.push(`HOS比 ${formatSignedYen(wageGap)}`);
+  const wageGapToOverall =
+    isNumber(record.average_wage_yen) && isNumber(state.dashboard?.analytics?.overall_wage_stats?.mean)
+      ? record.average_wage_yen - state.dashboard.analytics.overall_wage_stats.mean
+      : null;
+  if (wageGapToOverall != null) {
+    parts.push(`全道平均との差 ${formatSignedYen(wageGapToOverall)}`);
   }
-  if ((record.capacity ?? null) === (hosOffice.capacity ?? null)) {
-    parts.push("同じ定員");
+  if (isNumber(record.daily_user_capacity_ratio) && record.daily_user_capacity_ratio < 0.7) {
+    parts.push("利用率70%未満");
+  }
+  if (record.wam_match_status !== "matched") {
+    parts.push("人員詳細未取得");
   }
   parts.push(`利用率 ${formatPercent(record.daily_user_capacity_ratio)}`);
   return parts.join(" / ");
@@ -1757,65 +1750,79 @@ function renderHosManagement() {
   }
 
   const allRank = rankOfficeByWage(hosOffice.office_no, state.records);
-  const municipalityRecords = state.records.filter((record) => record.municipality === hosOffice.municipality);
-  const municipalityRank = rankOfficeByWage(hosOffice.office_no, municipalityRecords);
   const overallMean = meanFor(state.records, "average_wage_yen");
-  const municipalityMean = meanFor(municipalityRecords, "average_wage_yen");
+  const hosMean = meanFor(hosRecords, "average_wage_yen");
+  const hosMatchedCount = hosRecords.filter((record) => record.wam_match_status === "matched").length;
+  const hosHighHighCount = hosRecords.filter((record) => record.market_position_quadrant === "高工賃 × 高稼働").length;
+  const hosLowUtilCount = hosRecords.filter(
+    (record) => isNumber(record.daily_user_capacity_ratio) && record.daily_user_capacity_ratio < 0.7
+  ).length;
+  const municipalitySummary = [...new Set(hosRecords.map((record) => record.municipality).filter(Boolean))]
+    .map((municipality) => {
+      const count = hosRecords.filter((record) => record.municipality === municipality).length;
+      return `${municipality}${formatCount(count)}件`;
+    })
+    .join(" / ");
   const staffing = getStaffingComplianceLevel(hosOffice);
-  const peerCandidates = buildHosPeerCandidates(state.records, hosOffice);
+  const attentionCandidates = buildHosAttentionCandidates(hosRecords);
   const benchmarkCandidates = buildHosBenchmarkCandidates(state.records, hosOffice);
 
   summary.textContent = [
-    hosOffice.office_name ?? "HOS事業所",
-    municipalityRank ? `${hosOffice.municipality} ${formatCount(municipalityRank.rank)}位 / ${formatCount(municipalityRank.total)}件` : null,
-    allRank ? `北海道上位 ${formatPercent(allRank.rank / allRank.total)}` : null,
-    displayQuadrantLabel(hosOffice.market_position_quadrant),
+    `B型 ${formatCount(hosRecords.length)}事業所`,
+    municipalitySummary || null,
+    `高工賃・高利用率 ${formatCount(hosHighHighCount)}件`,
+    `人員詳細 ${formatCount(hosMatchedCount)}件`,
   ]
     .filter(Boolean)
     .join(" / ");
 
   const cards = [
     {
-      label: "HOS自社詳細",
-      value: hosOffice.office_name ?? "-",
-      hint: "自社の工賃・人員・比較先をすぐ開く",
-      action: "hos-detail",
+      label: "HOS全拠点一覧",
+      value: formatCount(hosRecords.length),
+      hint: "サイト掲載12拠点のうち、B型10拠点を収録。就労選択支援と相談支援は対象外。",
+      action: "hos-corporation",
       tone: "history",
-      cta: "詳細を見る",
+      cta: "一覧を見る",
     },
     {
-      label: "北海道での立ち位置",
-      value: allRank ? `上位 ${formatPercent(allRank.rank / allRank.total)}` : "-",
-      hint: allRank
-        ? `${formatCount(allRank.total)}件中 ${formatCount(allRank.rank)}位 / 平均工賃 ${formatMaybeYen(hosOffice.average_wage_yen)}`
-        : "全道順位を計算できない",
+      label: "HOS平均工賃",
+      value: formatMaybeYen(hosMean),
+      hint:
+        overallMean != null && hosMean != null
+          ? `全道平均との差 ${formatSignedYen(hosMean - overallMean)}`
+          : "平均工賃を計算できない",
     },
     {
-      label: `${hosOffice.municipality}での立ち位置`,
-      value: municipalityRank ? `${formatCount(municipalityRank.rank)}位 / ${formatCount(municipalityRank.total)}件` : "-",
-      hint: municipalityMean != null
-        ? `${hosOffice.municipality}平均より ${formatSignedYen(hosOffice.average_wage_yen - municipalityMean)}`
-        : "市内平均との差なし",
+      label: "高工賃・高利用率",
+      value: formatCount(hosHighHighCount),
+      hint: `${formatPercent(hosRecords.length ? hosHighHighCount / hosRecords.length : null)} / 横展開したい主力拠点`,
     },
     {
       label: "利用の埋まり方",
-      value: formatPercent(hosOffice.daily_user_capacity_ratio),
+      value: formatCount(hosLowUtilCount),
       hint:
-        isNumber(hosOffice.average_daily_users) && isNumber(hosOffice.capacity)
-          ? `定員 ${formatCount(hosOffice.capacity)} 名に対し平均 ${ratioFormatter.format(hosOffice.average_daily_users)} 人`
-          : "利用実績データなし",
+        hosLowUtilCount > 0
+          ? "利用率70%未満の拠点あり。先に確認したい。"
+          : "利用率70%未満の拠点なし",
     },
     {
-      label: "職員配置の強み",
-      value: staffing?.label ?? "人員詳細なし",
+      label: "人員詳細一致",
+      value: `${formatCount(hosMatchedCount)} / ${formatCount(hosRecords.length)}`,
+      hint:
+        hosMatchedCount < hosRecords.length
+          ? "函館拠点は現在のWAM詳細取得範囲外"
+          : "HOS拠点はすべて人員詳細まで見える",
+    },
+    {
+      label: "代表拠点の詳細",
+      value: hosOffice.office_name ?? "-",
       hint: staffing
-        ? `${staffing.qualifiedTier} / 定員に対する支援職員 ${formatPercent(hosOffice.wam_key_staff_fte_per_capacity)}`
-        : "WAMの人員詳細が未一致",
-    },
-    {
-      label: "全道平均との差",
-      value: overallMean != null ? formatSignedYen(hosOffice.average_wage_yen - overallMean) : "-",
-      hint: `${formatCount(hosRecords.length)} 事業所を収録 / ${hosOffice.wam_match_status === "matched" ? "WAM一致済み" : "WAM未一致"}`,
+        ? `${hosOffice.municipality} / ${staffing.label} / ${allRank ? `北海道上位 ${formatPercent(allRank.rank / allRank.total)}` : "順位計算不可"}`
+        : `${hosOffice.municipality} / まず詳細を確認したい代表拠点`,
+      action: "hos-detail",
+      tone: "history",
+      cta: "詳細を見る",
     },
   ];
 
@@ -1832,10 +1839,8 @@ function renderHosManagement() {
     )
     .join("");
 
-  renderHosWatchList("hosPeerList", peerCandidates, "まず比べる相手はまだ抽出できない", (record) =>
-    buildHosPeerReason(record, hosOffice)
-  );
-  renderHosWatchList("hosBenchmarkList", benchmarkCandidates, "札幌の好事例はまだ抽出できない", buildHosBenchmarkReason);
+  renderHosWatchList("hosPeerList", attentionCandidates, "先に確認したい HOS 拠点はまだ抽出できない", buildHosPeerReason);
+  renderHosWatchList("hosBenchmarkList", benchmarkCandidates, "札幌・小樽の好事例はまだ抽出できない", buildHosBenchmarkReason);
 }
 
 function renderHistoricalTrend(dashboard) {
