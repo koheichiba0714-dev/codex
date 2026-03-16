@@ -1753,13 +1753,14 @@ function renderDetail(record) {
 
   if (!dialogRoot) return;
 
+  const comparisonContext = getDetailComparisonContext(record);
   const tierInfo = getWageTierUpInfo(record);
   const staffComp = getStaffingComplianceLevel(record);
-  const peer = computePeerBenchmark(record, state.filteredRecords);
+  const peer = computePeerBenchmark(record, comparisonContext.records);
   const perUser = staffPerActualUser(record);
   const missedAddons = checkMissedAddons(record);
   const revPerPoint = revenuePerUtilizationPoint(record);
-  const sortedWages = numericValues(state.filteredRecords, "average_wage_yen").sort((a, b) => a - b);
+  const sortedWages = numericValues(comparisonContext.records, "average_wage_yen").sort((a, b) => a - b);
   const wagePercentile = computePercentileRank(record.average_wage_yen, sortedWages);
 
   dialogRoot.innerHTML = `
@@ -1796,8 +1797,25 @@ function renderDetail(record) {
       ${detailKpi("公開情報の月額工賃", formatMaybeYen(record.wam_average_wage_monthly_yen), `Excelとの差 ${formatSignedYen(record.wam_average_wage_gap_yen)}`)}
     </div>
     <div class="detail-grid">
+      <article class="detail-card detail-card-wide detail-comparison-card">
+        <div class="detail-comparison-head">
+          <div>
+            <h3>主要指標と平均との差・中央値差</h3>
+            <p class="detail-card-note">比較対象: ${escapeHtml(comparisonContext.label)}</p>
+          </div>
+          <p class="detail-card-note">${escapeHtml(comparisonContext.note)}</p>
+        </div>
+        <div class="detail-comparison-legend" aria-hidden="true">
+          <span><i class="detail-legend-line is-mean"></i>平均</span>
+          <span><i class="detail-legend-line is-median"></i>中央値</span>
+          <span><i class="detail-legend-dot"></i>この事業所</span>
+        </div>
+        <div class="detail-comparison-list">
+          ${renderDetailComparisonRows(record, comparisonContext)}
+        </div>
+      </article>
       <article class="detail-card">
-        <h3>📊 ピアベンチマーク</h3>
+        <h3>ピアベンチマーク</h3>
         <ul class="detail-list">
           ${peer.activity ? `<li>【${escapeHtml(peer.activity.type)}】${formatCount(peer.activity.count)}事業所中 ${formatCount(peer.activity.rank)}位（中央値 ${formatMaybeYen(peer.activity.median)}）</li>` : "<li>主活動のピアデータなし</li>"}
           ${peer.capacity ? `<li>【${escapeHtml(peer.capacity.band)}】${formatCount(peer.capacity.count)}事業所中 ${formatCount(peer.capacity.rank)}位（中央値 ${formatMaybeYen(peer.capacity.median)}）</li>` : "<li>定員帯のピアデータなし</li>"}
@@ -1807,7 +1825,7 @@ function renderDetail(record) {
         </ul>
       </article>
       <article class="detail-card">
-        <h3>💰 経営者向けシミュレーション</h3>
+        <h3>経営者向けシミュレーション</h3>
         <ul class="detail-list">
           ${tierInfo?.next ? `<li>ランクアップに必要な工賃改善: あと ${formatCount(tierInfo.gapYen)} 円</li>` : "<li>最上位の報酬算定区分</li>"}
           ${tierInfo?.revenueImpact ? `<li>ランクアップ時の増収: 月 ${formatMaybeYen(tierInfo.revenueImpact)}</li>` : ""}
@@ -1816,7 +1834,7 @@ function renderDetail(record) {
         </ul>
       </article>
       <article class="detail-card">
-        <h3>👥 運営体制</h3>
+        <h3>運営体制</h3>
         <ul class="detail-list">
           <li>人員詳細: ${escapeHtml(record.wam_match_status === "matched" ? `あり / ${matchConfidenceLabel(record.wam_match_confidence)}` : "なし")}</li>
           <li>送迎: ${escapeHtml(formatBool(record.wam_transport_available))}</li>
@@ -1827,13 +1845,13 @@ function renderDetail(record) {
         </ul>
       </article>
       <article class="detail-card">
-        <h3>⚠️ 専門家の注視ポイント</h3>
+        <h3>注視ポイント</h3>
         <ul class="detail-list">
           ${actionNotes.map((note) => `<li>${escapeHtml(note)}</li>`).join("")}
         </ul>
       </article>
       <article class="detail-card">
-        <h3>📋 基本情報</h3>
+        <h3>基本情報</h3>
         <ul class="detail-list">
           <li>住所: ${escapeHtml(composeAddress(record))}</li>
           <li>電話: ${escapeHtml(record.wam_office_phone ?? "-")}</li>
@@ -1845,7 +1863,7 @@ function renderDetail(record) {
         </ul>
       </article>
       <article class="detail-card">
-        <h3>🌐 外部リンク</h3>
+        <h3>外部リンク</h3>
         <ul class="detail-list">
           <li>ホームページ: ${homepageUrl ? `<a class="link-button" href="${escapeAttribute(homepageUrl)}" target="_blank" rel="noreferrer">開く</a>` : "未登録"}${homepageSource ? ` / ${escapeHtml(homepageSource)}` : ""}</li>
           <li>Instagram: ${instagramUrl ? `<a class="link-button" href="${escapeAttribute(instagramUrl)}" target="_blank" rel="noreferrer">開く</a>` : "未登録"}${instagramSource ? ` / ${escapeHtml(instagramSource)}` : ""}</li>
@@ -2113,12 +2131,26 @@ function ratioOf(records, predicate) {
 }
 
 function computeLocalStats(values) {
-  if (!values.length) return { mean: null, median: null, p90: null };
+  if (!values.length) {
+    return {
+      count: 0,
+      min: null,
+      p10: null,
+      mean: null,
+      median: null,
+      p90: null,
+      max: null,
+    };
+  }
   const sorted = [...values].sort((left, right) => left - right);
   return {
+    count: sorted.length,
+    min: sorted[0],
+    p10: percentile(sorted, 0.1),
     mean: sorted.reduce((sum, value) => sum + value, 0) / sorted.length,
     median: median(sorted),
     p90: percentile(sorted, 0.9),
+    max: sorted[sorted.length - 1],
   };
 }
 
@@ -2353,6 +2385,180 @@ function buildActionNotes(record) {
   return notes.slice(0, 6);
 }
 
+function getDetailComparisonContext(record) {
+  const filteredCount = state.filteredRecords.length;
+  const recordInFiltered = state.filteredRecords.some((item) => String(item.office_no) === String(record.office_no));
+  if (filteredCount && recordInFiltered) {
+    const usesAllRecords = filteredCount === state.records.length;
+    return {
+      records: state.filteredRecords,
+      label: usesAllRecords ? `大阪府全体 ${formatCount(filteredCount)}件` : `現在の絞り込み結果 ${formatCount(filteredCount)}件`,
+      note: usesAllRecords
+        ? "平均との差・中央値差は大阪府全体との比較で表示している。"
+        : "平均との差・中央値差は現在の絞り込み結果を母集団にしている。絞り込みを変えると比較値も変わる。",
+    };
+  }
+
+  return {
+    records: state.records,
+    label: `大阪府全体 ${formatCount(state.records.length)}件`,
+    note: "この事業所は現在の一覧外のため、大阪府全体を母集団にして比較している。",
+  };
+}
+
+function getDetailComparisonMetricConfigs() {
+  return [
+    {
+      key: "average_wage_yen",
+      label: "平均工賃",
+      description: "1人あたりの平均月額工賃",
+      emptyText: "未回答",
+      formatValue: formatMaybeYen,
+      formatDiff: formatSignedYen,
+    },
+    {
+      key: "daily_user_capacity_ratio",
+      label: "利用率",
+      description: "定員に対する平均利用人数",
+      emptyText: "未回答",
+      formatValue: formatPercent,
+      formatDiff: formatSignedPercentPoint,
+    },
+    {
+      key: "average_daily_users",
+      label: "平均利用人数",
+      description: "1日あたりの平均利用人数",
+      emptyText: "未回答",
+      formatValue: (value) => formatDecimalUnit(value, "人"),
+      formatDiff: (value) => formatSignedDecimalUnit(value, "人"),
+    },
+    {
+      key: "capacity",
+      label: "定員",
+      description: "届出上の受入定員",
+      emptyText: "未回答",
+      formatValue: (value) => formatIntegerUnit(value, "名"),
+      formatDiff: (value) => formatSignedIntegerUnit(value, "名"),
+    },
+    {
+      key: "home_use_user_ratio_decimal",
+      label: "在宅率",
+      description: "在宅利用者の構成比",
+      emptyText: "未回答",
+      formatValue: formatPercent,
+      formatDiff: formatSignedPercentPoint,
+    },
+    {
+      key: "wam_key_staff_fte_per_capacity",
+      label: "支援職員 / 定員",
+      description: "定員1人あたりの主要支援職員",
+      emptyText: "人員詳細なし",
+      formatValue: formatPercent,
+      formatDiff: formatSignedPercentPoint,
+    },
+    {
+      key: "wam_welfare_staff_fte_total",
+      label: "福祉職員（常勤換算）",
+      description: "就労支援員・職業指導員・生活支援員などの合計",
+      emptyText: "人員詳細なし",
+      formatValue: formatFte,
+      formatDiff: (value) => formatSignedDecimalUnit(value, "人分"),
+    },
+    {
+      key: "wam_service_manager_fte",
+      label: "サービス管理責任者（常勤換算）",
+      description: "公開情報にあるサービス管理責任者の人数",
+      emptyText: "人員詳細なし",
+      formatValue: formatFte,
+      formatDiff: (value) => formatSignedDecimalUnit(value, "人分"),
+    },
+    {
+      key: "wam_average_wage_monthly_yen",
+      label: "公開情報の月額工賃",
+      description: "WAM公開情報に掲載された月額工賃",
+      emptyText: "公開情報なし",
+      formatValue: formatMaybeYen,
+      formatDiff: formatSignedYen,
+    },
+  ];
+}
+
+function comparisonTrackPosition(value, min, max) {
+  if (!isNumber(value) || !isNumber(min) || !isNumber(max)) return null;
+  if (max <= min) return 50;
+  const ratio = ((value - min) / (max - min)) * 100;
+  return Math.max(0, Math.min(100, ratio));
+}
+
+function deltaClassName(value) {
+  if (!isNumber(value)) return "is-neutral";
+  if (value > 0) return "is-positive";
+  if (value < 0) return "is-negative";
+  return "is-neutral";
+}
+
+function renderDetailComparisonRows(record, comparisonContext) {
+  return getDetailComparisonMetricConfigs()
+    .map((metric) => {
+      const values = numericValues(comparisonContext.records, metric.key);
+      const stats = computeLocalStats(values);
+      const currentValue = record[metric.key];
+      const meanDiff = isNumber(currentValue) && isNumber(stats.mean) ? currentValue - stats.mean : null;
+      const medianDiff = isNumber(currentValue) && isNumber(stats.median) ? currentValue - stats.median : null;
+      const trackMin = isNumber(stats.p10) ? stats.p10 : stats.min;
+      const trackMax = isNumber(stats.p90) ? stats.p90 : stats.max;
+      const currentPosition = comparisonTrackPosition(currentValue, trackMin, trackMax);
+      const meanPosition = comparisonTrackPosition(stats.mean, trackMin, trackMax);
+      const medianPosition = comparisonTrackPosition(stats.median, trackMin, trackMax);
+      const hasTrack =
+        isNumber(currentPosition) &&
+        isNumber(meanPosition) &&
+        isNumber(medianPosition) &&
+        isNumber(trackMin) &&
+        isNumber(trackMax);
+
+      return `
+        <div class="detail-comparison-row">
+          <div class="detail-comparison-cell detail-comparison-label">
+            <strong>${escapeHtml(metric.label)}</strong>
+            <small>${escapeHtml(metric.description)} / 比較件数 ${formatCount(stats.count ?? 0)}件</small>
+          </div>
+          <div class="detail-comparison-cell">
+            <span class="detail-comparison-heading">この事業所</span>
+            <strong>${escapeHtml(isNumber(currentValue) ? metric.formatValue(currentValue) : metric.emptyText)}</strong>
+          </div>
+          <div class="detail-comparison-cell">
+            <span class="detail-comparison-heading">平均との差</span>
+            <strong class="detail-delta ${deltaClassName(meanDiff)}">${escapeHtml(metric.formatDiff(meanDiff))}</strong>
+            <small>平均 ${escapeHtml(metric.formatValue(stats.mean))}</small>
+          </div>
+          <div class="detail-comparison-cell">
+            <span class="detail-comparison-heading">中央値差</span>
+            <strong class="detail-delta ${deltaClassName(medianDiff)}">${escapeHtml(metric.formatDiff(medianDiff))}</strong>
+            <small>中央値 ${escapeHtml(metric.formatValue(stats.median))}</small>
+          </div>
+          <div class="detail-comparison-cell detail-deviation-cell">
+            <span class="detail-comparison-heading">位置グラフ</span>
+            ${
+              hasTrack
+                ? `
+                  <div class="detail-deviation-track" aria-hidden="true">
+                    <span class="detail-deviation-band"></span>
+                    <span class="detail-deviation-marker is-mean" style="left:${meanPosition}%;"></span>
+                    <span class="detail-deviation-marker is-median" style="left:${medianPosition}%;"></span>
+                    <span class="detail-deviation-point" style="left:${currentPosition}%;"></span>
+                  </div>
+                  <small>左右端は比較対象の下位10%〜上位10%</small>
+                `
+                : `<small>${escapeHtml(metric.emptyText)}のため位置グラフを出せない。</small>`
+            }
+          </div>
+        </div>
+      `;
+    })
+    .join("");
+}
+
 function detailKpi(label, value, hint) {
   return `
     <article class="detail-kpi">
@@ -2544,6 +2750,24 @@ function formatFte(value) {
   return isNumber(value) ? `${decimalFormatter.format(value)}人分` : "-";
 }
 
+function formatIntegerUnit(value, unit) {
+  return isNumber(value) ? `${formatCount(Math.round(value))}${unit}` : "-";
+}
+
+function formatSignedIntegerUnit(value, unit) {
+  if (!isNumber(value)) return "-";
+  return `${value >= 0 ? "+" : ""}${formatCount(Math.round(value))}${unit}`;
+}
+
+function formatDecimalUnit(value, unit) {
+  return isNumber(value) ? `${decimalFormatter.format(value)}${unit}` : "-";
+}
+
+function formatSignedDecimalUnit(value, unit) {
+  if (!isNumber(value)) return "-";
+  return `${value >= 0 ? "+" : ""}${decimalFormatter.format(value)}${unit}`;
+}
+
 function formatNumber(value) {
   return isNumber(value) ? ratioFormatter.format(value) : "-";
 }
@@ -2554,6 +2778,11 @@ function formatRatio(value) {
 
 function formatPercent(value) {
   return isNumber(value) ? `${percentFormatter.format(value * 100)}%` : "-";
+}
+
+function formatSignedPercentPoint(value) {
+  if (!isNumber(value)) return "-";
+  return `${value >= 0 ? "+" : ""}${percentFormatter.format(value * 100)}pt`;
 }
 
 function formatMaybeYen(value) {
