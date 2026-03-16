@@ -6,7 +6,7 @@
     <title>大阪府 就労継続支援B型 ダッシュボード</title>
     <meta
       name="description"
-      content="大阪府の就労継続支援B型データを比較しつつ、大阪市は WAM 公開情報の人員詳細まで見られる運営向けダッシュボード"
+      content="大阪府の就労継続支援B型データを比較し、絞り込みから一覧比較、事業所詳細まで見られる運営向けダッシュボード"
     />
     <link rel="stylesheet" href="./styles.css" />
   </head>
@@ -18,7 +18,7 @@
           <span class="brand-mark">工</span>
           <div>
             <strong>工賃ダッシュボード</strong>
-            <p>大阪府比較 / 大阪市WAM詳細</p>
+            <p>大阪府比較 / 事業所リンク付き</p>
           </div>
         </div>
         <nav class="sidebar-nav">
@@ -40,7 +40,7 @@
             <p class="section-kicker">大阪府 就労継続支援B型</p>
             <h1 id="overviewHeading">運営ダッシュボード</h1>
             <p class="hero-lead">
-              まず条件を絞り、次に一覧で比べ、最後に気になる事業所だけ深掘りする。大阪府全体を参考比較しつつ、大阪市は WAM の人員詳細まで見られる。
+              まず条件を絞り、次に一覧で比べ、最後に気になる事業所だけ深掘りする。大阪府全体を参考比較しながら、ホームページやInstagramもあわせて確認できる。
             </p>
           </div>
           <div class="topbar-actions">
@@ -60,8 +60,12 @@
             <strong id="totalRecords">-</strong>
           </article>
           <article class="meta-card">
-            <span class="meta-label">大阪市WAM詳細あり</span>
-            <strong id="wamMatchedCount">-</strong>
+            <span class="meta-label">ホームページあり</span>
+            <strong id="homepageCount">-</strong>
+          </article>
+          <article class="meta-card">
+            <span class="meta-label">Instagramあり</span>
+            <strong id="instagramCount">-</strong>
           </article>
         </section>
 
@@ -82,7 +86,6 @@
               <div class="preset-row" aria-label="クイック切り替え">
                 <button class="preset-chip" data-preset="all" type="button">全体</button>
                 <button class="preset-chip is-active" data-preset="osaka-city" type="button">大阪市</button>
-                <button class="preset-chip" data-preset="osaka-wam" type="button">公開データあり</button>
                 <button class="preset-chip" data-preset="high-wage" type="button">工賃高め</button>
                 <button class="preset-chip" data-preset="high-wage-low-util" type="button">高工賃・低利用率</button>
                 <button class="preset-chip" data-preset="fix-priority" type="button">低工賃・低利用率・人員過剰</button>
@@ -97,7 +100,7 @@
               <div class="quickstart-row" aria-label="使い方">
                 <article class="quickstart-card">
                   <strong>1. 条件を絞る</strong>
-                  <p>市町村、エリア、工賃水準、人員詳細で絞る。</p>
+                  <p>市町村、エリア、工賃水準、主活動で絞る。</p>
                 </article>
                 <article class="quickstart-card">
                   <strong>2. 一覧で比べる</strong>
@@ -116,7 +119,7 @@
               <div>
                 <p class="section-kicker">全体把握</p>
                 <h2 id="summaryHeading">ひと目で分かる主要指標</h2>
-                <p class="panel-note">よくある水準、平均との差が大きい事業所、人員詳細が見える範囲を先に押さえる。</p>
+                <p class="panel-note">よくある水準、工賃の差、利用状況を先に押さえる。</p>
               </div>
             </div>
             <section class="stats-grid" id="statsGrid" aria-label="集計カード"></section>
@@ -136,8 +139,8 @@
             </div>
             <div class="guide-preview">
               <div class="guide-pill-row" aria-label="よく使う言葉の要点">
-                <span class="guide-pill">常勤換算 = 常勤1人分に直した人数</span>
                 <span class="guide-pill">利用率 = 定員に対する平均利用人数</span>
+                <span class="guide-pill">在宅率 = 在宅利用者の構成比</span>
                 <span class="guide-pill">平均との差 = 1.00倍が平均</span>
               </div>
               <p class="panel-note">判断に迷ったら、用語ガイドを開くと全部の説明をまとめて確認できる。</p>
@@ -204,7 +207,7 @@
             <div class="panel-head">
               <div>
                 <p class="section-kicker">差が大きい事業所</p>
-                <h2 id="anomalyHeading">工賃と人員配置の確認候補</h2>
+                <h2 id="anomalyHeading">工賃の差が大きい事業所</h2>
               </div>
               <div class="panel-head-actions">
                 <p id="anomalySummary" class="table-summary"></p>
@@ -219,7 +222,7 @@
               <div>
                 <p class="section-kicker">比較グラフ</p>
                 <h2 id="chartsHeading">主要比較から順に見る</h2>
-                <p class="panel-note">まず地域差と工賃差を見て、次に利用状況と人員配置を見る。</p>
+                <p class="panel-note">まず地域差と工賃差を見て、次に利用状況を見る。</p>
               </div>
               <div class="panel-head-actions">
                 <button class="ghost-button panel-collapse-button" type="button" aria-expanded="false">開く</button>
@@ -251,27 +254,11 @@
               </div>
             </div>
             <details class="chart-group" open>
-              <summary>運営体制を見る</summary>
+              <summary>利用状況を見る</summary>
               <div class="chart-grid">
                 <article class="chart-card">
                   <h3>工賃と利用の4分類</h3>
                   <div id="quadrantChart" class="bar-chart compact-chart"></div>
-                </article>
-                <article class="chart-card">
-                  <h3>公開データあり / なし</h3>
-                  <div id="wamCoverageChart" class="bar-chart compact-chart"></div>
-                </article>
-                <article class="chart-card">
-                  <h3>工賃と人員配置の4分類</h3>
-                  <div id="staffingQuadrantChart" class="bar-chart compact-chart"></div>
-                </article>
-                <article class="chart-card">
-                  <h3>主な職種の平均人数（常勤換算）</h3>
-                  <div id="staffingRoleChart" class="bar-chart"></div>
-                </article>
-                <article class="chart-card">
-                  <h3>送迎・食事・地域協働の平均工賃</h3>
-                  <div id="featureChart" class="bar-chart"></div>
                 </article>
               </div>
             </details>
@@ -285,10 +272,6 @@
                 <article class="chart-card">
                   <h3>平均工賃帯</h3>
                   <div id="wageBandChart" class="bar-chart compact-chart"></div>
-                </article>
-                <article class="chart-card">
-                  <h3>報酬算定区分（R6年度）</h3>
-                  <div id="tierChart" class="bar-chart compact-chart"></div>
                 </article>
               </div>
             </details>
@@ -315,7 +298,6 @@
                     <th><button type="button" data-sort-key="wage_ratio_to_overall_mean">平均との差</button></th>
                     <th><button type="button" data-sort-key="daily_user_capacity_ratio">利用率</button></th>
                     <th><button type="button" data-sort-key="home_use_user_ratio_decimal">在宅率</button></th>
-                    <th><button type="button" data-sort-key="wam_match_status">人員詳細</button></th>
                     <th><button type="button" data-sort-key="wam_primary_activity_type">主活動</button></th>
                     <th>注目</th>
                     <th>詳細</th>
@@ -388,20 +370,12 @@
                 <select id="areaSelect"></select>
               </label>
               <label class="field">
-                <span>人員詳細</span>
-                <select id="wamMatchSelect"></select>
-              </label>
-              <label class="field">
                 <span>仕事不足の可能性</span>
                 <select id="workShortageRiskSelect"></select>
               </label>
               <label class="field">
                 <span>工賃の差が大きい</span>
                 <select id="outlierFlagSelect"></select>
-              </label>
-              <label class="field">
-                <span>人員配置の差が大きい</span>
-                <select id="staffingOutlierSelect"></select>
               </label>
               <label class="field">
                 <span>主活動</span>
@@ -455,10 +429,6 @@
               <input id="noufukuOnlyCheckbox" type="checkbox" />
               <span>農福連携あり</span>
             </label>
-            <label class="toggle">
-              <input id="wamOnlyCheckbox" type="checkbox" />
-              <span>公開データありのみ</span>
-            </label>
           </div>
         </div>
         <div class="dialog-actions">
@@ -481,14 +451,6 @@
         <div class="dialog-body">
           <div class="term-grid">
             <article class="term-card">
-              <h3>公開データあり</h3>
-              <p>福祉医療機構の公開情報と結び付いた状態で、送迎や職員数まで見比べられる。</p>
-            </article>
-            <article class="term-card">
-              <h3>常勤換算</h3>
-              <p>常勤1人を 1.0 人分として数えた人数。非常勤の合計も人分で見られる。</p>
-            </article>
-            <article class="term-card">
               <h3>利用率</h3>
               <p>定員に対して、平均で何人使っているか。高いほど空きが少ない。</p>
             </article>
@@ -502,11 +464,11 @@
             </article>
             <article class="term-card">
               <h3>仕事不足の可能性</h3>
-              <p>工賃が低めで、利用率や人員配置のバランスも弱い状態。作業量不足の可能性がある目印である。</p>
+              <p>工賃が低めで、利用率も弱い状態。仕事量が足りていない可能性を先に見るための目印である。</p>
             </article>
             <article class="term-card">
               <h3>低工賃・低利用率・人員過剰</h3>
-              <p>工賃が低めで、利用率も低く、人員が重い状態。仕事量、営業導線、配置の見直しを早めにかけたい事業所である。</p>
+              <p>工賃が低めで、利用率も低く、人員が先に膨らんでいる状態。仕事量、営業導線、配置の見直しを早めにかけたい事業所である。</p>
             </article>
           </div>
         </div>
