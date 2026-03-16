@@ -120,47 +120,6 @@ function revenuePerUtilizationPoint(record) {
   return Math.round(capacity * 0.01 * tier.unitYen * 22);
 }
 
-/** 加算取り漏れチェック（経営者向け） */
-function checkMissedAddons(record) {
-  const missed = [];
-  if (record.wam_match_status !== "matched") return missed;
-
-  // 目標工賃達成指導員配置加算: 工賃が前年度より上がっている or 一定額以上の場合に取得できる
-  const tier = getWageTier(record.average_wage_yen);
-  if (tier && tier.tierNo >= 4 && record.wam_staffing_efficiency_quadrant !== "低工賃 × 少ない人員") {
-    missed.push({
-      name: "目標工賃達成指導員配置加算",
-      hint: `工賃が${formatWageText(record.average_wage_yen)}と比較的高く、人員も確保されている。目標工賃達成指導員の配置で月額約7万円/人の加算が見込める。`,
-    });
-  }
-
-  // 送迎加算: 送迎なしだが利用率が低い場合
-  if (record.wam_transport_available === false && isNumber(record.daily_user_capacity_ratio) && record.daily_user_capacity_ratio < 0.7) {
-    missed.push({
-      name: "送迎体制の整備",
-      hint: "送迎なしかつ利用率低め。送迎実施で利用率改善が期待できる（送迎加算: 片道21単位/日）。",
-    });
-  }
-
-  // 食事加算: なしの場合
-  if (record.wam_meal_support_addon === false) {
-    missed.push({
-      name: "食事提供体制加算",
-      hint: "食事提供なし。食事加算（30単位/日）は利用者満足度と定着率の向上にもつながる。",
-    });
-  }
-
-  // 在宅利用: あるが在宅率が低い場合
-  if (record.home_use_active === true && isNumber(record.home_use_user_ratio_decimal) && record.home_use_user_ratio_decimal < 0.05) {
-    missed.push({
-      name: "在宅利用支援の強化",
-      hint: "在宅利用ありだが実績が少ない。在宅時生活支援加算（15単位/日）を算定できるケースを増やす余地あり。",
-    });
-  }
-
-  return missed;
-}
-
 /** 好事例の主活動詳細を抽出（スタッフ向け） */
 function topPerformerActivities(records, limit = 5) {
   return records
@@ -222,14 +181,10 @@ function createDefaultFilters() {
     capacityBand: "all",
     quadrant: "all",
     workShortageRisk: "all",
-    transport: "all",
     staffingOutlier: "all",
     primaryActivity: "all",
-    mealSupport: "all",
-    managerMulti: "all",
     newOnly: false,
     homeUseOnly: false,
-    noufukuOnly: false,
   };
 }
 
@@ -567,21 +522,11 @@ function bindEvents() {
   bindInput("workShortageRiskSelect", "change", (filters, value) => {
     filters.workShortageRisk = value;
   });
-  bindInput("transportSelect", "change", (filters, value) => {
-    filters.transport = value;
-  });
   bindInput("primaryActivitySelect", "change", (filters, value) => {
     filters.primaryActivity = value;
   });
-  bindInput("mealSupportSelect", "change", (filters, value) => {
-    filters.mealSupport = value;
-  });
-  bindInput("managerMultiSelect", "change", (filters, value) => {
-    filters.managerMulti = value;
-  });
   bindCheckbox("newOnlyCheckbox", "newOnly");
   bindCheckbox("homeUseOnlyCheckbox", "homeUseOnly");
-  bindCheckbox("noufukuOnlyCheckbox", "noufukuOnly");
 
   document.getElementById("resetFiltersButton").addEventListener("click", () => {
     resetFilters();
@@ -736,13 +681,9 @@ function syncFilterControls(filters = state.filters) {
   setValue("capacityBandSelect", filters.capacityBand);
   setValue("quadrantSelect", filters.quadrant);
   setValue("workShortageRiskSelect", filters.workShortageRisk);
-  setValue("transportSelect", filters.transport);
   setValue("primaryActivitySelect", filters.primaryActivity);
-  setValue("mealSupportSelect", filters.mealSupport);
-  setValue("managerMultiSelect", filters.managerMulti);
   setChecked("newOnlyCheckbox", filters.newOnly);
   setChecked("homeUseOnlyCheckbox", filters.homeUseOnly);
-  setChecked("noufukuOnlyCheckbox", filters.noufukuOnly);
 }
 
 function syncPresetButtons() {
@@ -899,27 +840,14 @@ function matchesFilters(record, filters) {
   if (filters.workShortageRisk === "likely" && !hasWorkShortageRisk(record)) {
     return false;
   }
-  if (filters.transport !== "all") {
-    const transportValue = record.wam_transport_available === true ? "true" : record.wam_transport_available === false ? "false" : "unknown";
-    if (transportValue !== filters.transport) return false;
-  }
   if (filters.staffingOutlier !== "all" && (record.wam_staffing_outlier_flag ?? "none") !== filters.staffingOutlier) {
     return false;
   }
   if (filters.primaryActivity !== "all" && (record.wam_primary_activity_type ?? "unknown") !== filters.primaryActivity) {
     return false;
   }
-  if (filters.mealSupport !== "all") {
-    const mealValue = record.wam_meal_support_addon === true ? "true" : record.wam_meal_support_addon === false ? "false" : "unknown";
-    if (mealValue !== filters.mealSupport) return false;
-  }
-  if (filters.managerMulti !== "all") {
-    const managerValue = record.wam_manager_multi_post === true ? "true" : record.wam_manager_multi_post === false ? "false" : "unknown";
-    if (managerValue !== filters.managerMulti) return false;
-  }
   if (filters.newOnly && !record.is_new_office) return false;
   if (filters.homeUseOnly && !record.home_use_active) return false;
-  if (filters.noufukuOnly && !record.noufuku_active) return false;
   return true;
 }
 
@@ -974,10 +902,7 @@ function populateFilterOptions(records) {
   populateSelect("capacityBandSelect", "all", "すべての定員帯", CAPACITY_BAND_ORDER);
   populateSelect("quadrantSelect", "all", "すべての工賃と利用の位置", QUADRANT_ORDER);
   populateSelect("workShortageRiskSelect", "all", "すべての仕事状況", ["likely"]);
-  populateSelect("transportSelect", "all", "すべての送迎", ["true", "false", "unknown"]);
   populateSelect("primaryActivitySelect", "all", "すべての主活動", uniqueValues(records, "wam_primary_activity_type"));
-  populateSelect("mealSupportSelect", "all", "すべての食事加算", ["true", "false", "unknown"]);
-  populateSelect("managerMultiSelect", "all", "すべての管理者兼務", ["true", "false", "unknown"]);
 }
 
 function populateSelect(id, defaultValue, defaultLabel, values) {
@@ -1116,13 +1041,9 @@ function renderActiveFilterSummary(records) {
   if (state.filters.capacityBand !== "all") filters.push(`定員帯: ${state.filters.capacityBand}`);
   if (state.filters.quadrant !== "all") filters.push(`工賃と利用の位置: ${labelForSelect(state.filters.quadrant)}`);
   if (state.filters.workShortageRisk !== "all") filters.push(`仕事状況: ${labelForSelect(state.filters.workShortageRisk)}`);
-  if (state.filters.transport !== "all") filters.push(`送迎: ${labelForSelect(state.filters.transport)}`);
   if (state.filters.primaryActivity !== "all") filters.push(`主活動: ${state.filters.primaryActivity}`);
-  if (state.filters.mealSupport !== "all") filters.push(`食事加算: ${labelForSelect(state.filters.mealSupport)}`);
-  if (state.filters.managerMulti !== "all") filters.push(`管理者兼務: ${labelForSelect(state.filters.managerMulti)}`);
   if (state.filters.newOnly) filters.push("新設のみ");
   if (state.filters.homeUseOnly) filters.push("在宅利用あり");
-  if (state.filters.noufukuOnly) filters.push("農福連携あり");
 
   document.getElementById("activeFilterSummary").textContent = filters.length
     ? `${formatCount(records.length)} 件を表示中。`
@@ -1517,7 +1438,6 @@ function renderDetail(record) {
 
   const comparisonContext = getDetailComparisonContext(record);
   const peer = computePeerBenchmark(record, comparisonContext.records);
-  const missedAddons = checkMissedAddons(record);
   const revPerPoint = revenuePerUtilizationPoint(record);
   const sortedWages = numericValues(comparisonContext.records, "average_wage_yen").sort((a, b) => a - b);
   const wagePercentile = computePercentileRank(record.average_wage_yen, sortedWages);
@@ -1568,16 +1488,7 @@ function renderDetail(record) {
       <article class="detail-card">
         <h3>経営者向けシミュレーション</h3>
         <ul class="detail-list">
-          ${revPerPoint ? `<li>利用率1%改善: 月 ${formatMaybeYen(revPerPoint)} の増収</li>` : ""}
-          ${missedAddons.length ? missedAddons.map((m) => `<li>💡 ${escapeHtml(m.name)}: ${escapeHtml(m.hint)}</li>`).join("") : "<li>主要加算の取り漏れは確認されない</li>"}
-        </ul>
-      </article>
-      <article class="detail-card">
-        <h3>運営体制</h3>
-        <ul class="detail-list">
-          <li>送迎: ${escapeHtml(formatBool(record.wam_transport_available))}</li>
-          <li>食事加算: ${escapeHtml(formatBool(record.wam_meal_support_addon))}</li>
-          <li>管理者兼務: ${escapeHtml(formatBool(record.wam_manager_multi_post))}</li>
+          ${revPerPoint ? `<li>利用率1%改善: 月 ${formatMaybeYen(revPerPoint)} の増収</li>` : "<li>利用率改善の試算に必要な値が不足している</li>"}
           <li>主活動: ${escapeHtml(record.wam_primary_activity_type ?? "-")} ${record.wam_primary_activity_detail ? `（${escapeHtml(record.wam_primary_activity_detail)}）` : ""}</li>
         </ul>
       </article>
@@ -2002,29 +1913,23 @@ function buildHighHighReason(record) {
 function buildActionNotes(record) {
   const notes = [];
 
-  // 1. 加算取り漏れ
-  const missed = checkMissedAddons(record);
-  if (missed.length > 0) {
-    notes.push(`【加算の検討】${missed.map((m) => m.name).join("、")}の導入余地あり。${missed[0].hint}`);
-  }
-
-  // 2. 利用率
+  // 1. 利用率
   if (isNumber(record.daily_user_capacity_ratio) && record.daily_user_capacity_ratio < 0.6) {
     const revPerPoint = revenuePerUtilizationPoint(record);
     notes.push(`【利用率】${formatPercent(record.daily_user_capacity_ratio)} と低水準。${revPerPoint ? `利用率10%改善で 月 ${formatMaybeYen(revPerPoint * 10)} の増収が見込める。体験利用の導線強化と相談支援事業所への営業強化を検討。` : "体験利用・紹介元の強化を検討したい。"}`);
   }
 
-  // 3. 仕事不足リスク
+  // 2. 仕事不足リスク
   if (hasWorkShortageRisk(record)) {
     notes.push("【仕事不足】工賃と利用率の両方が弱め。企業営業・新規作業種目の開拓・施設外就労の検討を。");
   }
 
-  // 4. 高工賃の好事例
+  // 3. 高工賃の好事例
   if (record.wage_outlier_flag === "high") {
     notes.push("【好事例】高工賃事業所。主活動と取引構造を他事業所への横展開候補として注目。作業内容と品質管理体制の共有を推奨。");
   }
 
-  // 5. 新設
+  // 4. 新設
   if (record.is_new_office) {
     notes.push("【新設】立ち上がり期のため単月値ではなく定員充足の推移を追う。3か月目以降の利用率と工賃のトレンドが重要。");
   }
@@ -2222,9 +2127,6 @@ function downloadFilteredCsv() {
     ["home_use_active", "在宅利用あり"],
     ["home_use_user_ratio_pct", "在宅率"],
     ["wage_outlier_flag", "工賃水準"],
-    ["wam_transport_available", "送迎"],
-    ["wam_meal_support_addon", "食事加算"],
-    ["wam_manager_multi_post", "管理者兼務"],
     ["derived_work_shortage_risk", "仕事不足の可能性"],
     ["wam_primary_activity_type", "主活動種別"],
     ["wam_office_number", "事業所番号"],
