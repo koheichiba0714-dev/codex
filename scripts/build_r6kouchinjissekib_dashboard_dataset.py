@@ -10,6 +10,7 @@ import difflib
 import json
 import math
 from pathlib import Path
+import re
 from statistics import median
 from typing import Any
 import unicodedata
@@ -132,7 +133,13 @@ APP_RECORD_FIELD_ORDER = [
     "office_no",
     "municipality",
     "corporation_type_label",
+    "corporation_number",
     "corporation_name",
+    "representative_name",
+    "representative_role",
+    "representative_raw",
+    "representative_source_url",
+    "representative_fetch_status",
     "office_name",
     "response_status",
     "remarks",
@@ -196,6 +203,29 @@ LINK_FIELD_ORDER = [
     "instagram_source",
     "instagram_confidence",
 ]
+REPRESENTATIVE_FIELD_ORDER = [
+    "representative_raw",
+    "representative_role",
+    "representative_name",
+    "representative_name_normalized",
+    "representative_source_url",
+    "representative_fetch_status",
+]
+REPRESENTATIVE_NOTE_RE = re.compile(r"\s*[（(][^()（）]*(職場情報総合サイト|GEPS)[^()（）]*[)）]\s*$")
+REPRESENTATIVE_ROLE_PREFIXES = [
+    "代表取締役社長",
+    "代表取締役会長",
+    "代表取締役",
+    "取締役社長",
+    "代表社員",
+    "代表理事",
+    "理事長",
+    "院長",
+    "会長",
+    "社長",
+    "代表",
+    "理事",
+]
 
 
 def parse_args() -> argparse.Namespace:
@@ -216,6 +246,11 @@ def parse_args() -> argparse.Namespace:
         "--wam-match-override-input",
         default="data/inputs/wam/osakashi_shuro_b_match_overrides.csv",
         help="manual workbook office_no to WAM office_number overrides",
+    )
+    parser.add_argument(
+        "--representative-input",
+        default="data/exports/gbizinfo/osaka_shuro_b/gbizinfo_corporation_people.json",
+        help="Gビズインフォ公開ページから取得した代表者情報 JSON",
     )
     parser.add_argument(
         "--link-enrichment-input",
@@ -329,6 +364,66 @@ def link_lookup_by_office(rows: list[dict[str, str]]) -> dict[str, dict[str, str
     }
 
 
+def representative_lookup_by_corporation(payload: Any) -> dict[str, dict[str, Any]]:
+    if isinstance(payload, dict):
+        rows = payload.get("records", [])
+    else:
+        rows = payload
+    lookup: dict[str, dict[str, Any]] = {}
+    for row in rows or []:
+        corporation_number = str((row or {}).get("corporation_number") or "").strip()
+        if not corporation_number:
+            continue
+        lookup[corporation_number] = {
+            "representative_raw": clean_representative_raw(row.get("representative_raw")),
+            "representative_role": clean_representative_role(row.get("representative_role")),
+            "representative_name": clean_representative_name(row.get("representative_name")),
+            "representative_name_normalized": normalize_representative_name(row.get("representative_name")),
+            "representative_source_url": row.get("source_url"),
+            "representative_fetch_status": row.get("fetch_status"),
+        }
+    return lookup
+
+
+def normalize_text(value: Any) -> str:
+    return re.sub(r"\s+", " ", str(value or "").replace("\u3000", " ")).strip()
+
+
+def clean_representative_note(value: Any) -> str:
+    return REPRESENTATIVE_NOTE_RE.sub("", normalize_text(value))
+
+
+def clean_representative_role(value: Any) -> str | None:
+    text = clean_representative_note(value)
+    return text or None
+
+
+def clean_representative_name(value: Any) -> str | None:
+    text = clean_representative_note(value)
+    while text:
+        text = re.sub(r"^[・･\s]+", "", text)
+        matched_prefix = next((prefix for prefix in REPRESENTATIVE_ROLE_PREFIXES if text.startswith(prefix)), None)
+        if not matched_prefix:
+            break
+        text = text[len(matched_prefix) :].strip(" :：・･")
+    return text or None
+
+
+def clean_representative_raw(value: Any) -> str | None:
+    text = clean_representative_note(value)
+    return text or None
+
+
+def normalize_representative_name(value: Any) -> str | None:
+    text = clean_representative_name(value)
+    if not text:
+        return None
+    normalized = unicodedata.normalize("NFKC", text).lower()
+    normalized = re.sub(r"[・･·]", "", normalized)
+    normalized = re.sub(r"\s+", "", normalized)
+    return normalized or None
+
+
 def merge_link_fields(record: dict[str, Any], link_row: dict[str, str] | None) -> dict[str, Any]:
     merged = deepcopy(record)
     merged.update(default_link_fields(merged))
@@ -338,6 +433,21 @@ def merge_link_fields(record: dict[str, Any], link_row: dict[str, str] | None) -
     for field in LINK_FIELD_ORDER:
         value = link_row.get(field)
         if value:
+            merged[field] = value
+    return merged
+
+
+def merge_representative_fields(
+    record: dict[str, Any], representative_row: dict[str, Any] | None
+) -> dict[str, Any]:
+    merged = deepcopy(record)
+    for field in REPRESENTATIVE_FIELD_ORDER:
+        merged.setdefault(field, None)
+    if not representative_row:
+        return merged
+    for field in REPRESENTATIVE_FIELD_ORDER:
+        value = representative_row.get(field)
+        if value not in (None, ""):
             merged[field] = value
     return merged
 
@@ -1114,6 +1224,7 @@ def main() -> None:
     wam_input = resolve_path(args.wam_details_input)
     override_input = resolve_path(args.wam_match_override_input)
     link_input = resolve_path(args.link_enrichment_input)
+    representative_input = resolve_path(args.representative_input)
     integrated_output = resolve_path(args.integrated_output)
     records_output_json = resolve_path(args.records_output_json)
     records_output_csv = resolve_path(args.records_output_csv)
@@ -1127,6 +1238,11 @@ def main() -> None:
     override_rows = load_csv_rows(override_input)
     link_rows = load_csv_rows(link_input)
     link_lookup = link_lookup_by_office(link_rows)
+    representative_lookup = (
+        representative_lookup_by_corporation(load_json(representative_input))
+        if representative_input.exists()
+        else {}
+    )
 
     records = deepcopy(dashboard_payload.get("records", []))
     chosen_matches, match_rows = assign_matches(records, wam_rows, focus_municipalities, override_rows)
@@ -1139,6 +1255,15 @@ def main() -> None:
         merged_records.append(merge_wam_fields(record, wam_row, match))
     merged_records = [
         merge_link_fields(record, link_lookup.get(str(record.get("office_no") or "").strip()))
+        for record in merged_records
+    ]
+    merged_records = [
+        merge_representative_fields(
+            record,
+            representative_lookup.get(
+                str(record.get("corporation_number") or record.get("wam_corporation_number") or "").strip()
+            ),
+        )
         for record in merged_records
     ]
 
@@ -1208,6 +1333,9 @@ def main() -> None:
     integrated_payload["meta"]["wam_generated_at"] = generated_at
     integrated_payload["meta"]["wam_directory_count"] = len(wam_rows)
     integrated_payload["meta"]["wam_matched_record_count"] = match_summary["matched_record_count"]
+    integrated_payload["meta"]["representative_name_count"] = sum(
+        1 for record in merged_records if record.get("representative_name")
+    )
     integrated_payload["summary"]["wam_match_summary"] = match_summary
     integrated_payload["summary"]["wam_staffing_summary"] = {
         "matched_record_count": wam_analytics["matched_record_count"],

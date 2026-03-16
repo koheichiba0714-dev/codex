@@ -487,6 +487,20 @@
       </div>
     </dialog>
 
+    <dialog id="representativeDialog" class="corporation-dialog" aria-labelledby="representativeDialogHeading">
+      <div class="corporation-dialog-shell">
+        <div class="dialog-head">
+          <div>
+            <p class="section-kicker">代表者名の候補グループ</p>
+            <h2 id="representativeDialogHeading">同じ代表者名でまとまる法人候補を見る</h2>
+            <p class="panel-note">同姓同名の別人を含む可能性があるため、参考候補として使う。</p>
+          </div>
+          <button id="closeRepresentativeButton" class="ghost-button" type="button">閉じる</button>
+        </div>
+        <div id="representativeDialogContent" class="corporation-dialog-body"></div>
+      </div>
+    </dialog>
+
     <script src="./app.js" defer></script>
   </body>
 </html>

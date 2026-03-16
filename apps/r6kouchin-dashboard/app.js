@@ -209,6 +209,8 @@ const state = {
   selectedCorporationKey: null,
   selectedCorporationLabel: null,
   selectedCorporationSort: "municipality",
+  selectedRepresentativeKey: null,
+  selectedRepresentativeLabel: null,
   activePreset: INITIAL_PRESET,
 };
 
@@ -224,6 +226,7 @@ async function init() {
   bindGuideDialog();
   bindDetailDialog();
   bindCorporationDialog();
+  bindRepresentativeDialog();
   bindPanelToggles();
   bindMobileSidebar();
   const response = await fetch("./data/dashboard-data.json", { cache: "no-store" });
@@ -402,6 +405,21 @@ function bindCorporationDialog() {
   });
 }
 
+function bindRepresentativeDialog() {
+  const dialog = document.getElementById("representativeDialog");
+  if (!dialog) return;
+
+  document.getElementById("closeRepresentativeButton")?.addEventListener("click", () => {
+    closeDialogElement(dialog);
+  });
+
+  dialog.addEventListener("click", (event) => {
+    if (event.target === dialog) {
+      closeDialogElement(dialog);
+    }
+  });
+}
+
 function bindPanelToggles() {
   document.querySelectorAll(".panel[data-collapsible]").forEach((panel) => {
     panel.querySelector(".panel-collapse-button")?.addEventListener("click", () => {
@@ -469,7 +487,17 @@ function openCorporationDialog(corporationName) {
   if (!label) return;
   renderCorporationDialog(label);
   closeDialogElement(document.getElementById("detailDialog"));
+  closeDialogElement(document.getElementById("representativeDialog"));
   openDialogElement(document.getElementById("corporationDialog"));
+}
+
+function openRepresentativeDialog(representativeName) {
+  const label = String(representativeName ?? "").trim();
+  if (!label) return;
+  renderRepresentativeDialog(label);
+  closeDialogElement(document.getElementById("detailDialog"));
+  closeDialogElement(document.getElementById("corporationDialog"));
+  openDialogElement(document.getElementById("representativeDialog"));
 }
 
 async function loadDashboardRecords(dashboard) {
@@ -584,12 +612,21 @@ function bindEvents() {
       return;
     }
 
+    const representativeTrigger = event.target.closest("[data-open-representative]");
+    if (representativeTrigger) {
+      const representativeName = representativeTrigger.getAttribute("data-open-representative");
+      if (!representativeName) return;
+      openRepresentativeDialog(representativeName);
+      return;
+    }
+
     const trigger = event.target.closest("[data-select-office]");
     if (!trigger) return;
     const officeNo = trigger.getAttribute("data-select-office");
     if (!officeNo) return;
-    if (trigger.closest("#corporationDialog")) {
+    if (trigger.closest("#corporationDialog") || trigger.closest("#representativeDialog")) {
       closeDialogElement(document.getElementById("corporationDialog"));
+      closeDialogElement(document.getElementById("representativeDialog"));
     }
     selectRecord(officeNo, { openDetail: true });
   });
@@ -730,8 +767,42 @@ function normalizeCorporationName(value) {
     .replace(/\s+/g, "");
 }
 
+function normalizeRepresentativeName(value) {
+  let text = String(value ?? "")
+    .normalize("NFKC")
+    .trim()
+    .toLowerCase()
+    .replace(/\s*[（(][^()（）]*(職場情報総合サイト|geps)[^()（）]*[)）]\s*$/g, "");
+  const prefixes = [
+    "代表取締役社長",
+    "代表取締役会長",
+    "代表取締役",
+    "取締役社長",
+    "代表社員",
+    "代表理事",
+    "理事長",
+    "院長",
+    "会長",
+    "社長",
+    "代表",
+    "理事",
+  ];
+  while (text) {
+    text = text.replace(/^[・･\s]+/g, "");
+    const prefix = prefixes.find((item) => text.startsWith(item));
+    if (!prefix) break;
+    text = text.slice(prefix.length).trim();
+  }
+  return text.replace(/[・･·]/g, "").replace(/\s+/g, "");
+}
+
 function getCorporationKey(value) {
   const key = normalizeCorporationName(value);
+  return key || null;
+}
+
+function getRepresentativeKey(value) {
+  const key = normalizeRepresentativeName(value);
   return key || null;
 }
 
@@ -739,6 +810,61 @@ function corporationRecords(corporationName) {
   const key = getCorporationKey(corporationName);
   if (!key) return [];
   return state.records.filter((record) => getCorporationKey(record.corporation_name) === key);
+}
+
+function corporationIdentityKey(record) {
+  return (
+    String(record.corporation_number ?? "").trim() ||
+    getCorporationKey(record.corporation_name) ||
+    `office:${String(record.office_no ?? "").trim()}`
+  );
+}
+
+function representativeRecords(representativeName) {
+  const key = getRepresentativeKey(representativeName);
+  if (!key) return [];
+  return state.records.filter((record) => getRepresentativeKey(record.representative_name) === key);
+}
+
+function representativeCorporationGroups(representativeName) {
+  const groups = new Map();
+  representativeRecords(representativeName).forEach((record) => {
+    const key = corporationIdentityKey(record);
+    if (!key) return;
+    const current =
+      groups.get(key) ??
+      {
+        key,
+        corporation_name: record.corporation_name,
+        corporation_number: record.corporation_number,
+        representative_name: record.representative_name,
+        representative_role: record.representative_role,
+        representative_raw: record.representative_raw,
+        records: [],
+      };
+    current.records.push(record);
+    groups.set(key, current);
+  });
+  return [...groups.values()].sort((left, right) => {
+    if (right.records.length !== left.records.length) return right.records.length - left.records.length;
+    const wageDiff = meanFor(right.records, "average_wage_yen") - meanFor(left.records, "average_wage_yen");
+    if (Number.isFinite(wageDiff) && wageDiff !== 0) return wageDiff;
+    return String(left.corporation_name ?? "").localeCompare(String(right.corporation_name ?? ""), "ja");
+  });
+}
+
+function representativeDisplayText(record) {
+  return String(record?.representative_raw || record?.representative_name || "").trim();
+}
+
+function representativeLinkMarkup(record, className = "entity-link-button") {
+  const label = representativeDisplayText(record);
+  if (!label) return `<span class="flag-muted">未取得</span>`;
+  const groupCount = representativeCorporationGroups(label).length;
+  if (groupCount <= 1) {
+    return escapeHtml(label);
+  }
+  return `<button class="${escapeAttribute(className)}" type="button" data-open-representative="${escapeAttribute(label)}">${escapeHtml(label)}</button>`;
 }
 
 function sortCorporationRecords(records, sortKey = state.selectedCorporationSort) {
@@ -809,6 +935,8 @@ function matchesFilters(record, filters) {
       record.municipality,
       getAreaLabel(record),
       record.corporation_name,
+      record.representative_name,
+      record.representative_raw,
       record.office_name,
       record.corporation_type_label,
       record.remarks,
@@ -1409,6 +1537,12 @@ function renderDetail(record) {
   const corporationActionButton = corporationName
     ? `<button class="ghost-button" type="button" data-open-corporation="${escapeAttribute(corporationName)}">法人の事業所一覧</button>`
     : "";
+  const representativeLabel = representativeDisplayText(record);
+  const representativeGroups = representativeCorporationGroups(representativeLabel);
+  const representativeActionButton =
+    representativeGroups.length > 1
+      ? `<button class="ghost-button" type="button" data-open-representative="${escapeAttribute(representativeLabel)}">同じ代表者名の法人候補</button>`
+      : "";
 
   if (openButton) openButton.disabled = false;
   if (focusButton) focusButton.disabled = false;
@@ -1434,6 +1568,7 @@ function renderDetail(record) {
         <p class="selected-office-note">${escapeHtml(actionNotes[0] ?? "詳しい内訳は詳細を開いて確認できる。")}</p>
         <div class="selected-office-actions">
           ${corporationActionButton}
+          ${representativeActionButton}
           ${homepageUrl ? `<a class="ghost-button link-button" href="${escapeAttribute(homepageUrl)}" target="_blank" rel="noreferrer">ホームページ</a>` : `<a class="ghost-button link-button" href="${escapeAttribute(websiteSearchUrl)}" target="_blank" rel="noreferrer">Webで探す</a>`}
           ${instagramUrl ? `<a class="ghost-button link-button" href="${escapeAttribute(instagramUrl)}" target="_blank" rel="noreferrer">Instagram</a>` : `<a class="ghost-button link-button" href="${escapeAttribute(instagramSearchUrl)}" target="_blank" rel="noreferrer">Instagramを探す</a>`}
         </div>
@@ -1458,6 +1593,7 @@ function renderDetail(record) {
       </div>
       <div class="detail-cta">
         ${corporationActionButton}
+        ${representativeActionButton}
         ${homepageUrl ? `<a class="solid-button link-button" href="${escapeAttribute(homepageUrl)}" target="_blank" rel="noreferrer">ホームページ</a>` : `<a class="solid-button link-button" href="${escapeAttribute(websiteSearchUrl)}" target="_blank" rel="noreferrer">Webで探す</a>`}
         ${instagramUrl ? `<a class="ghost-button link-button" href="${escapeAttribute(instagramUrl)}" target="_blank" rel="noreferrer">Instagram</a>` : `<a class="ghost-button link-button" href="${escapeAttribute(instagramSearchUrl)}" target="_blank" rel="noreferrer">Instagramを探す</a>`}
       </div>
@@ -1505,12 +1641,26 @@ function renderDetail(record) {
           ${actionNotes.map((note) => `<li>${escapeHtml(note)}</li>`).join("")}
         </ul>
       </article>
+      ${
+        representativeLabel
+          ? `<article class="detail-card">
+        <h3>代表者名の候補グループ</h3>
+        <ul class="detail-list">
+          <li>代表者: ${representativeLinkMarkup(record, "entity-link-button detail-entity-link")}</li>
+          <li>候補法人数: ${formatCount(representativeGroups.length)} 法人</li>
+          <li>候補事業所数: ${formatCount(representativeRecords(representativeLabel).length)} 事業所</li>
+          <li>注意: 同姓同名の別人を含む可能性があるため、候補として扱う。</li>
+        </ul>
+      </article>`
+          : ""
+      }
       <article class="detail-card">
         <h3>基本情報</h3>
         <ul class="detail-list">
           <li>住所: ${escapeHtml(composeAddress(record))}</li>
           <li>電話: ${escapeHtml(record.wam_office_phone ?? "-")}</li>
           <li>事業所番号: ${escapeHtml(record.wam_office_number ?? "-")}</li>
+          <li>代表者: ${representativeLinkMarkup(record, "entity-link-button detail-entity-link")}</li>
           <li>参考定員: ${escapeHtml(formatNullable(record.wam_office_capacity))}</li>
           <li>在宅利用: ${escapeHtml(formatBool(record.home_use_active))} ${isNumber(record.home_use_user_ratio_decimal) ? `（在宅率 ${formatPercent(record.home_use_user_ratio_decimal)}）` : ""}</li>
           <li>新設: ${escapeHtml(record.is_new_office ? "あり" : "なし")}</li>
@@ -1551,6 +1701,8 @@ function renderCorporationDialog(corporationName) {
     ? answeredWages.reduce((sum, value) => sum + value, 0) / answeredWages.length
     : null;
   const averageUtilization = meanFor(records, "daily_user_capacity_ratio");
+  const representativeLabel = representativeDisplayText(records[0]);
+  const representativeGroups = representativeCorporationGroups(representativeLabel);
   const corporationTypeCounts = new Map();
   records.forEach((record) => {
     const label = record.corporation_type_label;
@@ -1574,9 +1726,10 @@ function renderCorporationDialog(corporationName) {
       <div>
         <p class="section-kicker">法人名からまとめて確認</p>
         <h3>${escapeHtml(corporationName)}</h3>
-        <p class="detail-subtitle">${escapeHtml(corporationTypeLabel)} / 大阪府内で ${formatCount(records.length)} 事業所</p>
+        <p class="detail-subtitle">${escapeHtml(corporationTypeLabel)} / 大阪府内で ${formatCount(records.length)} 事業所${representativeLabel ? ` / 代表者 ${escapeHtml(representativeLabel)}` : ""}</p>
       </div>
       <div class="selected-office-actions">
+        ${representativeGroups.length > 1 ? `<button class="ghost-button" type="button" data-open-representative="${escapeAttribute(representativeLabel)}">同じ代表者名の法人候補</button>` : ""}
         <button class="ghost-button" type="button" data-select-office="${escapeAttribute(records[0].office_no)}">先頭の事業所を開く</button>
       </div>
     </div>
@@ -1644,6 +1797,100 @@ function renderCorporationDialog(corporationName) {
                 </div>
                 <p class="corporation-office-note">${escapeHtml(record.wam_primary_activity_type ?? "主活動の記載なし")} / ${escapeHtml(record.remarks ?? "備考なし")}</p>
               </button>
+            `;
+          })
+          .join("")}
+      </div>
+    </article>
+  `;
+}
+
+function renderRepresentativeDialog(representativeName) {
+  const dialogRoot = document.getElementById("representativeDialogContent");
+  if (!dialogRoot) return;
+
+  const records = representativeRecords(representativeName);
+  const groups = representativeCorporationGroups(representativeName);
+  state.selectedRepresentativeKey = getRepresentativeKey(representativeName);
+  state.selectedRepresentativeLabel = representativeName;
+
+  if (!records.length) {
+    dialogRoot.innerHTML = document.getElementById("emptyStateTemplate").innerHTML;
+    return;
+  }
+
+  const municipalityCount = new Set(records.map((record) => record.municipality).filter(Boolean)).size;
+  const officeCount = records.length;
+  const corporationCount = groups.length;
+
+  dialogRoot.innerHTML = `
+    <div class="corporation-hero">
+      <div>
+        <p class="section-kicker">同じ代表者名の法人候補</p>
+        <h3>${escapeHtml(representativeName)}</h3>
+        <p class="detail-subtitle">法人 ${formatCount(corporationCount)} 件 / 事業所 ${formatCount(officeCount)} 件 / ${formatCount(municipalityCount)} 市区</p>
+      </div>
+    </div>
+    <div class="corporation-summary-grid">
+      <article class="corporation-summary-card">
+        <span>候補法人数</span>
+        <strong>${formatCount(corporationCount)}</strong>
+        <em>同じ代表者名でまとまる法人</em>
+      </article>
+      <article class="corporation-summary-card">
+        <span>候補事業所数</span>
+        <strong>${formatCount(officeCount)}</strong>
+        <em>大阪府内の対象事業所</em>
+      </article>
+      <article class="corporation-summary-card">
+        <span>平均工賃の平均</span>
+        <strong>${escapeHtml(formatWageText(meanFor(records, "average_wage_yen")))}</strong>
+        <em>候補全体の平均</em>
+      </article>
+      <article class="corporation-summary-card">
+        <span>平均利用率</span>
+        <strong>${formatPercent(meanFor(records, "daily_user_capacity_ratio"))}</strong>
+        <em>候補全体の平均</em>
+      </article>
+    </div>
+    <article class="detail-card">
+      <h3>候補法人一覧</h3>
+      <ul class="detail-list corporation-note-list">
+        <li>同じ代表者名で自動集約した候補であり、同姓同名の別人を含む可能性がある。</li>
+        <li>法人名を押すと法人別の事業所一覧へ移動できる。</li>
+      </ul>
+      <div class="corporation-office-list">
+        ${groups
+          .map((group) => {
+            const groupAverageWage = meanFor(group.records, "average_wage_yen");
+            const groupAverageUtilization = meanFor(group.records, "daily_user_capacity_ratio");
+            const officeButtons = group.records
+              .sort((left, right) => String(left.office_name ?? "").localeCompare(String(right.office_name ?? ""), "ja"))
+              .map(
+                (record) => `
+                  <button class="table-link" type="button" data-select-office="${escapeAttribute(record.office_no)}">
+                    ${escapeHtml(record.office_name ?? "-")}
+                  </button>
+                `
+              )
+              .join(" / ");
+
+            return `
+              <article class="corporation-office-item">
+                <div class="corporation-office-head">
+                  <div>
+                    <p class="section-kicker">${escapeHtml(group.records[0]?.municipality ?? "-")} / 法人番号 ${escapeHtml(group.corporation_number ?? "-")}</p>
+                    <h3>${corporationLinkButton(group.corporation_name, "entity-link-button detail-entity-link")}</h3>
+                    <p class="detail-subtitle">${escapeHtml(group.representative_raw ?? representativeName)}</p>
+                  </div>
+                </div>
+                <div class="corporation-office-meta">
+                  <span class="metric-chip">${escapeHtml(`事業所 ${formatCount(group.records.length)} 件`)}</span>
+                  <span class="metric-chip">${escapeHtml(`平均工賃 ${formatWageText(groupAverageWage)}`)}</span>
+                  <span class="metric-chip">${escapeHtml(`平均利用率 ${formatPercent(groupAverageUtilization)}`)}</span>
+                </div>
+                <p class="corporation-office-note">${officeButtons}</p>
+              </article>
             `;
           })
           .join("")}
@@ -2124,7 +2371,10 @@ function downloadFilteredCsv() {
     ["office_no", "No."],
     ["municipality", "市町村"],
     ["corporation_type_label", "法人種別"],
+    ["corporation_number", "法人番号"],
     ["corporation_name", "法人名"],
+    ["representative_name", "代表者名"],
+    ["representative_role", "代表者役職"],
     ["office_name", "事業所名"],
     ["average_wage_yen", "平均工賃"],
     ["wage_ratio_to_overall_mean", "平均との差"],
