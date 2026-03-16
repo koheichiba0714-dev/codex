@@ -4400,7 +4400,7 @@
     "wam_manager_multi_post": true,
     "wam_welfare_staff_fte_total": 3.5,
     "wam_key_staff_fte_per_capacity": 0.225,
-    "wam_staffing_efficiency_quadrant": "高工賃 × 厚い人員",
+    "wam_staffing_efficiency_quadrant": "低工賃 × 厚い人員",
     "wam_staffing_outlier_flag": null,
     "wam_staffing_outlier_severity": null,
     "wam_average_wage_monthly_yen": 21595,

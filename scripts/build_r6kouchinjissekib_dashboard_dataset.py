@@ -300,6 +300,11 @@ def parse_args() -> argparse.Namespace:
         default="大阪市",
         help="human-readable label for the WAM detail focus area",
     )
+    parser.add_argument(
+        "--wam-extra-focus-office-nos",
+        default="",
+        help="comma-separated record office_no values allowed for WAM matching outside the focus municipalities",
+    )
     return parser.parse_args()
 
 
@@ -447,6 +452,16 @@ def common_suffix_length(left: str, right: str) -> int:
     return length
 
 
+def record_is_wam_matching_target(
+    record: dict[str, Any],
+    focus_municipalities: set[str],
+    extra_focus_office_nos: set[str],
+) -> bool:
+    municipality = str(record.get("municipality") or "").strip()
+    office_no = str(record.get("office_no") or "").strip()
+    return municipality in focus_municipalities or office_no in extra_focus_office_nos
+
+
 def is_numeric(value: Any) -> bool:
     return isinstance(value, (int, float)) and not math.isnan(value)
 
@@ -568,6 +583,7 @@ def build_match_proposals(
     records: list[dict[str, Any]],
     wam_rows: list[dict[str, Any]],
     focus_municipalities: set[str],
+    extra_focus_office_nos: set[str],
 ) -> list[dict[str, Any]]:
     wam_by_corporation: dict[str, list[tuple[int, dict[str, Any]]]] = defaultdict(list)
     wam_by_corporation_name: dict[str, list[tuple[int, dict[str, Any]]]] = defaultdict(list)
@@ -584,7 +600,7 @@ def build_match_proposals(
 
     proposals: list[dict[str, Any]] = []
     for record_index, record in enumerate(records):
-        if str(record.get("municipality") or "") not in focus_municipalities:
+        if not record_is_wam_matching_target(record, focus_municipalities, extra_focus_office_nos):
             continue
 
         strict_record_name = normalize_name(record.get("office_name"))
@@ -747,11 +763,12 @@ def build_override_proposals(
     wam_rows: list[dict[str, Any]],
     override_rows: list[dict[str, str]],
     focus_municipalities: set[str],
+    extra_focus_office_nos: set[str],
 ) -> list[dict[str, Any]]:
     record_index_by_office_no = {
         str(record.get("office_no")): record_index
         for record_index, record in enumerate(records)
-        if str(record.get("municipality") or "") in focus_municipalities
+        if record_is_wam_matching_target(record, focus_municipalities, extra_focus_office_nos)
     }
     wam_index_by_office_number = {
         str(wam_row.get("office_number")): wam_index
@@ -791,9 +808,19 @@ def assign_matches(
     wam_rows: list[dict[str, Any]],
     focus_municipalities: set[str],
     override_rows: list[dict[str, str]] | None = None,
+    extra_focus_office_nos: set[str] | None = None,
 ) -> tuple[dict[int, dict[str, Any]], list[dict[str, Any]]]:
-    proposals = build_match_proposals(records, wam_rows, focus_municipalities)
-    proposals.extend(build_override_proposals(records, wam_rows, override_rows or [], focus_municipalities))
+    extra_focus_office_nos = extra_focus_office_nos or set()
+    proposals = build_match_proposals(records, wam_rows, focus_municipalities, extra_focus_office_nos)
+    proposals.extend(
+        build_override_proposals(
+            records,
+            wam_rows,
+            override_rows or [],
+            focus_municipalities,
+            extra_focus_office_nos,
+        )
+    )
     confidence_priority = {"high": 3, "medium": 2, "low": 1}
     proposals_by_record: dict[int, list[dict[str, Any]]] = defaultdict(list)
     for proposal in proposals:
@@ -1153,6 +1180,11 @@ def main() -> None:
         for value in args.wam_focus_municipalities.split(",")
         if value.strip()
     }
+    extra_focus_office_nos = {
+        value.strip()
+        for value in args.wam_extra_focus_office_nos.split(",")
+        if value.strip()
+    }
     dashboard_input = resolve_path(args.dashboard_input)
     wam_input = resolve_path(args.wam_details_input)
     override_input = resolve_path(args.wam_match_override_input)
@@ -1172,7 +1204,13 @@ def main() -> None:
     link_lookup = link_lookup_by_office(link_rows)
 
     records = deepcopy(dashboard_payload.get("records", []))
-    chosen_matches, match_rows = assign_matches(records, wam_rows, focus_municipalities, override_rows)
+    chosen_matches, match_rows = assign_matches(
+        records,
+        wam_rows,
+        focus_municipalities,
+        override_rows,
+        extra_focus_office_nos,
+    )
 
     merged_records: list[dict[str, Any]] = []
     matched_wam_indices = {proposal["wam_index"] for proposal in chosen_matches.values()}
