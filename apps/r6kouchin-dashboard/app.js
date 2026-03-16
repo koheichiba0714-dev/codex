@@ -719,8 +719,15 @@ function normalizeCorporationName(value) {
   return String(value ?? "")
     .normalize("NFKC")
     .trim()
-    .replace(/\s+/g, "")
-    .toLowerCase();
+    .toLowerCase()
+    .replace(/^(㈱|\(株\)|（株）)/, "株式会社")
+    .replace(/^(㈲|\(有\)|（有）)/, "有限会社")
+    .replace(/^npo法人/, "特定非営利活動法人")
+    .replace(/^\(一社\)|^（一社）/, "一般社団法人")
+    .replace(/^\(社福\)|^（社福）/, "社会福祉法人")
+    .replace(/[‐‑‒–—―ｰ－-]/g, "ー")
+    .replace(/[・･·]/g, "")
+    .replace(/\s+/g, "");
 }
 
 function getCorporationKey(value) {
