@@ -69,6 +69,43 @@ const LEGAL_STAFFING_RATIO_HIGH = 6;   // R6新設・手厚い
 /* 比較用の月額ライン。報酬算定区分の境目として使う。 */
 const REFERENCE_WAGE_LINE_YEN = 15000;
 
+/* 北海道公式の就労継続支援B型 概要版から直近3年分を手元表示用に保持。
+   令和5年度から平均工賃月額の算定方法が変更されている。 */
+const HOKKAIDO_B_TYPE_HISTORY = {
+  source_page_url: "https://www.pref.hokkaido.lg.jp/hf/shf/ko-chin.html",
+  caution:
+    "令和5年度から平均工賃月額の算定方法が変わっているため、令和4年度との伸びは制度上の計算変更も含む。",
+  years: [
+    {
+      fiscal_year_label: "令和4年度",
+      average_wage_monthly_yen: 19931.7,
+      facility_count: 1021,
+      average_wage_hourly_yen: 275.3,
+      calculation_method_label: "旧算定方式",
+      source_url:
+        "https://www.pref.hokkaido.lg.jp/fs/1/2/9/0/1/1/4/7/_/%E4%BB%A4%E5%92%8C4%E5%B9%B4%E5%BA%A6%20%E6%A6%82%E8%A6%81%E7%89%88.pdf",
+    },
+    {
+      fiscal_year_label: "令和5年度",
+      average_wage_monthly_yen: 26675.4,
+      facility_count: 1024,
+      average_wage_hourly_yen: 261.7,
+      calculation_method_label: "新算定方式へ変更",
+      source_url:
+        "https://www.pref.hokkaido.lg.jp/fs/1/2/9/0/1/1/3/6/_/R5%E5%B7%A5%E8%B3%83%E5%AE%9F%E7%B8%BE%E7%8A%B6%E6%B3%81%28%E6%A6%82%E8%A6%81%29.pdf",
+    },
+    {
+      fiscal_year_label: "令和6年度",
+      average_wage_monthly_yen: 27361,
+      facility_count: 1235,
+      average_wage_hourly_yen: 259.6,
+      calculation_method_label: "現行算定方式",
+      source_url:
+        "https://www.pref.hokkaido.lg.jp/fs/1/2/9/0/1/1/2/3/_/R6%E5%B7%A5%E8%B3%83%E5%AE%9F%E7%B8%BE%E7%8A%B6%E6%B3%81%28%E6%A6%82%E8%A6%81%29.pdf",
+    },
+  ],
+};
+
 /* 人口順ソート用。北海道は令和7年1月1日、札幌市の区は令和8年1月1日の住民基本台帳人口を使用。 */
 const MUNICIPALITY_POPULATION = {
   "札幌市": 1955678,
@@ -642,6 +679,7 @@ async function init() {
   renderLoadingState();
   state.records = await loadDashboardRecords(dashboard);
   renderMeta(dashboard);
+  renderHistoricalTrend(dashboard);
   renderQuality(dashboard, state.records);
   populateFilterOptions(state.records);
   bindEvents();
@@ -1506,6 +1544,9 @@ function renderLoadingState() {
   document.getElementById("fixList").innerHTML = loadingCard;
   document.getElementById("highHighList").innerHTML = loadingCard;
   document.getElementById("statsGrid").innerHTML = loadingCard;
+  document.getElementById("historyTrendGrid").innerHTML = loadingCard;
+  document.getElementById("historyTrendFoot").innerHTML = "";
+  document.getElementById("historyTrendSummary").textContent = "年度推移を読み込み中...";
   document.getElementById("recordsCardList").innerHTML = loadingCard;
   [
     "municipalityChart",
@@ -1540,6 +1581,96 @@ function renderMeta(dashboard) {
     updatedAt && !Number.isNaN(updatedAt.valueOf()) ? updatedAt.toLocaleString("ja-JP") : "-";
   document.getElementById("totalRecords").textContent = formatCount(state.records.length);
   document.getElementById("wamMatchedCount").textContent = formatCount(matchSummary.matched_record_count ?? 0);
+}
+
+function renderHistoricalTrend(dashboard) {
+  const root = document.getElementById("historyTrendGrid");
+  const foot = document.getElementById("historyTrendFoot");
+  const summary = document.getElementById("historyTrendSummary");
+  if (!root || !foot || !summary) return;
+
+  const history = dashboard.analytics?.historical_b_type_overview ?? HOKKAIDO_B_TYPE_HISTORY;
+  const years = Array.isArray(history.years) ? history.years : [];
+  if (!years.length) {
+    root.innerHTML = document.getElementById("emptyStateTemplate").innerHTML;
+    foot.innerHTML = "";
+    summary.textContent = "過去3年の概要データなし";
+    return;
+  }
+
+  const sortedYears = [...years].sort((left, right) =>
+    String(left.fiscal_year_label ?? "").localeCompare(String(right.fiscal_year_label ?? ""), "ja")
+  );
+  const latest = sortedYears[sortedYears.length - 1];
+  const baseline = sortedYears[0];
+  const totalGrowthRate =
+    isNumber(latest.average_wage_monthly_yen) &&
+    isNumber(baseline.average_wage_monthly_yen) &&
+    baseline.average_wage_monthly_yen > 0
+      ? latest.average_wage_monthly_yen / baseline.average_wage_monthly_yen - 1
+      : null;
+  const facilityDelta =
+    isNumber(latest.facility_count) && isNumber(baseline.facility_count)
+      ? latest.facility_count - baseline.facility_count
+      : null;
+
+  summary.textContent = totalGrowthRate != null
+    ? `${baseline.fiscal_year_label}比 ${formatSignedPercent(totalGrowthRate)} / 施設数 ${formatSignedCount(facilityDelta)}`
+    : "直近3年の全道推移";
+
+  root.innerHTML = sortedYears
+    .map((year, index) => {
+      const previous = sortedYears[index - 1];
+      const diffYen =
+        previous && isNumber(year.average_wage_monthly_yen) && isNumber(previous.average_wage_monthly_yen)
+          ? year.average_wage_monthly_yen - previous.average_wage_monthly_yen
+          : null;
+      const diffRate =
+        previous && isNumber(year.average_wage_monthly_yen) && isNumber(previous.average_wage_monthly_yen) && previous.average_wage_monthly_yen > 0
+          ? year.average_wage_monthly_yen / previous.average_wage_monthly_yen - 1
+          : null;
+      const yearSourceUrl = safeExternalUrl(year.source_url);
+      return `
+        <article class="history-card${index === sortedYears.length - 1 ? " is-latest" : ""}${String(year.calculation_method_label ?? "").includes("変更") ? " is-caution" : ""}">
+          <p class="section-kicker">${escapeHtml(year.fiscal_year_label ?? "-")}</p>
+          <h3>平均工賃/月</h3>
+          <strong>${escapeHtml(formatOfficialYen(year.average_wage_monthly_yen))}</strong>
+          <p>北海道内 ${formatCount(year.facility_count ?? 0)} 事業所 / 平均工賃/時間 ${escapeHtml(formatOfficialYen(year.average_wage_hourly_yen))}</p>
+          <div class="history-chip-row">
+            <span class="history-chip${diffRate != null && diffRate > 0 ? " is-positive" : ""}">${escapeHtml(
+              previous ? `前年度比 ${formatSignedPercent(diffRate)}` : "比較起点"
+            )}</span>
+            <span class="history-chip">${escapeHtml(previous && diffYen != null ? `前年差 ${formatSignedYen(diffYen)}` : String(year.calculation_method_label ?? "-"))}</span>
+            ${
+              previous && String(year.calculation_method_label ?? "").includes("変更")
+                ? '<span class="history-chip is-caution">算定方法変更あり</span>'
+                : `<span class="history-chip">${escapeHtml(String(year.calculation_method_label ?? "-"))}</span>`
+            }
+          </div>
+          ${yearSourceUrl ? `<a class="history-link" href="${escapeAttribute(yearSourceUrl)}" target="_blank" rel="noreferrer">概要PDFを見る</a>` : ""}
+        </article>
+      `;
+    })
+    .join("");
+
+  const pageUrl = safeExternalUrl(history.source_page_url);
+  foot.innerHTML = `
+    <article class="history-note">
+      <strong>比較の読み方</strong>
+      <p>${escapeHtml(history.caution ?? "年度比較の前提差があるため、増減は制度変更も含めて読む。")}</p>
+      <div class="history-links">
+        ${pageUrl ? `<a class="history-link" href="${escapeAttribute(pageUrl)}" target="_blank" rel="noreferrer">北海道公式ページ</a>` : ""}
+        ${sortedYears
+          .map((year) => {
+            const yearSourceUrl = safeExternalUrl(year.source_url);
+            return yearSourceUrl
+              ? `<a class="history-link" href="${escapeAttribute(yearSourceUrl)}" target="_blank" rel="noreferrer">${escapeHtml(year.fiscal_year_label ?? "-")} 概要</a>`
+              : "";
+          })
+          .join("")}
+      </div>
+    </article>
+  `;
 }
 
 function renderQuality(dashboard, records = state.records) {
@@ -2751,9 +2882,22 @@ function formatMaybeYen(value) {
   return isNumber(value) ? `${formatCount(Math.round(value))}円` : "-";
 }
 
+function formatOfficialYen(value) {
+  if (!isNumber(value)) return "-";
+  if (Number.isInteger(value)) {
+    return `${formatCount(value)}円`;
+  }
+  return `${decimalFormatter.format(value)}円`;
+}
+
 function formatSignedYen(value) {
   if (!isNumber(value)) return "-";
   return `${value >= 0 ? "+" : ""}${formatCount(Math.round(value))}円`;
+}
+
+function formatSignedCount(value) {
+  if (!isNumber(value)) return "-";
+  return `${value >= 0 ? "+" : ""}${formatCount(value)}件`;
 }
 
 function formatCount(value) {

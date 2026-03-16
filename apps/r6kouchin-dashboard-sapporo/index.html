@@ -23,6 +23,7 @@
         </div>
         <nav class="sidebar-nav">
           <a href="#overviewHeading" class="nav-link is-active">ダッシュボード</a>
+          <a href="#historyHeading" class="nav-link">3年推移</a>
           <a href="#filtersHeading" class="nav-link">絞り込み</a>
           <a href="#tableHeading" class="nav-link">一覧比較</a>
           <a href="#detailHeading" class="nav-link">事業所詳細</a>
@@ -120,6 +121,19 @@
               </div>
             </div>
             <section class="stats-grid" id="statsGrid" aria-label="集計カード"></section>
+          </section>
+
+          <section class="panel history-panel" aria-labelledby="historyHeading">
+            <div class="panel-head">
+              <div>
+                <p class="section-kicker">過去3年</p>
+                <h2 id="historyHeading">北海道全体の平均工賃推移</h2>
+                <p class="panel-note">事業所別ではなく、北海道公式の年度概要にある就労継続支援B型の全道平均を並べた。</p>
+              </div>
+              <p id="historyTrendSummary" class="table-summary"></p>
+            </div>
+            <div id="historyTrendGrid" class="history-grid"></div>
+            <div id="historyTrendFoot" class="history-foot"></div>
           </section>
 
           <section class="panel explain-panel is-collapsed" data-collapsible aria-labelledby="termsHeading">

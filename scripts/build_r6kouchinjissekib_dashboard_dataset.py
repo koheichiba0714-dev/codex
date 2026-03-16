@@ -197,6 +197,49 @@ LINK_FIELD_ORDER = [
     "instagram_confidence",
 ]
 
+HOKKAIDO_B_TYPE_HISTORY = {
+    "source_page_url": "https://www.pref.hokkaido.lg.jp/hf/shf/ko-chin.html",
+    "caution": (
+        "令和5年度から平均工賃月額の算定方法が変わっているため、"
+        "令和4年度との伸びは制度上の計算変更も含む。"
+    ),
+    "years": [
+        {
+            "fiscal_year_label": "令和4年度",
+            "average_wage_monthly_yen": 19931.7,
+            "facility_count": 1021,
+            "average_wage_hourly_yen": 275.3,
+            "calculation_method_label": "旧算定方式",
+            "source_url": (
+                "https://www.pref.hokkaido.lg.jp/fs/1/2/9/0/1/1/4/7/_/"
+                "%E4%BB%A4%E5%92%8C4%E5%B9%B4%E5%BA%A6%20%E6%A6%82%E8%A6%81%E7%89%88.pdf"
+            ),
+        },
+        {
+            "fiscal_year_label": "令和5年度",
+            "average_wage_monthly_yen": 26675.4,
+            "facility_count": 1024,
+            "average_wage_hourly_yen": 261.7,
+            "calculation_method_label": "新算定方式へ変更",
+            "source_url": (
+                "https://www.pref.hokkaido.lg.jp/fs/1/2/9/0/1/1/3/6/_/"
+                "R5%E5%B7%A5%E8%B3%83%E5%AE%9F%E7%B8%BE%E7%8A%B6%E6%B3%81%28%E6%A6%82%E8%A6%81%29.pdf"
+            ),
+        },
+        {
+            "fiscal_year_label": "令和6年度",
+            "average_wage_monthly_yen": 27361,
+            "facility_count": 1235,
+            "average_wage_hourly_yen": 259.6,
+            "calculation_method_label": "現行算定方式",
+            "source_url": (
+                "https://www.pref.hokkaido.lg.jp/fs/1/2/9/0/1/1/2/3/_/"
+                "R6%E5%B7%A5%E8%B3%83%E5%AE%9F%E7%B8%BE%E7%8A%B6%E6%B3%81%28%E6%A6%82%E8%A6%81%29.pdf"
+            ),
+        },
+    ],
+}
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
@@ -1237,6 +1280,7 @@ def main() -> None:
         "overall_wage_stats": integrated_payload["analytics"].get("overall_wage_stats"),
         "overall_utilization_stats": integrated_payload["analytics"].get("overall_utilization_stats"),
         "wam_match_summary": integrated_payload["analytics"].get("wam_match_summary"),
+        "historical_b_type_overview": deepcopy(HOKKAIDO_B_TYPE_HISTORY),
     }
     app_records = slim_records_for_app(merged_records)
     app_payload["records"] = []
