@@ -33,6 +33,20 @@ const CORPORATION_SORT_OPTIONS = [
   { key: "wage", label: "工賃順" },
   { key: "utilization", label: "利用率順" },
 ];
+const LEGAL_ENTITY_PREFIXES = [
+  "株式会社",
+  "有限会社",
+  "合同会社",
+  "一般社団法人",
+  "一般財団法人",
+  "公益社団法人",
+  "公益財団法人",
+  "社会福祉法人",
+  "医療法人",
+  "学校法人",
+  "宗教法人",
+  "特定非営利活動法人",
+];
 
 /* 工賃レンジごとの内部計算テーブル */
 const WAGE_TIER_TABLE = [
@@ -212,6 +226,7 @@ const state = {
   selectedRepresentativeKey: null,
   selectedRepresentativeLabel: null,
   activePreset: INITIAL_PRESET,
+  corporationGroupIndex: null,
 };
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -482,10 +497,12 @@ function openDetailDialog() {
   openDialogElement(document.getElementById("detailDialog"));
 }
 
-function openCorporationDialog(corporationName) {
-  const label = String(corporationName ?? "").trim();
-  if (!label) return;
-  renderCorporationDialog(label);
+function openCorporationDialog(officeNo) {
+  const record = findRecordByOffice(officeNo);
+  if (!record) return;
+  const corporationKey = corporationIdentityKey(record);
+  if (!corporationKey) return;
+  renderCorporationDialog(corporationKey);
   closeDialogElement(document.getElementById("detailDialog"));
   closeDialogElement(document.getElementById("representativeDialog"));
   openDialogElement(document.getElementById("corporationDialog"));
@@ -597,18 +614,18 @@ function bindEvents() {
     const corporationSortTrigger = event.target.closest("[data-corporation-sort]");
     if (corporationSortTrigger) {
       const sortKey = corporationSortTrigger.getAttribute("data-corporation-sort");
-      if (sortKey && state.selectedCorporationLabel) {
+      if (sortKey && state.selectedCorporationKey) {
         state.selectedCorporationSort = sortKey;
-        renderCorporationDialog(state.selectedCorporationLabel);
+        renderCorporationDialog(state.selectedCorporationKey);
       }
       return;
     }
 
-    const corporationTrigger = event.target.closest("[data-open-corporation]");
+    const corporationTrigger = event.target.closest("[data-open-corporation-office]");
     if (corporationTrigger) {
-      const corporationName = corporationTrigger.getAttribute("data-open-corporation");
-      if (!corporationName) return;
-      openCorporationDialog(corporationName);
+      const officeNo = corporationTrigger.getAttribute("data-open-corporation-office");
+      if (!officeNo) return;
+      openCorporationDialog(officeNo);
       return;
     }
 
@@ -752,6 +769,19 @@ function getSelectedRecord() {
   );
 }
 
+function findRecordByOffice(officeNo) {
+  if (officeNo == null) return null;
+  return (
+    state.filteredRecords.find((record) => String(record.office_no) === String(officeNo)) ??
+    state.records.find((record) => String(record.office_no) === String(officeNo)) ??
+    null
+  );
+}
+
+function compactInlineText(value) {
+  return String(value ?? "").replace(/\s+/g, " ").trim();
+}
+
 function normalizeCorporationName(value) {
   return String(value ?? "")
     .normalize("NFKC")
@@ -765,6 +795,17 @@ function normalizeCorporationName(value) {
     .replace(/[‐‑‒–—―ｰ－-]/g, "ー")
     .replace(/[・･·]/g, "")
     .replace(/\s+/g, "");
+}
+
+function hasLegalEntityPrefix(value) {
+  const key = normalizeCorporationName(value);
+  return LEGAL_ENTITY_PREFIXES.some((prefix) => key.startsWith(prefix));
+}
+
+function stripLegalEntityPrefix(value) {
+  const key = typeof value === "string" ? value : normalizeCorporationName(value);
+  const prefix = LEGAL_ENTITY_PREFIXES.find((item) => key.startsWith(item));
+  return prefix ? key.slice(prefix.length) : key;
 }
 
 function normalizeRepresentativeName(value) {
@@ -801,23 +842,142 @@ function getCorporationKey(value) {
   return key || null;
 }
 
+function getCorporationBaseKey(value) {
+  const key = getCorporationKey(value);
+  if (!key) return null;
+  return stripLegalEntityPrefix(key) || key;
+}
+
 function getRepresentativeKey(value) {
   const key = normalizeRepresentativeName(value);
   return key || null;
 }
 
-function corporationRecords(corporationName) {
-  const key = getCorporationKey(corporationName);
-  if (!key) return [];
-  return state.records.filter((record) => getCorporationKey(record.corporation_name) === key);
+function preferredCorporationRecord(records) {
+  if (!records.length) return null;
+  return [...records].sort((left, right) => {
+    const leftLabel = compactInlineText(left.corporation_name);
+    const rightLabel = compactInlineText(right.corporation_name);
+    const leftScore =
+      (hasLegalEntityPrefix(leftLabel) ? 100 : 0) +
+      (String(left.corporation_number ?? "").trim() ? 20 : 0) +
+      leftLabel.length;
+    const rightScore =
+      (hasLegalEntityPrefix(rightLabel) ? 100 : 0) +
+      (String(right.corporation_number ?? "").trim() ? 20 : 0) +
+      rightLabel.length;
+    if (rightScore !== leftScore) return rightScore - leftScore;
+    return rightLabel.localeCompare(leftLabel, "ja");
+  })[0];
+}
+
+function buildCorporationGroupIndex() {
+  if (state.corporationGroupIndex?.recordsRef === state.records) {
+    return state.corporationGroupIndex;
+  }
+
+  const representativeBaseGroups = new Map();
+  state.records.forEach((record) => {
+    const representativeKey = getRepresentativeKey(record.representative_name);
+    const baseKey = getCorporationBaseKey(record.corporation_name);
+    const corporationNumber = compactInlineText(record.corporation_number);
+    if (!representativeKey || !baseKey) return;
+    const clusterKey = `${representativeKey}::${baseKey}`;
+    const cluster =
+      representativeBaseGroups.get(clusterKey) ??
+      {
+        numbers: new Set(),
+      };
+    if (corporationNumber) {
+      cluster.numbers.add(corporationNumber);
+    }
+    representativeBaseGroups.set(clusterKey, cluster);
+  });
+
+  const corporationNameGroups = new Map();
+  state.records.forEach((record) => {
+    const corporationKey = getCorporationKey(record.corporation_name);
+    const corporationNumber = compactInlineText(record.corporation_number);
+    if (!corporationKey) return;
+    const representativeKey = getRepresentativeKey(record.representative_name);
+    const baseKey = getCorporationBaseKey(record.corporation_name);
+    const clusterKey = representativeKey && baseKey ? `${representativeKey}::${baseKey}` : null;
+    const inferredByRepresentative =
+      !corporationNumber && clusterKey && representativeBaseGroups.get(clusterKey)?.numbers.size === 1
+        ? [...representativeBaseGroups.get(clusterKey).numbers][0]
+        : null;
+    const cluster =
+      corporationNameGroups.get(corporationKey) ??
+      {
+        numbers: new Set(),
+      };
+    if (corporationNumber || inferredByRepresentative) {
+      cluster.numbers.add(corporationNumber || inferredByRepresentative);
+    }
+    corporationNameGroups.set(corporationKey, cluster);
+  });
+
+  const keyByOffice = new Map();
+  const recordsByKey = new Map();
+  const labelByKey = new Map();
+
+  state.records.forEach((record) => {
+    const officeKey = String(record.office_no ?? "").trim();
+    const corporationNumber = compactInlineText(record.corporation_number);
+    const representativeKey = getRepresentativeKey(record.representative_name);
+    const baseKey = getCorporationBaseKey(record.corporation_name);
+    const corporationNameKey = getCorporationKey(record.corporation_name);
+    const clusterKey = representativeKey && baseKey ? `${representativeKey}::${baseKey}` : null;
+    const inferredByExactName =
+      !corporationNumber && corporationNameKey && corporationNameGroups.get(corporationNameKey)?.numbers.size === 1
+        ? [...corporationNameGroups.get(corporationNameKey).numbers][0]
+        : null;
+    const inferredCorporationNumber =
+      inferredByExactName ||
+      (!corporationNumber && clusterKey && representativeBaseGroups.get(clusterKey)?.numbers.size === 1
+        ? [...representativeBaseGroups.get(clusterKey).numbers][0]
+        : null);
+    const corporationKey =
+      (corporationNumber && `corp:${corporationNumber}`) ||
+      (inferredCorporationNumber && `corp:${inferredCorporationNumber}`) ||
+      (getCorporationKey(record.corporation_name) && `name:${getCorporationKey(record.corporation_name)}`) ||
+      `office:${officeKey}`;
+
+    keyByOffice.set(officeKey, corporationKey);
+    const list = recordsByKey.get(corporationKey) ?? [];
+    list.push(record);
+    recordsByKey.set(corporationKey, list);
+  });
+
+  recordsByKey.forEach((records, key) => {
+    labelByKey.set(key, compactInlineText(preferredCorporationRecord(records)?.corporation_name) || "-");
+  });
+
+  state.corporationGroupIndex = {
+    recordsRef: state.records,
+    keyByOffice,
+    recordsByKey,
+    labelByKey,
+  };
+  return state.corporationGroupIndex;
+}
+
+function corporationRecords(corporationKey) {
+  if (!corporationKey) return [];
+  const index = buildCorporationGroupIndex();
+  return index.recordsByKey.get(corporationKey) ?? [];
 }
 
 function corporationIdentityKey(record) {
-  return (
-    String(record.corporation_number ?? "").trim() ||
-    getCorporationKey(record.corporation_name) ||
-    `office:${String(record.office_no ?? "").trim()}`
-  );
+  const officeKey = String(record?.office_no ?? "").trim();
+  if (!officeKey) return null;
+  const index = buildCorporationGroupIndex();
+  return index.keyByOffice.get(officeKey) ?? null;
+}
+
+function corporationLabelForKey(corporationKey) {
+  const index = buildCorporationGroupIndex();
+  return index.labelByKey.get(corporationKey) ?? "-";
 }
 
 function representativeRecords(representativeName) {
@@ -845,7 +1005,19 @@ function representativeCorporationGroups(representativeName) {
     current.records.push(record);
     groups.set(key, current);
   });
-  return [...groups.values()].sort((left, right) => {
+  return [...groups.values()]
+    .map((group) => {
+      const preferred = preferredCorporationRecord(group.records);
+      return {
+        ...group,
+        corporation_name: compactInlineText(preferred?.corporation_name ?? group.corporation_name),
+        corporation_number: compactInlineText(preferred?.corporation_number ?? group.corporation_number),
+        representative_name: preferred?.representative_name ?? group.representative_name,
+        representative_role: preferred?.representative_role ?? group.representative_role,
+        representative_raw: preferred?.representative_raw ?? group.representative_raw,
+      };
+    })
+    .sort((left, right) => {
     if (right.records.length !== left.records.length) return right.records.length - left.records.length;
     const wageDiff = meanFor(right.records, "average_wage_yen") - meanFor(left.records, "average_wage_yen");
     if (Number.isFinite(wageDiff) && wageDiff !== 0) return wageDiff;
@@ -888,16 +1060,20 @@ function sortCorporationRecords(records, sortKey = state.selectedCorporationSort
   });
 }
 
-function corporationLinkButton(corporationName, className = "entity-link-button") {
-  const label = String(corporationName ?? "").trim();
+function corporationLinkButton(recordOrName, className = "entity-link-button", officeNo = null) {
+  const label = compactInlineText(
+    typeof recordOrName === "object" && recordOrName != null ? recordOrName.corporation_name : recordOrName
+  );
+  const resolvedOfficeNo =
+    officeNo ??
+    (typeof recordOrName === "object" && recordOrName != null ? String(recordOrName.office_no ?? "").trim() : "");
   if (!label) return escapeHtml("-");
-  return `<button class="${escapeAttribute(className)}" type="button" data-open-corporation="${escapeAttribute(label)}">${escapeHtml(label)}</button>`;
+  if (!resolvedOfficeNo) return escapeHtml(label);
+  return `<button class="${escapeAttribute(className)}" type="button" data-open-corporation-office="${escapeAttribute(resolvedOfficeNo)}">${escapeHtml(label)}</button>`;
 }
 
 function selectRecord(officeNo, options = {}) {
-  const record =
-    state.filteredRecords.find((item) => String(item.office_no) === String(officeNo)) ??
-    state.records.find((item) => String(item.office_no) === String(officeNo));
+  const record = findRecordByOffice(officeNo);
   if (!record) return;
   state.selectedOfficeNo = String(officeNo);
   renderCharts(state.filteredRecords);
@@ -1533,9 +1709,9 @@ function renderDetail(record) {
   const instagramSearchUrl = buildInstagramSearchUrl(record);
   const homepageSource = record.homepage_source ? linkSourceLabel(record.homepage_source) : null;
   const instagramSource = record.instagram_source ? linkSourceLabel(record.instagram_source) : null;
-  const corporationName = String(record.corporation_name ?? "").trim();
+  const corporationName = compactInlineText(record.corporation_name);
   const corporationActionButton = corporationName
-    ? `<button class="ghost-button" type="button" data-open-corporation="${escapeAttribute(corporationName)}">法人の事業所一覧</button>`
+    ? `<button class="ghost-button" type="button" data-open-corporation-office="${escapeAttribute(record.office_no)}">法人の事業所一覧</button>`
     : "";
   const representativeLabel = representativeDisplayText(record);
   const representativeGroups = representativeCorporationGroups(representativeLabel);
@@ -1554,7 +1730,7 @@ function renderDetail(record) {
           <div>
             <p class="section-kicker">${escapeHtml(record.municipality ?? "-")} / No.${escapeHtml(record.office_no ?? "-")}</p>
             <h3>${escapeHtml(record.office_name ?? "-")}</h3>
-            <p class="detail-subtitle">${corporationLinkButton(record.corporation_name, "entity-link-button detail-entity-link")} / ${escapeHtml(record.corporation_type_label ?? "-")}</p>
+            <p class="detail-subtitle">${corporationLinkButton(record, "entity-link-button detail-entity-link")} / ${escapeHtml(record.corporation_type_label ?? "-")}</p>
           </div>
         <div class="selected-office-status">
             ${record.wage_outlier_flag ? outlierBadge(record.wage_outlier_flag, record.wage_outlier_severity) : ""}
@@ -1589,7 +1765,7 @@ function renderDetail(record) {
       <div>
         <p class="section-kicker">${escapeHtml(record.municipality ?? "-")} / No.${escapeHtml(record.office_no ?? "-")}</p>
         <h3>${escapeHtml(record.office_name ?? "-")}</h3>
-        <p class="detail-subtitle">${corporationLinkButton(record.corporation_name, "entity-link-button detail-entity-link")} / ${escapeHtml(record.corporation_type_label ?? "-")}</p>
+        <p class="detail-subtitle">${corporationLinkButton(record, "entity-link-button detail-entity-link")} / ${escapeHtml(record.corporation_type_label ?? "-")}</p>
       </div>
       <div class="detail-cta">
         ${corporationActionButton}
@@ -1679,13 +1855,13 @@ function renderDetail(record) {
   `;
 }
 
-function renderCorporationDialog(corporationName) {
+function renderCorporationDialog(corporationKey) {
   const dialogRoot = document.getElementById("corporationDialogContent");
   if (!dialogRoot) return;
 
-  const records = sortCorporationRecords(corporationRecords(corporationName));
-  state.selectedCorporationKey = getCorporationKey(corporationName);
-  state.selectedCorporationLabel = corporationName;
+  const records = sortCorporationRecords(corporationRecords(corporationKey));
+  state.selectedCorporationKey = corporationKey;
+  state.selectedCorporationLabel = corporationLabelForKey(corporationKey);
 
   if (!records.length) {
     dialogRoot.innerHTML = document.getElementById("emptyStateTemplate").innerHTML;
@@ -1725,7 +1901,7 @@ function renderCorporationDialog(corporationName) {
     <div class="corporation-hero">
       <div>
         <p class="section-kicker">法人名からまとめて確認</p>
-        <h3>${escapeHtml(corporationName)}</h3>
+        <h3>${escapeHtml(state.selectedCorporationLabel)}</h3>
         <p class="detail-subtitle">${escapeHtml(corporationTypeLabel)} / 大阪府内で ${formatCount(records.length)} 事業所${representativeLabel ? ` / 代表者 ${escapeHtml(representativeLabel)}` : ""}</p>
       </div>
       <div class="selected-office-actions">
@@ -1880,7 +2056,7 @@ function renderRepresentativeDialog(representativeName) {
                 <div class="corporation-office-head">
                   <div>
                     <p class="section-kicker">${escapeHtml(group.records[0]?.municipality ?? "-")} / 法人番号 ${escapeHtml(group.corporation_number ?? "-")}</p>
-                    <h3>${corporationLinkButton(group.corporation_name, "entity-link-button detail-entity-link")}</h3>
+                    <h3>${corporationLinkButton(group.records[0], "entity-link-button detail-entity-link")}</h3>
                     <p class="detail-subtitle">${escapeHtml(group.representative_raw ?? representativeName)}</p>
                   </div>
                 </div>
@@ -1926,7 +2102,7 @@ function renderTable(records) {
           <td class="numeric">${formatNullable(record.office_no)}</td>
           <td>${escapeHtml(record.office_name ?? "-")}</td>
           <td>${escapeHtml(getAreaLabel(record) || record.municipality || "-")}</td>
-          <td>${corporationLinkButton(record.corporation_name, "entity-link-button table-entity-link")}</td>
+          <td>${corporationLinkButton(record, "entity-link-button table-entity-link")}</td>
           <td class="numeric">${formatWage(record.average_wage_yen, record.average_wage_error)}</td>
           <td class="numeric">${formatRatio(record.wage_ratio_to_overall_mean)}</td>
           <td class="numeric">${formatPercent(record.daily_user_capacity_ratio)}</td>
@@ -1948,7 +2124,7 @@ function renderTable(records) {
               <div>
                 <p class="section-kicker">${escapeHtml(record.municipality ?? "-")} / No.${escapeHtml(record.office_no ?? "-")}</p>
                 <h3>${escapeHtml(record.office_name ?? "-")}</h3>
-                <p class="detail-subtitle">${corporationLinkButton(record.corporation_name, "entity-link-button detail-entity-link")}</p>
+                <p class="detail-subtitle">${corporationLinkButton(record, "entity-link-button detail-entity-link")}</p>
               </div>
               <button class="table-link" data-select-office="${escapeHtml(record.office_no)}" type="button">詳細</button>
             </div>
