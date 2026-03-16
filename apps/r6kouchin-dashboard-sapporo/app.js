@@ -106,6 +106,9 @@ const HOKKAIDO_B_TYPE_HISTORY = {
   ],
 };
 
+const HOS_CORPORATION_NAME = "合同会社 HOS";
+const HOS_PRIMARY_OFFICE_NO = "799";
+
 /* 人口順ソート用。北海道は令和7年1月1日、札幌市の区は令和8年1月1日の住民基本台帳人口を使用。 */
 const MUNICIPALITY_POPULATION = {
   "札幌市": 1955678,
@@ -582,6 +585,10 @@ function wageTierDistribution(records) {
 }
 const FILTER_PRESETS = {
   all: {},
+  "hos-office": {
+    municipality: "小樽市",
+    search: "HOS",
+  },
   "sapporo-city": {
     municipality: "札幌市",
   },
@@ -651,7 +658,7 @@ const state = {
   currentPage: 1,
   filters: createPresetFilters(INITIAL_PRESET),
   draftFilters: createPresetFilters(INITIAL_PRESET),
-  selectedOfficeNo: "339",
+  selectedOfficeNo: HOS_PRIMARY_OFFICE_NO,
   activePreset: INITIAL_PRESET,
 };
 
@@ -679,6 +686,7 @@ async function init() {
   renderLoadingState();
   state.records = await loadDashboardRecords(dashboard);
   renderMeta(dashboard);
+  renderHosManagement();
   renderHistoricalTrend(dashboard);
   renderQuality(dashboard, state.records);
   populateFilterOptions(state.records);
@@ -912,6 +920,19 @@ function normalizeCorporationName(value) {
   return String(value ?? "")
     .replace(/[\s\u3000]+/g, " ")
     .trim();
+}
+
+function getHosRecords(records = state.records) {
+  const targetName = normalizeCorporationName(HOS_CORPORATION_NAME);
+  return records.filter((record) => normalizeCorporationName(record.corporation_name) === targetName);
+}
+
+function getHosPrimaryOffice(records = state.records) {
+  return (
+    records.find((record) => String(record.office_no) === HOS_PRIMARY_OFFICE_NO) ??
+    getHosRecords(records)[0] ??
+    null
+  );
 }
 
 function renderCorporationTrigger(name, className = "corporation-link") {
@@ -1239,7 +1260,7 @@ function syncPresetButtons() {
   });
 }
 
-const MY_OFFICE_NO = "339";
+const MY_OFFICE_NO = HOS_PRIMARY_OFFICE_NO;
 
 function syncSelectedRecord(filtered) {
   if (!filtered.length) {
@@ -1285,6 +1306,10 @@ function openRecordDetailByOfficeNo(officeNo) {
 function applyStatsAction(action) {
   if (action === "history") {
     document.getElementById("historyHeading")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    return;
+  }
+  if (action === "hos-detail") {
+    openRecordDetailByOfficeNo(HOS_PRIMARY_OFFICE_NO);
     return;
   }
 
@@ -1549,6 +1574,10 @@ function renderLoadingState() {
   document.getElementById("fixList").innerHTML = loadingCard;
   document.getElementById("highHighList").innerHTML = loadingCard;
   document.getElementById("statsGrid").innerHTML = loadingCard;
+  document.getElementById("hosStatsGrid").innerHTML = loadingCard;
+  document.getElementById("hosPeerList").innerHTML = loadingCard;
+  document.getElementById("hosBenchmarkList").innerHTML = loadingCard;
+  document.getElementById("hosSummary").textContent = "HOS向け要点を読み込み中...";
   document.getElementById("historyTrendGrid").innerHTML = loadingCard;
   document.getElementById("historyTrendFoot").innerHTML = "";
   document.getElementById("historyTrendSummary").textContent = "年度推移を読み込み中...";
@@ -1586,6 +1615,227 @@ function renderMeta(dashboard) {
     updatedAt && !Number.isNaN(updatedAt.valueOf()) ? updatedAt.toLocaleString("ja-JP") : "-";
   document.getElementById("totalRecords").textContent = formatCount(state.records.length);
   document.getElementById("wamMatchedCount").textContent = formatCount(matchSummary.matched_record_count ?? 0);
+}
+
+function rankOfficeByWage(targetOfficeNo, records) {
+  const comparableRecords = records.filter((record) => isNumber(record.average_wage_yen));
+  const sorted = comparableRecords
+    .slice()
+    .sort((left, right) => right.average_wage_yen - left.average_wage_yen);
+  const rank = sorted.findIndex((record) => String(record.office_no) === String(targetOfficeNo));
+  if (rank === -1) return null;
+  return { rank: rank + 1, total: sorted.length };
+}
+
+function buildHosPeerCandidates(records, hosOffice) {
+  const hosCapacity = hosOffice.capacity ?? hosOffice.wam_office_capacity ?? 0;
+  const hosWage = hosOffice.average_wage_yen ?? 0;
+  return records
+    .filter(
+      (record) =>
+        String(record.office_no) !== String(hosOffice.office_no) &&
+        record.municipality === hosOffice.municipality &&
+        isNumber(record.average_wage_yen)
+    )
+    .sort((left, right) => {
+      const leftIsAbove = left.average_wage_yen >= hosWage ? 1 : 0;
+      const rightIsAbove = right.average_wage_yen >= hosWage ? 1 : 0;
+      if (leftIsAbove !== rightIsAbove) return rightIsAbove - leftIsAbove;
+
+      const leftCapacityGap = Math.abs((left.capacity ?? left.wam_office_capacity ?? 0) - hosCapacity);
+      const rightCapacityGap = Math.abs((right.capacity ?? right.wam_office_capacity ?? 0) - hosCapacity);
+      if (leftCapacityGap !== rightCapacityGap) return leftCapacityGap - rightCapacityGap;
+
+      const leftWageGap = Math.abs(left.average_wage_yen - hosWage);
+      const rightWageGap = Math.abs(right.average_wage_yen - hosWage);
+      if (leftWageGap !== rightWageGap) return leftWageGap - rightWageGap;
+
+      return (right.daily_user_capacity_ratio ?? -1) - (left.daily_user_capacity_ratio ?? -1);
+    })
+    .slice(0, 4);
+}
+
+function buildHosBenchmarkCandidates(records, hosOffice) {
+  const focusMunicipalities = new Set(["札幌市", hosOffice.municipality].filter(Boolean));
+  return records
+    .filter(
+      (record) =>
+        String(record.office_no) !== String(hosOffice.office_no) &&
+        focusMunicipalities.has(record.municipality) &&
+        record.market_position_quadrant === "高工賃 × 高稼働" &&
+        isNumber(record.average_wage_yen)
+    )
+    .sort((left, right) => {
+      const leftSameBand = left.capacity_band_label === hosOffice.capacity_band_label ? 1 : 0;
+      const rightSameBand = right.capacity_band_label === hosOffice.capacity_band_label ? 1 : 0;
+      if (leftSameBand !== rightSameBand) return rightSameBand - leftSameBand;
+
+      const leftMatched = left.wam_match_status === "matched" ? 1 : 0;
+      const rightMatched = right.wam_match_status === "matched" ? 1 : 0;
+      if (leftMatched !== rightMatched) return rightMatched - leftMatched;
+
+      return right.average_wage_yen - left.average_wage_yen;
+    })
+    .slice(0, 4);
+}
+
+function buildHosPeerReason(record, hosOffice) {
+  const wageGap =
+    isNumber(record.average_wage_yen) && isNumber(hosOffice.average_wage_yen)
+      ? record.average_wage_yen - hosOffice.average_wage_yen
+      : null;
+  const parts = [];
+  if (wageGap != null) {
+    parts.push(`HOS比 ${formatSignedYen(wageGap)}`);
+  }
+  if ((record.capacity ?? null) === (hosOffice.capacity ?? null)) {
+    parts.push("同じ定員");
+  }
+  parts.push(`利用率 ${formatPercent(record.daily_user_capacity_ratio)}`);
+  return parts.join(" / ");
+}
+
+function buildHosBenchmarkReason(record) {
+  const staffing = getStaffingComplianceLevel(record);
+  const parts = [
+    `平均工賃 ${formatMaybeYen(record.average_wage_yen)}`,
+    `利用率 ${formatPercent(record.daily_user_capacity_ratio)}`,
+  ];
+  if (staffing) {
+    parts.push(staffing.label);
+  }
+  return parts.join(" / ");
+}
+
+function renderHosWatchList(rootId, records, emptyLabel, buildReason) {
+  const root = document.getElementById(rootId);
+  if (!root) return;
+  if (!records.length) {
+    root.innerHTML = `<div class="empty-state"><h3>${escapeHtml(emptyLabel)}</h3></div>`;
+    return;
+  }
+
+  root.innerHTML = records
+    .map(
+      (record) => `
+        <article class="hos-watch-item">
+          <div>
+            <p class="strategy-kicker">${escapeHtml(record.municipality ?? "-")} / No.${escapeHtml(record.office_no ?? "-")}</p>
+            <strong>${escapeHtml(record.office_name ?? "-")}</strong>
+            <p class="detail-subtitle">${escapeHtml(record.corporation_name ?? "法人名未登録")}</p>
+          </div>
+          <div class="corporation-office-meta">
+            <span class="metric-chip">${escapeHtml(`平均工賃 ${formatWageText(record.average_wage_yen)}`)}</span>
+            <span class="metric-chip">${escapeHtml(`利用率 ${formatPercent(record.daily_user_capacity_ratio)}`)}</span>
+            ${record.wam_match_status === "matched" ? `<span class="metric-chip">人員詳細あり</span>` : ""}
+          </div>
+          <p>${escapeHtml(buildReason(record))}</p>
+          <div class="hos-watch-actions">
+            <button class="table-link" data-open-office-detail="${escapeAttribute(record.office_no ?? "")}" type="button">詳細</button>
+          </div>
+        </article>
+      `
+    )
+    .join("");
+}
+
+function renderHosManagement() {
+  const summary = document.getElementById("hosSummary");
+  const statsRoot = document.getElementById("hosStatsGrid");
+  const peerRoot = document.getElementById("hosPeerList");
+  const benchmarkRoot = document.getElementById("hosBenchmarkList");
+  if (!summary || !statsRoot || !peerRoot || !benchmarkRoot) return;
+
+  const hosRecords = getHosRecords(state.records);
+  const hosOffice = getHosPrimaryOffice(state.records);
+  if (!hosOffice) {
+    summary.textContent = "HOSの事業所データなし";
+    statsRoot.innerHTML = document.getElementById("emptyStateTemplate").innerHTML;
+    peerRoot.innerHTML = document.getElementById("emptyStateTemplate").innerHTML;
+    benchmarkRoot.innerHTML = document.getElementById("emptyStateTemplate").innerHTML;
+    return;
+  }
+
+  const allRank = rankOfficeByWage(hosOffice.office_no, state.records);
+  const municipalityRecords = state.records.filter((record) => record.municipality === hosOffice.municipality);
+  const municipalityRank = rankOfficeByWage(hosOffice.office_no, municipalityRecords);
+  const overallMean = meanFor(state.records, "average_wage_yen");
+  const municipalityMean = meanFor(municipalityRecords, "average_wage_yen");
+  const staffing = getStaffingComplianceLevel(hosOffice);
+  const peerCandidates = buildHosPeerCandidates(state.records, hosOffice);
+  const benchmarkCandidates = buildHosBenchmarkCandidates(state.records, hosOffice);
+
+  summary.textContent = [
+    hosOffice.office_name ?? "HOS事業所",
+    municipalityRank ? `${hosOffice.municipality} ${formatCount(municipalityRank.rank)}位 / ${formatCount(municipalityRank.total)}件` : null,
+    allRank ? `北海道上位 ${formatPercent(allRank.rank / allRank.total)}` : null,
+    displayQuadrantLabel(hosOffice.market_position_quadrant),
+  ]
+    .filter(Boolean)
+    .join(" / ");
+
+  const cards = [
+    {
+      label: "HOS自社詳細",
+      value: hosOffice.office_name ?? "-",
+      hint: "自社の工賃・人員・比較先をすぐ開く",
+      action: "hos-detail",
+      tone: "history",
+      cta: "詳細を見る",
+    },
+    {
+      label: "北海道での立ち位置",
+      value: allRank ? `上位 ${formatPercent(allRank.rank / allRank.total)}` : "-",
+      hint: allRank
+        ? `${formatCount(allRank.total)}件中 ${formatCount(allRank.rank)}位 / 平均工賃 ${formatMaybeYen(hosOffice.average_wage_yen)}`
+        : "全道順位を計算できない",
+    },
+    {
+      label: `${hosOffice.municipality}での立ち位置`,
+      value: municipalityRank ? `${formatCount(municipalityRank.rank)}位 / ${formatCount(municipalityRank.total)}件` : "-",
+      hint: municipalityMean != null
+        ? `${hosOffice.municipality}平均より ${formatSignedYen(hosOffice.average_wage_yen - municipalityMean)}`
+        : "市内平均との差なし",
+    },
+    {
+      label: "利用の埋まり方",
+      value: formatPercent(hosOffice.daily_user_capacity_ratio),
+      hint:
+        isNumber(hosOffice.average_daily_users) && isNumber(hosOffice.capacity)
+          ? `定員 ${formatCount(hosOffice.capacity)} 名に対し平均 ${ratioFormatter.format(hosOffice.average_daily_users)} 人`
+          : "利用実績データなし",
+    },
+    {
+      label: "職員配置の強み",
+      value: staffing?.label ?? "人員詳細なし",
+      hint: staffing
+        ? `${staffing.qualifiedTier} / 定員に対する支援職員 ${formatPercent(hosOffice.wam_key_staff_fte_per_capacity)}`
+        : "WAMの人員詳細が未一致",
+    },
+    {
+      label: "全道平均との差",
+      value: overallMean != null ? formatSignedYen(hosOffice.average_wage_yen - overallMean) : "-",
+      hint: `${formatCount(hosRecords.length)} 事業所を収録 / ${hosOffice.wam_match_status === "matched" ? "WAM一致済み" : "WAM未一致"}`,
+    },
+  ];
+
+  statsRoot.innerHTML = cards
+    .map(
+      (card) => `
+        <${card.action ? "button" : "article"} class="stat-card${card.action ? ` stat-card-action stat-card-${escapeAttribute(card.tone ?? "accent")}` : ""}"${card.action ? ` data-stat-action="${escapeAttribute(card.action)}" type="button"` : ""}>
+          <p>${escapeHtml(card.label)}</p>
+          <strong>${escapeHtml(card.value)}</strong>
+          <em>${escapeHtml(card.hint)}</em>
+          ${card.action ? `<span class="stat-card-cta">${escapeHtml(card.cta ?? "詳細を見る")}</span>` : ""}
+        </${card.action ? "button" : "article"}>
+      `
+    )
+    .join("");
+
+  renderHosWatchList("hosPeerList", peerCandidates, "まず比べる相手はまだ抽出できない", (record) =>
+    buildHosPeerReason(record, hosOffice)
+  );
+  renderHosWatchList("hosBenchmarkList", benchmarkCandidates, "札幌の好事例はまだ抽出できない", buildHosBenchmarkReason);
 }
 
 function renderHistoricalTrend(dashboard) {

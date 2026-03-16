@@ -23,6 +23,7 @@
         </div>
         <nav class="sidebar-nav">
           <a href="#overviewHeading" class="nav-link is-active">ダッシュボード</a>
+          <a href="#hosHeading" class="nav-link">HOS視点</a>
           <a href="#historyHeading" class="nav-link">3年推移</a>
           <a href="#filtersHeading" class="nav-link">絞り込み</a>
           <a href="#tableHeading" class="nav-link">一覧比較</a>
@@ -82,6 +83,7 @@
             <div class="filter-launch-body">
               <div class="preset-row" aria-label="クイック切り替え">
                 <button class="preset-chip" data-preset="all" type="button">全体</button>
+                <button class="preset-chip" data-preset="hos-office" type="button">HOS自社</button>
                 <button class="preset-chip is-active" data-preset="sapporo-city" type="button">札幌市</button>
                 <button class="preset-chip" data-preset="sapporo-otaru-wam" type="button">札幌市・小樽市詳細</button>
                 <button class="preset-chip" data-preset="high-wage" type="button">工賃高め</button>
@@ -121,6 +123,40 @@
               </div>
             </div>
             <section class="stats-grid" id="statsGrid" aria-label="集計カード"></section>
+          </section>
+
+          <section class="panel hos-panel" aria-labelledby="hosHeading">
+            <div class="panel-head">
+              <div>
+                <p class="section-kicker">HOS視点</p>
+                <h2 id="hosHeading">合同会社HOSが最初に見る情報</h2>
+                <p class="panel-note">自社の現在地、まず比べる相手、札幌・小樽で真似したい好事例をまとめた。</p>
+              </div>
+              <p id="hosSummary" class="table-summary"></p>
+            </div>
+            <section id="hosStatsGrid" class="stats-grid" aria-label="HOSサマリーカード"></section>
+            <section class="hos-watch-grid" aria-label="HOS比較リスト">
+              <article class="hos-watch-card">
+                <div class="hos-watch-head">
+                  <div>
+                    <p class="section-kicker">近い比較先</p>
+                    <h3>まず比べる相手</h3>
+                    <p>小樽市内で定員が近く、工賃の見比べ先になりやすい事業所。</p>
+                  </div>
+                </div>
+                <div id="hosPeerList" class="hos-watch-list"></div>
+              </article>
+              <article class="hos-watch-card">
+                <div class="hos-watch-head">
+                  <div>
+                    <p class="section-kicker">好事例</p>
+                    <h3>札幌・小樽で真似したい運営先</h3>
+                    <p>札幌市・小樽市で高工賃かつ高利用率の事業所から、横展開の参考先を並べた。</p>
+                  </div>
+                </div>
+                <div id="hosBenchmarkList" class="hos-watch-list"></div>
+              </article>
+            </section>
           </section>
 
           <section class="panel history-panel" aria-labelledby="historyHeading">
