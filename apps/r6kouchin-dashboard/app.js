@@ -47,6 +47,14 @@ const LEGAL_ENTITY_PREFIXES = [
   "宗教法人",
   "特定非営利活動法人",
 ];
+const WORK_MODEL_RULES = [
+  { label: "軽作業中心", pattern: /(内職|軽作業|袋詰|梱包|検品|シール|箱折|封入|セット|組立|仕分|ピッキング)/ },
+  { label: "PC・クリエイティブ", pattern: /(データ入力|web|hp|sns|デザイン|動画|ライティング|ec|印刷|チラシ|ブログ|名刺|パンフレット|pc)/ },
+  { label: "飲食・食品", pattern: /(弁当|飲食|カフェ|調理|菓子|パン|喫茶|盛付|仕込み|プリン|食品)/ },
+  { label: "農業・園芸", pattern: /(農業|農作業|栽培|園芸|水耕|畑|野菜|多肉植物)/ },
+  { label: "ものづくり", pattern: /(製造|加工|製作|アクセサリー|ハンドメイド|縫製|木工|クラフト|ものづくり)/ },
+  { label: "サービス・役務", pattern: /(清掃|洗濯|ポスティング|役務|接客|販売|受託|施設外|請負)/ },
+];
 
 /* 工賃レンジごとの内部計算テーブル */
 const WAGE_TIER_TABLE = [
@@ -149,6 +157,351 @@ function topPerformerActivities(records, limit = 5) {
     }));
 }
 
+function sumComputed(records, selector) {
+  return records.reduce((sum, record) => {
+    const value = selector(record);
+    return sum + (isNumber(value) ? value : 0);
+  }, 0);
+}
+
+function getPrimaryActivityLabel(record) {
+  return compactInlineText(record?.wam_primary_activity_type) || "主活動未取得";
+}
+
+function deriveWorkModelLabel(record) {
+  const text = `${record?.wam_primary_activity_type ?? ""} ${record?.wam_primary_activity_detail ?? ""}`
+    .normalize("NFKC")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!text) return "主活動未取得";
+  const matched = WORK_MODEL_RULES.find((rule) => rule.pattern.test(text));
+  if (matched) return matched.label;
+  if (text.includes("その他")) return "その他";
+  return getPrimaryActivityLabel(record);
+}
+
+function isLightWorkModel(record) {
+  return deriveWorkModelLabel(record) === "軽作業中心";
+}
+
+function availableCapacity(record) {
+  const capacity = record.capacity ?? record.wam_office_capacity;
+  if (!isNumber(capacity) || !isNumber(record.average_daily_users)) return null;
+  return Math.max(capacity - record.average_daily_users, 0);
+}
+
+function buildGroupStats(records, getLabel, metricKey, minCount = 1) {
+  const groups = new Map();
+  records.forEach((record) => {
+    const label = getLabel(record);
+    if (!label || !isNumber(record[metricKey])) return;
+    const bucket = groups.get(label) ?? [];
+    bucket.push(record[metricKey]);
+    groups.set(label, bucket);
+  });
+  return [...groups.entries()]
+    .map(([label, values]) => {
+      const stats = computeLocalStats(values);
+      return {
+        label,
+        count: stats.count,
+        mean: stats.mean,
+        median: stats.median,
+        min: stats.min,
+        max: stats.max,
+      };
+    })
+    .filter((item) => (item.count ?? 0) >= minCount);
+}
+
+function groupRecords(records, getKey) {
+  const groups = new Map();
+  records.forEach((record) => {
+    const key = getKey(record);
+    if (!key) return;
+    const bucket = groups.get(key) ?? [];
+    bucket.push(record);
+    groups.set(key, bucket);
+  });
+  return groups;
+}
+
+function groupedCorporations(records) {
+  const groups = new Map();
+  records.forEach((record) => {
+    const key = corporationIdentityKey(record) ?? `office:${record.office_no}`;
+    const current =
+      groups.get(key) ??
+      {
+        key,
+        label: compactInlineText(record.corporation_name) || "-",
+        records: [],
+      };
+    current.records.push(record);
+    groups.set(key, current);
+  });
+  return [...groups.values()].map((group) => ({
+    ...group,
+    label: corporationLabelForKey(group.key) || group.label,
+  }));
+}
+
+function competitionAreaRecords(record, records = state.records) {
+  const areaLabel = getAreaLabel(record);
+  if (!areaLabel) return [];
+  return records.filter((item) => getAreaLabel(item) === areaLabel);
+}
+
+function computeCompetitionProfile(record, records = state.records) {
+  const areaLabel = getAreaLabel(record);
+  const areaRecords = competitionAreaRecords(record, records);
+  const sameActivityRecords = areaRecords.filter(
+    (item) =>
+      String(item.office_no) !== String(record.office_no) &&
+      getPrimaryActivityLabel(item) === getPrimaryActivityLabel(record)
+  );
+  const areaCounts = [...groupRecords(records, (item) => getAreaLabel(item)).values()]
+    .map((items) => items.length)
+    .sort((left, right) => right - left);
+  const areaRank = areaLabel
+    ? [...groupRecords(records, (item) => getAreaLabel(item)).entries()]
+        .sort((left, right) => right[1].length - left[1].length)
+        .findIndex(([label]) => label === areaLabel) + 1
+    : null;
+  return {
+    areaLabel,
+    areaCount: areaRecords.length,
+    sameActivityAreaCount: sameActivityRecords.length,
+    areaWageMedian: computeLocalStats(numericValues(areaRecords, "average_wage_yen")).median,
+    areaUtilizationMean: meanFor(areaRecords, "daily_user_capacity_ratio"),
+    areaDensityMedian: areaCounts.length ? median(areaCounts) : null,
+    areaRank: areaRank || null,
+  };
+}
+
+function computeCapacityProfile(record, records) {
+  const capacity = record.capacity ?? record.wam_office_capacity;
+  const peers = records.filter(
+    (item) => item.capacity_band_label && item.capacity_band_label === record.capacity_band_label
+  );
+  const localPeers = peers.filter((item) => item.municipality === record.municipality);
+  const benchmarkPeers = localPeers.length >= 5 ? localPeers : peers;
+  return {
+    capacity,
+    availableSlots: availableCapacity(record),
+    benchmarkCount: benchmarkPeers.length,
+    peerUsersMedian: computeLocalStats(numericValues(benchmarkPeers, "average_daily_users")).median,
+    peerUtilizationMedian: computeLocalStats(numericValues(benchmarkPeers, "daily_user_capacity_ratio")).median,
+  };
+}
+
+function computeActivityProfile(record, records) {
+  const activityLabel = getPrimaryActivityLabel(record);
+  const peers = records.filter((item) => getPrimaryActivityLabel(item) === activityLabel);
+  const wagePeers = peers.filter((item) => isNumber(item.average_wage_yen));
+  const sortedWages = wagePeers.map((item) => item.average_wage_yen).sort((left, right) => left - right);
+  const rank =
+    wagePeers.length && isNumber(record.average_wage_yen)
+      ? wagePeers.filter((item) => item.average_wage_yen > record.average_wage_yen).length + 1
+      : null;
+  return {
+    activityLabel,
+    workModelLabel: deriveWorkModelLabel(record),
+    peerCount: peers.length,
+    wageMedian: computeLocalStats(sortedWages).median,
+    utilizationMean: meanFor(peers, "daily_user_capacity_ratio"),
+    rank,
+  };
+}
+
+function computeCorporationProfile(record) {
+  const corporationKey = corporationIdentityKey(record);
+  const recordsInCorporation = corporationKey ? corporationRecords(corporationKey) : [record];
+  const wages = numericValues(recordsInCorporation, "average_wage_yen");
+  return {
+    officeCount: recordsInCorporation.length,
+    municipalityCount: new Set(recordsInCorporation.map((item) => item.municipality).filter(Boolean)).size,
+    averageWage: meanFor(recordsInCorporation, "average_wage_yen"),
+    utilizationMean: meanFor(recordsInCorporation, "daily_user_capacity_ratio"),
+    wageSpread:
+      wages.length >= 2 ? Math.max(...wages) - Math.min(...wages) : null,
+  };
+}
+
+function computeHomeUseProfile(record, records) {
+  const homeUseRecords = records.filter((item) => item.home_use_active === true);
+  const nonHomeUseRecords = records.filter((item) => item.home_use_active === false);
+  const topWageThreshold = percentile(
+    numericValues(records, "average_wage_yen").sort((left, right) => left - right),
+    0.8
+  );
+  const topWageRecords = records.filter((item) => isNumber(item.average_wage_yen) && item.average_wage_yen >= topWageThreshold);
+  return {
+    homeUseAverageWage: meanFor(homeUseRecords, "average_wage_yen"),
+    nonHomeUseAverageWage: meanFor(nonHomeUseRecords, "average_wage_yen"),
+    homeUseAverageUtilization: meanFor(homeUseRecords, "daily_user_capacity_ratio"),
+    nonHomeUseAverageUtilization: meanFor(nonHomeUseRecords, "daily_user_capacity_ratio"),
+    topWageHomeUseRate: ratioOf(topWageRecords, (item) => item.home_use_active === true),
+    currentGroupAverageWage: meanFor(
+      record.home_use_active === true ? homeUseRecords : nonHomeUseRecords,
+      "average_wage_yen"
+    ),
+  };
+}
+
+function buildWorkShortageSignals(record) {
+  const signals = [];
+  if (isNumber(record.wage_ratio_to_overall_mean) && record.wage_ratio_to_overall_mean < 0.9) {
+    signals.push("工賃が平均より低め");
+  }
+  if (isNumber(record.daily_user_capacity_ratio) && record.daily_user_capacity_ratio < 0.7) {
+    signals.push("利用率が低い");
+  }
+  if (isNumber(record.home_use_user_ratio_decimal) && record.home_use_user_ratio_decimal >= 0.3) {
+    signals.push("在宅率が高め");
+  }
+  if (isLightWorkModel(record)) {
+    signals.push("軽作業中心");
+  }
+  if (isNumber(availableCapacity(record)) && availableCapacity(record) >= 5) {
+    signals.push("定員まで空きが多い");
+  }
+  return signals;
+}
+
+function buildMarketCards(records) {
+  const areaGroups = [...groupRecords(records, (record) => getAreaLabel(record)).entries()]
+    .map(([label, items]) => ({
+      label,
+      count: items.length,
+      medianWage: computeLocalStats(numericValues(items, "average_wage_yen")).median,
+      utilizationMean: meanFor(items, "daily_user_capacity_ratio"),
+    }))
+    .filter((item) => item.label)
+    .sort((left, right) => right.count - left.count);
+  const areaCountMedian = areaGroups.length ? median(areaGroups.map((item) => item.count).sort((a, b) => a - b)) : null;
+  const overallWageMedian = computeLocalStats(numericValues(records, "average_wage_yen")).median;
+  const overallUtilizationMean = meanFor(records, "daily_user_capacity_ratio");
+  const topAreas = areaGroups.slice(0, 3);
+  const opportunityArea = areaGroups
+    .filter(
+      (item) =>
+        item.count >= 3 &&
+        isNumber(item.medianWage) &&
+        isNumber(item.utilizationMean) &&
+        isNumber(areaCountMedian) &&
+        item.count <= areaCountMedian &&
+        item.medianWage >= overallWageMedian &&
+        item.utilizationMean >= overallUtilizationMean
+    )
+    .sort((left, right) => right.medianWage + right.utilizationMean * 10000 - (left.medianWage + left.utilizationMean * 10000))[0];
+
+  const activityStats = buildGroupStats(records, (record) => deriveWorkModelLabel(record), "average_wage_yen", 5)
+    .sort((left, right) => (right.median ?? 0) - (left.median ?? 0));
+
+  const shortageRecords = records.filter((record) => hasWorkShortageRisk(record));
+  const shortageLightWorkCount = shortageRecords.filter((record) => isLightWorkModel(record)).length;
+  const shortageHighHomeUseCount = shortageRecords.filter(
+    (record) => isNumber(record.home_use_user_ratio_decimal) && record.home_use_user_ratio_decimal >= 0.3
+  ).length;
+  const shortageOpenSlots = sumComputed(shortageRecords, (record) => availableCapacity(record));
+
+  const homeUseRecords = records.filter((record) => record.home_use_active === true);
+  const nonHomeUseRecords = records.filter((record) => record.home_use_active === false);
+  const highWageThreshold = percentile(
+    numericValues(records, "average_wage_yen").sort((left, right) => left - right),
+    0.8
+  );
+  const topWageRecords = records.filter((record) => isNumber(record.average_wage_yen) && record.average_wage_yen >= highWageThreshold);
+
+  const corporationGroups = groupedCorporations(records);
+  const multiOfficeGroups = corporationGroups.filter((group) => group.records.length >= 2);
+  const largestCorporation = [...corporationGroups].sort((left, right) => right.records.length - left.records.length)[0];
+  const averageCorporationSpread = computeLocalStats(
+    multiOfficeGroups
+      .map((group) => {
+        const wages = numericValues(group.records, "average_wage_yen");
+        return wages.length >= 2 ? Math.max(...wages) - Math.min(...wages) : null;
+      })
+      .filter(isNumber)
+  ).mean;
+
+  const averageOpenSlots = computeLocalStats(records.map((record) => availableCapacity(record)).filter(isNumber)).mean;
+
+  return [
+    {
+      title: "競合密度",
+      summary: topAreas.length
+        ? `${topAreas.map((item) => `${item.label} ${formatCount(item.count)}件`).join(" / ")} が表示中の密集エリア。`
+        : "エリア比較に必要な住所情報が不足している。",
+      bullets: [
+        opportunityArea
+          ? `${opportunityArea.label} は ${formatCount(opportunityArea.count)}件と競合が薄めだが、中央値工賃 ${formatMaybeYen(opportunityArea.medianWage)}、平均利用率 ${formatPercent(opportunityArea.utilizationMean)}。`
+          : "競合が薄くて強いエリアは、今の絞り込みでははっきり出ていない。",
+        "詳細を開くと、各事業所ごとに同じエリア・同じ主活動の件数を確認できる。",
+      ],
+    },
+    {
+      title: "定員充足のしやすさ",
+      summary: isNumber(averageOpenSlots)
+        ? `表示中では定員まで平均 ${formatDecimalUnit(averageOpenSlots, "人")} の空きがある。`
+        : "定員充足の比較に必要な定員または平均利用人数が不足している。",
+      bullets: [
+        `${formatCount(records.filter((record) => isNumber(availableCapacity(record)) && availableCapacity(record) >= 5).length)}件で、定員まで平均5人以上の空きが残る。`,
+        "詳細では、同じ定員帯の中央値と比べて何人分の差があるかを表示する。",
+      ],
+    },
+    {
+      title: "主活動の勝ち筋",
+      summary: activityStats.length
+        ? `${activityStats
+            .slice(0, 3)
+            .map((item) => `${item.label} ${formatMaybeYen(item.median)}`)
+            .join(" / ")} が高工賃側。`
+        : "主活動の比較に必要な公開情報が不足している。",
+      bullets: [
+        activityStats[0]
+          ? `${activityStats[0].label} は ${formatCount(activityStats[0].count)}件で中央値 ${formatMaybeYen(activityStats[0].median)}。`
+          : "十分な件数がある主活動がまだ少ない。",
+        "詳細では、主活動ごとの順位と中央値差を確認できる。",
+      ],
+    },
+    {
+      title: "仕事不足の実態",
+      summary: `${formatCount(shortageRecords.length)}件を仕事不足の確認候補として抽出。`,
+      bullets: [
+        `そのうち ${formatCount(shortageLightWorkCount)}件が軽作業中心、${formatCount(shortageHighHomeUseCount)}件が在宅率30%以上。`,
+        isNumber(shortageOpenSlots)
+          ? `候補全体で定員まで合計 ${formatCount(Math.round(shortageOpenSlots))}人分の空きがある。`
+          : "空き人数の比較に必要な値が不足している。",
+      ],
+    },
+    {
+      title: "在宅の使い方",
+      summary: homeUseRecords.length && nonHomeUseRecords.length
+        ? `在宅ありの平均工賃 ${formatMaybeYen(meanFor(homeUseRecords, "average_wage_yen"))}、なしは ${formatMaybeYen(meanFor(nonHomeUseRecords, "average_wage_yen"))}。`
+        : "在宅あり/なしの比較に十分な件数がない。",
+      bullets: [
+        `在宅ありの平均利用率 ${formatPercent(meanFor(homeUseRecords, "daily_user_capacity_ratio"))} / なし ${formatPercent(meanFor(nonHomeUseRecords, "daily_user_capacity_ratio"))}。`,
+        `工賃上位20%では ${formatPercent(ratioOf(topWageRecords, (record) => record.home_use_active === true))} が在宅あり。`,
+      ],
+    },
+    {
+      title: "法人展開の傾向",
+      summary: `${formatCount(multiOfficeGroups.length)}法人が2拠点以上で展開。`,
+      bullets: [
+        largestCorporation
+          ? `最大は ${largestCorporation.label} の ${formatCount(largestCorporation.records.length)}事業所。`
+          : "複数拠点の法人はまだない。",
+        isNumber(averageCorporationSpread)
+          ? `複数拠点法人の工賃差は平均 ${formatMaybeYen(averageCorporationSpread)}。法人内でも差が出ている。`
+          : "法人内の工賃差を比べるだけの件数が足りない。",
+      ],
+    },
+  ];
+}
+
 /** 工賃の標準偏差を計算 */
 function computeStdDev(values) {
   if (values.length < 2) return null;
@@ -170,7 +523,7 @@ const FILTER_PRESETS = {
   },
   "fix-priority": {
     quadrant: "低工賃 × 低稼働",
-    staffingOutlier: "high",
+    workShortageRisk: "likely",
   },
   "high-wage-high-util": {
     quadrant: "高工賃 × 高稼働",
@@ -1096,6 +1449,7 @@ function applyFilters() {
 
   renderActiveFilterSummary(filtered);
   renderInsights(filtered);
+  renderMarket(filtered);
   renderStrategy(filtered);
   renderStats(filtered);
   renderCharts(filtered);
@@ -1270,6 +1624,10 @@ function renderLoadingState() {
     filterTags.innerHTML = "";
   }
   document.getElementById("insightList").innerHTML = loadingCard;
+  const marketList = document.getElementById("marketList");
+  if (marketList) {
+    marketList.innerHTML = loadingCard;
+  }
   document.getElementById("growthList").innerHTML = loadingCard;
   document.getElementById("fixList").innerHTML = loadingCard;
   document.getElementById("highHighList").innerHTML = loadingCard;
@@ -1279,6 +1637,10 @@ function renderLoadingState() {
     "municipalityChart",
     "wageChart",
     "corporationChart",
+    "areaChart",
+    "activityMedianChart",
+    "homeUseComparisonChart",
+    "corporationScaleChart",
     "capacityChart",
     "quadrantChart",
     "outlierChart",
@@ -1383,6 +1745,11 @@ function renderInsights(records) {
 
   // 好事例
   const topPerformers = topPerformerActivities(records, 3);
+  const activityStats = buildGroupStats(records, (record) => deriveWorkModelLabel(record), "average_wage_yen", 5).sort(
+    (left, right) => (right.median ?? 0) - (left.median ?? 0)
+  );
+  const homeUseRecords = records.filter((record) => record.home_use_active === true);
+  const nonHomeUseRecords = records.filter((record) => record.home_use_active === false);
 
   // 利用率1%改善のインパクト
   const lowUtilRecords = records.filter((r) => isNumber(r.daily_user_capacity_ratio) && r.daily_user_capacity_ratio < 0.7);
@@ -1409,6 +1776,22 @@ function renderInsights(records) {
         ? topPerformers.map((p) => `${p.name}（${formatWageText(p.wage)}）: ${p.detail}`).join(" / ")
         : "工賃が高い事業所の作業内容が確認できない。",
     },
+    {
+      title: "主活動の勝ち筋",
+      body: activityStats.length
+        ? `${activityStats
+            .slice(0, 2)
+            .map((item) => `${item.label} は中央値 ${formatMaybeYen(item.median)}`)
+            .join(" / ")}`
+        : "主活動の公開情報が少なく、勝ち筋を読み切れない。",
+    },
+    {
+      title: "在宅の使い方",
+      body:
+        homeUseRecords.length && nonHomeUseRecords.length
+          ? `在宅ありの平均工賃は ${formatMaybeYen(meanFor(homeUseRecords, "average_wage_yen"))}、在宅なしは ${formatMaybeYen(meanFor(nonHomeUseRecords, "average_wage_yen"))}。在宅の有無で工賃差が出るかを確認しやすい。`
+          : "在宅あり/なしの比較に十分な件数がない。",
+    },
   ];
 
   root.innerHTML = insights
@@ -1417,6 +1800,30 @@ function renderInsights(records) {
         <article class="insight-card">
           <h3>${escapeHtml(insight.title)}</h3>
           <p>${escapeHtml(insight.body)}</p>
+        </article>
+      `
+    )
+    .join("");
+}
+
+function renderMarket(records) {
+  const root = document.getElementById("marketList");
+  if (!root) return;
+  if (!records.length) {
+    root.innerHTML = document.getElementById("emptyStateTemplate").innerHTML;
+    return;
+  }
+
+  const cards = buildMarketCards(records);
+  root.innerHTML = cards
+    .map(
+      (card) => `
+        <article class="market-card">
+          <h3>${escapeHtml(card.title)}</h3>
+          <p class="market-summary">${escapeHtml(card.summary)}</p>
+          <ul class="market-points">
+            ${card.bullets.map((bullet) => `<li>${escapeHtml(bullet)}</li>`).join("")}
+          </ul>
         </article>
       `
     )
@@ -1451,8 +1858,7 @@ function renderStrategy(records) {
         isNumber(record.daily_user_capacity_ratio) &&
         (record.wage_ratio_to_municipality_mean ?? record.wage_ratio_to_overall_mean ?? 1) < 0.9 &&
         record.daily_user_capacity_ratio < 0.75 &&
-        (record.wam_staffing_efficiency_quadrant === "低工賃 × 厚い人員" ||
-          record.wam_staffing_outlier_flag === "high")
+        hasWorkShortageRisk(record)
     )
     .sort((left, right) => fixScore(right) - fixScore(left))
     .slice(0, 6);
@@ -1515,6 +1921,11 @@ function renderStats(records) {
     "home_use_user_ratio_decimal"
   );
   const workShortageCount = records.filter((record) => hasWorkShortageRisk(record)).length;
+  const corporationGroups = groupedCorporations(records);
+  const multiOfficeCorporationCount = corporationGroups.filter((group) => group.records.length >= 2).length;
+  const topWorkModel = buildGroupStats(records, (record) => deriveWorkModelLabel(record), "average_wage_yen", 5).sort(
+    (left, right) => (right.median ?? 0) - (left.median ?? 0)
+  )[0];
 
   const cards = [
     { label: "表示件数", value: formatCount(records.length), hint: `全 ${formatCount(state.records.length)} 件中` },
@@ -1526,6 +1937,8 @@ function renderStats(records) {
     { label: "在宅利用あり", value: formatCount(homeUseActiveCount), hint: `表示中の ${formatPercent(homeUseActiveRate)}` },
     { label: "在宅利用ありの平均在宅率", value: formatPercent(homeUseRateAmongActive), hint: "在宅利用ありの事業所のみ" },
     { label: "仕事不足の可能性", value: formatCount(workShortageCount), hint: "工賃と利用状況から確認候補を抽出" },
+    { label: "2拠点以上の法人", value: formatCount(multiOfficeCorporationCount), hint: "法人内比較ができる法人" },
+    { label: "工賃中央値が高い作業モデル", value: topWorkModel ? topWorkModel.label : "-", hint: topWorkModel ? `中央値 ${formatMaybeYen(topWorkModel.median)}` : "件数5件以上で比較" },
   ];
 
   document.getElementById("statsGrid").innerHTML = cards
@@ -1545,6 +1958,35 @@ function renderCharts(records) {
   renderBarChart("municipalityChart", topCounts(records, "municipality", 10), formatCountSuffix("件"));
   renderBarChart("wageChart", topAverageWageByMunicipality(records, 8), formatCountSuffix("円", true));
   renderBarChart("corporationChart", topCounts(records, "corporation_type_label", 6), formatCountSuffix("件"));
+  renderBarChart("areaChart", topCounts(records.map((record) => ({ ...record, derived_area_label: getAreaLabel(record) })), "derived_area_label", 10), formatCountSuffix("件"));
+  renderBarChart(
+    "activityMedianChart",
+    buildGroupStats(records, (record) => deriveWorkModelLabel(record), "average_wage_yen", 5)
+      .sort((left, right) => (right.median ?? 0) - (left.median ?? 0))
+      .slice(0, 8)
+      .map((item) => ({ label: item.label, value: item.median })),
+    formatCountSuffix("円", true)
+  );
+  renderBarChart(
+    "homeUseComparisonChart",
+    [
+      { label: "在宅あり", value: meanFor(records.filter((record) => record.home_use_active === true), "average_wage_yen") },
+      { label: "在宅なし", value: meanFor(records.filter((record) => record.home_use_active === false), "average_wage_yen") },
+    ].filter((item) => isNumber(item.value)),
+    formatCountSuffix("円", true)
+  );
+  renderBarChart(
+    "corporationScaleChart",
+    (() => {
+      const groups = groupedCorporations(records);
+      return [
+        { label: "1拠点", value: groups.filter((group) => group.records.length === 1).length },
+        { label: "2-3拠点", value: groups.filter((group) => group.records.length >= 2 && group.records.length <= 3).length },
+        { label: "4拠点以上", value: groups.filter((group) => group.records.length >= 4).length },
+      ].filter((item) => item.value > 0);
+    })(),
+    formatCountSuffix("件")
+  );
   renderBarChart(
     "capacityChart",
     averageByOrderedGroup(records, "capacity_band_label", "average_wage_yen", CAPACITY_BAND_ORDER),
@@ -1759,6 +2201,12 @@ function renderDetail(record) {
   const revPerPoint = revenuePerUtilizationPoint(record);
   const sortedWages = numericValues(comparisonContext.records, "average_wage_yen").sort((a, b) => a - b);
   const wagePercentile = computePercentileRank(record.average_wage_yen, sortedWages);
+  const competitionProfile = computeCompetitionProfile(record, state.records);
+  const capacityProfile = computeCapacityProfile(record, comparisonContext.records);
+  const activityProfile = computeActivityProfile(record, comparisonContext.records);
+  const corporationProfile = computeCorporationProfile(record);
+  const homeUseProfile = computeHomeUseProfile(record, comparisonContext.records);
+  const workShortageSignals = buildWorkShortageSignals(record);
 
   dialogRoot.innerHTML = `
     <div class="detail-hero">
@@ -1812,9 +2260,61 @@ function renderDetail(record) {
         </ul>
       </article>
       <article class="detail-card">
+        <h3>エリア競合</h3>
+        <ul class="detail-list">
+          <li>同じエリア: ${escapeHtml(competitionProfile.areaLabel ?? "-")} に ${formatCount(competitionProfile.areaCount)}事業所</li>
+          <li>同じエリアで同じ主活動: ${formatCount(competitionProfile.sameActivityAreaCount)}事業所</li>
+          <li>エリア中央値工賃: ${escapeHtml(formatMaybeYen(competitionProfile.areaWageMedian))} / 平均利用率 ${escapeHtml(formatPercent(competitionProfile.areaUtilizationMean))}</li>
+          <li>エリア密度順位: ${competitionProfile.areaRank ? `${formatCount(competitionProfile.areaRank)}位` : "-"} ${isNumber(competitionProfile.areaDensityMedian) ? ` / エリア件数の中央値 ${formatCount(Math.round(competitionProfile.areaDensityMedian))}件` : ""}</li>
+        </ul>
+      </article>
+      <article class="detail-card">
+        <h3>定員充足のしやすさ</h3>
+        <ul class="detail-list">
+          <li>定員まで平均あと: ${escapeHtml(formatDecimalUnit(capacityProfile.availableSlots, "人"))}</li>
+          <li>同じ定員帯の中央値との差: ${escapeHtml(formatSignedDecimalUnit(isNumber(record.average_daily_users) && isNumber(capacityProfile.peerUsersMedian) ? record.average_daily_users - capacityProfile.peerUsersMedian : null, "人"))}</li>
+          <li>同じ定員帯の利用率中央値との差: ${escapeHtml(formatSignedPercentPoint(isNumber(record.daily_user_capacity_ratio) && isNumber(capacityProfile.peerUtilizationMedian) ? record.daily_user_capacity_ratio - capacityProfile.peerUtilizationMedian : null))}</li>
+          <li>比較件数: ${formatCount(capacityProfile.benchmarkCount)}件</li>
+        </ul>
+      </article>
+      <article class="detail-card">
+        <h3>主活動の勝ち筋</h3>
+        <ul class="detail-list">
+          <li>主活動: ${escapeHtml(activityProfile.activityLabel)}</li>
+          <li>作業モデル: ${escapeHtml(activityProfile.workModelLabel)}</li>
+          <li>同じ主活動の中央値工賃: ${escapeHtml(formatMaybeYen(activityProfile.wageMedian))} / 平均利用率 ${escapeHtml(formatPercent(activityProfile.utilizationMean))}</li>
+          <li>${activityProfile.rank ? `同じ主活動 ${formatCount(activityProfile.peerCount)}件中 ${formatCount(activityProfile.rank)}位` : `同じ主活動 ${formatCount(activityProfile.peerCount)}件`}</li>
+        </ul>
+      </article>
+      <article class="detail-card">
+        <h3>法人内の横比較</h3>
+        <ul class="detail-list">
+          <li>同法人の運営事業所: ${formatCount(corporationProfile.officeCount)}件 / ${formatCount(corporationProfile.municipalityCount)}市区</li>
+          <li>法人内平均工賃: ${escapeHtml(formatMaybeYen(corporationProfile.averageWage))}</li>
+          <li>法人内平均利用率: ${escapeHtml(formatPercent(corporationProfile.utilizationMean))}</li>
+          <li>法人内の工賃差: ${escapeHtml(formatMaybeYen(corporationProfile.wageSpread))}</li>
+        </ul>
+      </article>
+      <article class="detail-card">
+        <h3>在宅の使い方</h3>
+        <ul class="detail-list">
+          <li>この事業所の在宅利用: ${escapeHtml(formatBool(record.home_use_active))} ${isNumber(record.home_use_user_ratio_decimal) ? `（在宅率 ${escapeHtml(formatPercent(record.home_use_user_ratio_decimal))}）` : ""}</li>
+          <li>在宅ありの平均工賃: ${escapeHtml(formatMaybeYen(homeUseProfile.homeUseAverageWage))} / なし ${escapeHtml(formatMaybeYen(homeUseProfile.nonHomeUseAverageWage))}</li>
+          <li>在宅ありの平均利用率: ${escapeHtml(formatPercent(homeUseProfile.homeUseAverageUtilization))} / なし ${escapeHtml(formatPercent(homeUseProfile.nonHomeUseAverageUtilization))}</li>
+          <li>この事業所が属する群の平均工賃: ${escapeHtml(formatMaybeYen(homeUseProfile.currentGroupAverageWage))} / 上位20%で在宅あり ${escapeHtml(formatPercent(homeUseProfile.topWageHomeUseRate))}</li>
+        </ul>
+      </article>
+      <article class="detail-card">
         <h3>注視ポイント</h3>
         <ul class="detail-list">
           ${actionNotes.map((note) => `<li>${escapeHtml(note)}</li>`).join("")}
+        </ul>
+      </article>
+      <article class="detail-card">
+        <h3>仕事状況の見立て</h3>
+        <ul class="detail-list">
+          <li>仕事不足の可能性: ${escapeHtml(hasWorkShortageRisk(record) ? "あり" : "今のところ強くない")}</li>
+          ${workShortageSignals.length ? workShortageSignals.map((signal) => `<li>${escapeHtml(signal)}</li>`).join("") : "<li>公開データ上では強い不足シグナルは少ない。</li>"}
         </ul>
       </article>
       ${
@@ -2309,8 +2809,10 @@ function growthScore(record) {
 function fixScore(record) {
   return (
     Math.max(1 - (record.wage_ratio_to_municipality_mean ?? record.wage_ratio_to_overall_mean ?? 1), 0) * 80 +
-    ((record.wam_key_staff_fte_per_capacity ?? 0) * 100) +
-    Math.max(0.7 - (record.daily_user_capacity_ratio ?? 0.7), 0) * 25
+    Math.max(0.7 - (record.daily_user_capacity_ratio ?? 0.7), 0) * 35 +
+    Math.max((availableCapacity(record) ?? 0) - 3, 0) * 2 +
+    (isLightWorkModel(record) ? 10 : 0) +
+    ((record.home_use_user_ratio_decimal ?? 0) >= 0.3 ? 8 : 0)
   );
 }
 
@@ -2526,14 +3028,15 @@ function hasWorkShortageRisk(record) {
   const lowWage = isNumber(wageRatio) && wageRatio < 0.9;
   const lowUtilization = isNumber(utilization) && utilization < 0.7;
   const veryLowUtilization = isNumber(utilization) && utilization < 0.6;
-  const staffingHeavy =
-    record.wam_staffing_efficiency_quadrant === "低工賃 × 厚い人員" ||
-    record.wam_staffing_outlier_flag === "high";
+  const highHomeUse = isNumber(record.home_use_user_ratio_decimal) && record.home_use_user_ratio_decimal >= 0.3;
+  const lightWork = isLightWorkModel(record);
+  const openSlots = isNumber(availableCapacity(record)) && availableCapacity(record) >= 5;
 
   return (
     (lowWage && lowUtilization) ||
-    (lowWage && staffingHeavy) ||
-    (veryLowUtilization && staffingHeavy)
+    (lowWage && highHomeUse && lightWork) ||
+    (lowWage && openSlots && (lowUtilization || lightWork)) ||
+    (veryLowUtilization && openSlots)
   );
 }
 
@@ -2552,15 +3055,21 @@ function downloadFilteredCsv() {
     ["representative_name", "代表者名"],
     ["representative_role", "代表者役職"],
     ["office_name", "事業所名"],
+    ["derived_area_label", "エリア"],
     ["average_wage_yen", "平均工賃"],
     ["wage_ratio_to_overall_mean", "平均との差"],
     ["wage_ratio_to_municipality_mean", "市町村平均との差"],
     ["wage_ratio_to_capacity_band_mean", "定員帯平均との差"],
     ["daily_user_capacity_ratio", "利用率"],
+    ["derived_available_capacity", "定員まで平均あと人数"],
     ["home_use_active", "在宅利用あり"],
     ["home_use_user_ratio_pct", "在宅率"],
     ["wage_outlier_flag", "工賃水準"],
     ["derived_work_shortage_risk", "仕事不足の可能性"],
+    ["derived_work_model", "作業モデル"],
+    ["derived_same_area_office_count", "同じエリアの事業所数"],
+    ["derived_same_activity_area_count", "同じエリアで同じ主活動の事業所数"],
+    ["derived_corporation_office_count", "同法人の事業所数"],
     ["wam_primary_activity_type", "主活動種別"],
     ["wam_office_number", "事業所番号"],
     ["wam_office_url", "掲載ページ"],
@@ -2583,6 +3092,25 @@ function downloadFilteredCsv() {
       }
       if (key === "derived_work_shortage_risk") {
         return escapeCsvCell(hasWorkShortageRisk(record) ? "あり" : "なし");
+      }
+      if (key === "derived_area_label") {
+        return escapeCsvCell(getAreaLabel(record));
+      }
+      if (key === "derived_available_capacity") {
+        const value = availableCapacity(record);
+        return escapeCsvCell(isNumber(value) ? decimalFormatter.format(value) : "");
+      }
+      if (key === "derived_work_model") {
+        return escapeCsvCell(deriveWorkModelLabel(record));
+      }
+      if (key === "derived_same_area_office_count") {
+        return escapeCsvCell(String(computeCompetitionProfile(record, state.records).areaCount ?? ""));
+      }
+      if (key === "derived_same_activity_area_count") {
+        return escapeCsvCell(String(computeCompetitionProfile(record, state.records).sameActivityAreaCount ?? ""));
+      }
+      if (key === "derived_corporation_office_count") {
+        return escapeCsvCell(String(computeCorporationProfile(record).officeCount ?? ""));
       }
       if (key === "derived_website_search_url") {
         return escapeCsvCell(buildWebsiteSearchUrl(record));

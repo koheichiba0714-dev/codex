@@ -27,6 +27,7 @@
           <a href="#tableHeading" class="nav-link">一覧比較</a>
           <a href="#detailHeading" class="nav-link">事業所詳細</a>
           <a href="#summaryHeading" class="nav-link">主要指標</a>
+          <a href="#marketHeading" class="nav-link">勝ち筋分析</a>
           <a href="#strategyHeading" class="nav-link">優先順位</a>
           <a href="#chartsHeading" class="nav-link">比較グラフ</a>
           <a href="#notesHeading" class="nav-link">注記と品質</a>
@@ -160,6 +161,20 @@
             <div id="insightList" class="insight-grid"></div>
           </section>
 
+          <section class="panel market-panel" data-collapsible aria-labelledby="marketHeading">
+            <div class="panel-head">
+              <div>
+                <p class="section-kicker">勝ち筋分析</p>
+                <h2 id="marketHeading">公開データから読める伸ばし方</h2>
+                <p class="panel-note">競合密度、定員充足、主活動、在宅、法人展開をまとめて見て、次の打ち手を探す。</p>
+              </div>
+              <div class="panel-head-actions">
+                <button class="ghost-button panel-collapse-button" type="button" aria-expanded="true">閉じる</button>
+              </div>
+            </div>
+            <div id="marketList" class="market-grid"></div>
+          </section>
+
           <section class="panel strategy-panel" data-collapsible aria-labelledby="strategyHeading">
             <div class="panel-head">
               <div>
@@ -259,6 +274,27 @@
                 <article class="chart-card">
                   <h3>工賃と利用の4分類</h3>
                   <div id="quadrantChart" class="bar-chart compact-chart"></div>
+                </article>
+              </div>
+            </details>
+            <details class="chart-group">
+              <summary>競合と勝ち筋を見る</summary>
+              <div class="chart-grid">
+                <article class="chart-card">
+                  <h3>エリア別 件数</h3>
+                  <div id="areaChart" class="bar-chart compact-chart"></div>
+                </article>
+                <article class="chart-card">
+                  <h3>作業モデル別 工賃中央値</h3>
+                  <div id="activityMedianChart" class="bar-chart compact-chart"></div>
+                </article>
+                <article class="chart-card">
+                  <h3>在宅あり/なし 平均工賃</h3>
+                  <div id="homeUseComparisonChart" class="bar-chart compact-chart"></div>
+                </article>
+                <article class="chart-card">
+                  <h3>法人規模の分布</h3>
+                  <div id="corporationScaleChart" class="bar-chart compact-chart"></div>
                 </article>
               </div>
             </details>

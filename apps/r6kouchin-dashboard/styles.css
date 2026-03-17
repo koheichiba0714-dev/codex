@@ -333,15 +333,16 @@ h1[id], h2[id] { scroll-margin-top: 24px; }
 .panel-main { grid-column: 1 / -1; order: 2; }
 .table-panel { grid-column: 1 / -1; order: 3; }
 .detail-panel { display: none; }
-.insight-panel, .strategy-panel, .anomaly-panel, .charts-panel, .explain-panel, .notes-panel {
+.insight-panel, .market-panel, .strategy-panel, .anomaly-panel, .charts-panel, .explain-panel, .notes-panel {
   grid-column: 1 / -1;
 }
 .insight-panel { order: 4; }
-.strategy-panel { order: 5; }
-.anomaly-panel { order: 6; }
-.charts-panel { order: 7; }
-.explain-panel { order: 8; }
-.notes-panel { order: 9; }
+.market-panel { order: 5; }
+.strategy-panel { order: 6; }
+.anomaly-panel { order: 7; }
+.charts-panel { order: 8; }
+.explain-panel { order: 9; }
+.notes-panel { order: 10; }
 
 /* Panel head */
 .panel-head {
@@ -390,7 +391,7 @@ h1[id], h2[id] { scroll-margin-top: 24px; }
 .panel[data-collapsible].is-collapsed .panel-head { border-bottom: none; }
 
 /* Panel body */
-.filter-launch-panel, .panel-main, .explain-panel, .insight-panel,
+ .filter-launch-panel, .panel-main, .explain-panel, .insight-panel, .market-panel,
 .strategy-panel, .benchmark-panel, .anomaly-panel, .detail-panel,
 .charts-panel, .table-panel, .notes-panel {
   display: grid;
@@ -399,6 +400,7 @@ h1[id], h2[id] { scroll-margin-top: 24px; }
 .panel-main > :not(.panel-head),
 .explain-panel > :not(.panel-head),
 .insight-panel > :not(.panel-head),
+.market-panel > :not(.panel-head),
 .strategy-panel > :not(.panel-head),
 .benchmark-panel > :not(.panel-head),
 .anomaly-panel > :not(.panel-head),
@@ -414,6 +416,7 @@ h1[id], h2[id] { scroll-margin-top: 24px; }
 .panel-main { --panel-accent: #6b7f96; }
 .explain-panel { --panel-accent: #f59e0b; }
 .insight-panel { --panel-accent: #22c55e; }
+.market-panel { --panel-accent: #0f766e; }
 .strategy-panel { --panel-accent: #f97316; }
 .anomaly-panel { --panel-accent: #ef4444; }
 .charts-panel { --panel-accent: #3b82f6; }
@@ -622,6 +625,65 @@ h1[id], h2[id] { scroll-margin-top: 24px; }
 .insight-card:hover { background: var(--bg-card-hover); transform: translateY(-1px); }
 .insight-card h3 { font-size: 12px; font-weight: 600; margin-bottom: 4px; color: var(--accent-hover); }
 .insight-card p { font-size: 12px; color: var(--text-secondary); line-height: 1.6; }
+
+.market-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 8px;
+}
+
+.market-card {
+  padding: 14px 16px;
+  border-radius: var(--radius-sm);
+  background:
+    linear-gradient(180deg, rgba(15,118,110,0.05) 0%, rgba(15,118,110,0) 58%),
+    var(--bg-card);
+  border: 1px solid var(--border);
+  display: grid;
+  gap: 8px;
+  transition: all var(--duration) var(--ease);
+}
+
+.market-card:hover {
+  background:
+    linear-gradient(180deg, rgba(15,118,110,0.08) 0%, rgba(15,118,110,0.02) 58%),
+    var(--bg-card-hover);
+  transform: translateY(-1px);
+}
+
+.market-card h3 {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent-hover);
+}
+
+.market-summary {
+  font-size: 12px;
+  color: var(--text-primary);
+  line-height: 1.6;
+}
+
+.market-points {
+  list-style: none;
+  display: grid;
+  gap: 6px;
+}
+
+.market-points li {
+  font-size: 11px;
+  color: var(--text-secondary);
+  line-height: 1.55;
+  padding-left: 12px;
+  position: relative;
+}
+
+.market-points li::before {
+  content: '·';
+  position: absolute;
+  left: 0;
+  color: var(--text-muted);
+  font-weight: 700;
+}
 
 /* --- Strategy --- */
 .strategy-grid {
@@ -1432,6 +1494,7 @@ dialog[open] {
   .quickstart-row { grid-template-columns: 1fr; }
   .stats-grid { grid-template-columns: repeat(2, 1fr); }
   .insight-grid { grid-template-columns: repeat(2, 1fr); }
+  .market-grid { grid-template-columns: repeat(2, 1fr); }
   .strategy-grid { grid-template-columns: 1fr; }
   .anomaly-grid { grid-template-columns: 1fr; }
   .chart-grid, .chart-grid-primary { grid-template-columns: 1fr; }
@@ -1467,6 +1530,8 @@ dialog[open] {
     display: grid;
     grid-template-columns: 1fr;
   }
+
+  .market-grid { grid-template-columns: 1fr; }
 
   /* Mobile menu button */
   .mobile-menu-toggle {
