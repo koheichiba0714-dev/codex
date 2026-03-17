@@ -548,8 +548,8 @@ function createDefaultFilters() {
     capacityBand: "all",
     quadrant: "all",
     workShortageRisk: "all",
-    staffingOutlier: "all",
     primaryActivity: "all",
+    workModel: "all",
     newOnly: false,
     homeUseOnly: false,
   };
@@ -923,6 +923,9 @@ function bindEvents() {
   bindInput("primaryActivitySelect", "change", (filters, value) => {
     filters.primaryActivity = value;
   });
+  bindInput("workModelSelect", "change", (filters, value) => {
+    filters.workModel = value;
+  });
   bindCheckbox("newOnlyCheckbox", "newOnly");
   bindCheckbox("homeUseOnlyCheckbox", "homeUseOnly");
 
@@ -1089,6 +1092,7 @@ function syncFilterControls(filters = state.filters) {
   setValue("quadrantSelect", filters.quadrant);
   setValue("workShortageRiskSelect", filters.workShortageRisk);
   setValue("primaryActivitySelect", filters.primaryActivity);
+  setValue("workModelSelect", filters.workModel);
   setChecked("newOnlyCheckbox", filters.newOnly);
   setChecked("homeUseOnlyCheckbox", filters.homeUseOnly);
 }
@@ -1472,6 +1476,7 @@ function matchesFilters(record, filters) {
       record.remarks,
       record.wam_primary_activity_type,
       record.wam_primary_activity_detail,
+      deriveWorkModelLabel(record),
       record.wam_office_address_city,
       record.wam_office_address_line,
       record.wam_office_number,
@@ -1505,10 +1510,10 @@ function matchesFilters(record, filters) {
   if (filters.workShortageRisk === "likely" && !hasWorkShortageRisk(record)) {
     return false;
   }
-  if (filters.staffingOutlier !== "all" && (record.wam_staffing_outlier_flag ?? "none") !== filters.staffingOutlier) {
+  if (filters.primaryActivity !== "all" && (record.wam_primary_activity_type ?? "unknown") !== filters.primaryActivity) {
     return false;
   }
-  if (filters.primaryActivity !== "all" && (record.wam_primary_activity_type ?? "unknown") !== filters.primaryActivity) {
+  if (filters.workModel !== "all" && deriveWorkModelLabel(record) !== filters.workModel) {
     return false;
   }
   if (filters.newOnly && !record.is_new_office) return false;
@@ -1568,6 +1573,7 @@ function populateFilterOptions(records) {
   populateSelect("quadrantSelect", "all", "すべての工賃と利用の位置", QUADRANT_ORDER);
   populateSelect("workShortageRiskSelect", "all", "すべての仕事状況", ["likely"]);
   populateSelect("primaryActivitySelect", "all", "すべての主活動", uniqueValues(records, "wam_primary_activity_type"));
+  populateSelect("workModelSelect", "all", "すべての作業モデル", uniqueWorkModelValues(records));
 }
 
 function populateSelect(id, defaultValue, defaultLabel, values) {
@@ -1588,6 +1594,12 @@ function uniqueValues(records, key) {
 
 function uniqueAreaValues(records) {
   return [...new Set(records.map((record) => getAreaLabel(record)).filter(Boolean))].sort((left, right) =>
+    String(left).localeCompare(String(right), "ja")
+  );
+}
+
+function uniqueWorkModelValues(records) {
+  return [...new Set(records.map((record) => deriveWorkModelLabel(record)).filter(Boolean))].sort((left, right) =>
     String(left).localeCompare(String(right), "ja")
   );
 }
@@ -1715,6 +1727,7 @@ function renderActiveFilterSummary(records) {
   if (state.filters.quadrant !== "all") filters.push(`工賃と利用の位置: ${labelForSelect(state.filters.quadrant)}`);
   if (state.filters.workShortageRisk !== "all") filters.push(`仕事状況: ${labelForSelect(state.filters.workShortageRisk)}`);
   if (state.filters.primaryActivity !== "all") filters.push(`主活動: ${state.filters.primaryActivity}`);
+  if (state.filters.workModel !== "all") filters.push(`作業モデル: ${state.filters.workModel}`);
   if (state.filters.newOnly) filters.push("新設のみ");
   if (state.filters.homeUseOnly) filters.push("在宅利用あり");
 
