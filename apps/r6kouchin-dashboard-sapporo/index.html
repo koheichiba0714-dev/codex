@@ -1,0 +1,606 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>北海道 就労継続支援B型 ダッシュボード</title>
+    <meta
+      name="description"
+      content="北海道の就労継続支援B型データを比較しつつ、札幌市・小樽市は WAM 公開情報の人員詳細まで見られる運営向けダッシュボード"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <button class="mobile-menu-toggle" id="mobileMenuToggle" type="button" aria-label="メニュー">☰</button>
+    <div class="admin-layout">
+      <aside class="sidebar" id="sidebar" aria-label="ナビゲーション">
+        <div class="sidebar-brand">
+          <span class="brand-mark">工</span>
+          <div>
+            <strong>工賃ダッシュボード</strong>
+            <p>北海道比較 / 札幌市・小樽市WAM詳細</p>
+          </div>
+        </div>
+        <nav class="sidebar-nav">
+          <a href="#overviewHeading" class="nav-link is-active">ダッシュボード</a>
+          <a href="#hosHeading" class="nav-link">HOS視点</a>
+          <a href="#historyHeading" class="nav-link">3年推移</a>
+          <a href="#filtersHeading" class="nav-link">絞り込み</a>
+          <a href="#tableHeading" class="nav-link">一覧比較</a>
+          <a href="#detailHeading" class="nav-link">事業所詳細</a>
+          <a href="#summaryHeading" class="nav-link">主要指標</a>
+          <a href="#strategyHeading" class="nav-link">優先順位</a>
+          <a href="#chartsHeading" class="nav-link">比較グラフ</a>
+          <a href="#notesHeading" class="nav-link">注記と品質</a>
+        </nav>
+      </aside>
+      <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+      <div class="workspace">
+        <header class="topbar">
+          <div class="topbar-copy">
+            <p class="section-kicker">北海道 就労継続支援B型</p>
+            <h1 id="overviewHeading">運営ダッシュボード</h1>
+            <p class="hero-lead">
+              まず条件を絞り、次に一覧で比べ、最後に気になる事業所だけ深掘りする。北海道全体を参考比較しつつ、札幌市・小樽市は WAM の人員詳細まで見られる。
+            </p>
+          </div>
+          <div class="topbar-actions">
+            <button id="openFiltersButton" class="solid-button filter-search-button" type="button">絞り込み検索</button>
+            <button id="downloadCsvButton" class="ghost-button" type="button">絞り込み結果をCSV出力</button>
+            <button id="openGuideButton" class="ghost-button" type="button">用語ガイド</button>
+          </div>
+        </header>
+
+        <section class="meta-strip" aria-label="データ概要">
+          <article class="meta-card">
+            <span class="meta-label">データ更新</span>
+            <strong id="updatedAt">-</strong>
+          </article>
+          <article class="meta-card">
+            <span class="meta-label">収録件数</span>
+            <strong id="totalRecords">-</strong>
+          </article>
+          <article class="meta-card">
+            <span class="meta-label">札幌市・小樽市WAM詳細あり</span>
+            <strong id="wamMatchedCount">-</strong>
+          </article>
+        </section>
+
+        <main class="dashboard-grid">
+          <section class="panel filter-launch-panel" aria-labelledby="filtersHeading">
+            <div class="panel-head">
+              <div>
+                <p class="section-kicker">条件を絞る</p>
+                <h2 id="filtersHeading">対象を絞り込む</h2>
+                <p class="panel-note">初期表示は札幌市。詳細条件はポップアップで開き、ここでは今の条件とよく使う切り替えだけを見る。</p>
+              </div>
+              <div class="panel-head-actions">
+                <button id="openFiltersPanelButton" class="solid-button filter-search-button" type="button">絞り込み検索</button>
+                <button id="resetFiltersButton" class="ghost-button" type="button">条件を初期化</button>
+              </div>
+            </div>
+            <div class="filter-launch-body">
+              <div class="preset-row" aria-label="クイック切り替え">
+                <button class="preset-chip" data-preset="all" type="button">全体</button>
+                <button class="preset-chip" data-preset="hos-office" type="button">HOS自社</button>
+                <button class="preset-chip is-active" data-preset="sapporo-city" type="button">札幌市</button>
+                <button class="preset-chip" data-preset="sapporo-otaru-wam" type="button">札幌市・小樽市詳細</button>
+                <button class="preset-chip" data-preset="high-wage" type="button">工賃高め</button>
+                <button class="preset-chip" data-preset="high-wage-low-util" type="button">高工賃・低利用率</button>
+                <button class="preset-chip" data-preset="fix-priority" type="button">低工賃・低利用率・人員過剰</button>
+                <button class="preset-chip" data-preset="high-wage-high-util" type="button">高工賃・高利用率</button>
+                <button class="preset-chip" data-preset="work-shortage" type="button">仕事不足の可能性</button>
+                <button class="preset-chip" data-preset="unanswered" type="button">未回答</button>
+              </div>
+              <div class="filter-summary-stack">
+                <p id="activeFilterSummary" class="filter-summary"></p>
+                <div id="activeFilterTags" class="active-filter-tags" aria-live="polite"></div>
+              </div>
+              <div class="quickstart-row" aria-label="使い方">
+                <article class="quickstart-card">
+                  <strong>1. 条件を絞る</strong>
+                  <p>市町村、エリア、工賃水準、人員詳細で絞る。</p>
+                </article>
+                <article class="quickstart-card">
+                  <strong>2. 一覧で比べる</strong>
+                  <p>絞った結果をすぐ下の一覧で横比較する。</p>
+                </article>
+                <article class="quickstart-card">
+                  <strong>3. 詳細を開く</strong>
+                  <p>気になる事業所だけモーダルで深掘りする。</p>
+                </article>
+              </div>
+            </div>
+          </section>
+
+          <section class="panel panel-main" aria-labelledby="summaryHeading">
+            <div class="panel-head">
+              <div>
+                <p class="section-kicker">全体把握</p>
+                <h2 id="summaryHeading">ひと目で分かる主要指標</h2>
+                <p class="panel-note">まず工賃、次に利用率、その次に人員体制と優先順位を見る。経営判断に直結する指標だけを先に並べる。</p>
+              </div>
+            </div>
+            <section class="stats-grid" id="statsGrid" aria-label="集計カード"></section>
+          </section>
+
+          <section class="panel hos-panel" aria-labelledby="hosHeading">
+            <div class="panel-head">
+              <div>
+                <p class="section-kicker">HOS視点</p>
+                <h2 id="hosHeading">合同会社HOSが最初に見る情報</h2>
+                <p class="panel-note">自社の現在地、まず比べる相手、札幌・小樽で真似したい好事例をまとめた。</p>
+              </div>
+              <p id="hosSummary" class="table-summary"></p>
+            </div>
+            <section id="hosStatsGrid" class="stats-grid" aria-label="HOSサマリーカード"></section>
+            <section class="hos-watch-grid" aria-label="HOS比較リスト">
+              <article class="hos-watch-card">
+                <div class="hos-watch-head">
+                  <div>
+                    <p class="section-kicker">HOS内</p>
+                    <h3>先に確認したい拠点</h3>
+                    <p>低工賃・低利用率・WAM未取得など、先に見ておきたい HOS 拠点を並べた。</p>
+                  </div>
+                </div>
+                <div id="hosPeerList" class="hos-watch-list"></div>
+              </article>
+              <article class="hos-watch-card">
+                <div class="hos-watch-head">
+                  <div>
+                    <p class="section-kicker">好事例</p>
+                    <h3>札幌・小樽で真似したい運営先</h3>
+                    <p>札幌市・小樽市で高工賃かつ高利用率の事業所から、横展開の参考先を並べた。</p>
+                  </div>
+                </div>
+                <div id="hosBenchmarkList" class="hos-watch-list"></div>
+              </article>
+            </section>
+          </section>
+
+          <section class="panel history-panel" aria-labelledby="historyHeading">
+            <div class="panel-head">
+              <div>
+                <p class="section-kicker">過去3年</p>
+                <h2 id="historyHeading">北海道全体の平均工賃推移</h2>
+                <p class="panel-note">事業所別ではなく、北海道公式の年度概要にある就労継続支援B型の全道平均を並べた。</p>
+              </div>
+              <p id="historyTrendSummary" class="table-summary"></p>
+            </div>
+            <div id="historyTrendGrid" class="history-grid"></div>
+            <div id="historyTrendFoot" class="history-foot"></div>
+          </section>
+
+          <section class="panel explain-panel is-collapsed" data-collapsible aria-labelledby="termsHeading">
+            <div class="panel-head">
+              <div>
+                <p class="section-kicker">用語の見方</p>
+                <h2 id="termsHeading">迷いやすい言葉だけ先に確認する</h2>
+                <p class="panel-note">詳しい説明はモーダルで開く。ここでは判断に直結する要点だけ残す。</p>
+              </div>
+              <div class="panel-head-actions">
+                <button class="ghost-button panel-collapse-button" type="button" aria-expanded="false">開く</button>
+                <button id="openGuidePanelButton" class="ghost-button" type="button">用語ガイドを開く</button>
+              </div>
+            </div>
+            <div class="guide-preview">
+              <div class="guide-pill-row" aria-label="よく使う言葉の要点">
+                <span class="guide-pill">常勤換算 = 常勤1人分に直した人数</span>
+                <span class="guide-pill">定員に対する支援職員 = 職員配置の厚さ</span>
+                <span class="guide-pill">6:1 は最も手厚い配置 / 10:1 は最低ライン</span>
+                <span class="guide-pill">利用率 = 定員に対する平均利用人数</span>
+                <span class="guide-pill">平均との差 = 1.00倍が平均</span>
+              </div>
+              <p class="panel-note">判断に迷ったら、用語ガイドを開くと全部の説明をまとめて確認できる。</p>
+            </div>
+          </section>
+
+          <section class="panel insight-panel" data-collapsible aria-labelledby="insightHeading">
+            <div class="panel-head">
+              <div>
+                <p class="section-kicker">要点</p>
+                <h2 id="insightHeading">最初に押さえる状況</h2>
+              </div>
+              <div class="panel-head-actions">
+                <button class="ghost-button panel-collapse-button" type="button" aria-expanded="true">閉じる</button>
+              </div>
+            </div>
+            <div id="insightList" class="insight-grid"></div>
+          </section>
+
+          <section class="panel strategy-panel" data-collapsible aria-labelledby="strategyHeading">
+            <div class="panel-head">
+              <div>
+                <p class="section-kicker">優先順位</p>
+                <h2 id="strategyHeading">先に見るべき事業所</h2>
+                <p class="panel-note">高工賃でまだ伸ばせる候補、低工賃で利用も弱く人員が重い候補、すでに高工賃かつ高利用率の候補、の3つに分けた。</p>
+              </div>
+              <div class="panel-head-actions">
+                <p id="strategySummary" class="table-summary"></p>
+                <button class="ghost-button panel-collapse-button" type="button" aria-expanded="true">閉じる</button>
+              </div>
+            </div>
+            <div class="strategy-grid">
+              <article class="strategy-column">
+                <h3>高工賃・低利用率</h3>
+                <div id="growthList" class="strategy-list"></div>
+              </article>
+              <article class="strategy-column">
+                <h3>低工賃・低利用率・人員過剰</h3>
+                <div id="fixList" class="strategy-list"></div>
+              </article>
+              <article class="strategy-column">
+                <h3>高工賃・高利用率</h3>
+                <div id="highHighList" class="strategy-list"></div>
+              </article>
+            </div>
+          </section>
+
+          <section class="panel detail-panel" aria-labelledby="detailHeading">
+            <div class="panel-head">
+              <div>
+                <p class="section-kicker">選択中の事業所</p>
+                <h2 id="detailHeading">一覧比較の途中で要点だけ確認する</h2>
+                <p class="panel-note">詳しい情報はモーダルで開く。ここでは今選んでいる事業所の要点だけを見る。</p>
+              </div>
+              <div class="panel-head-actions">
+                <button id="openSelectedDetailButton" class="solid-button" type="button">詳細を開く</button>
+                <button id="focusSelectedButton" class="ghost-button" type="button">一覧で同じ事業所を見る</button>
+              </div>
+            </div>
+            <div id="detailContent"></div>
+          </section>
+
+          <section class="panel anomaly-panel is-collapsed" data-collapsible aria-labelledby="anomalyHeading">
+            <div class="panel-head">
+              <div>
+                <p class="section-kicker">差が大きい事業所</p>
+                <h2 id="anomalyHeading">工賃と人員配置の確認候補</h2>
+              </div>
+              <div class="panel-head-actions">
+                <p id="anomalySummary" class="table-summary"></p>
+                <button class="ghost-button panel-collapse-button" type="button" aria-expanded="false">開く</button>
+              </div>
+            </div>
+            <div id="anomalyList" class="anomaly-grid"></div>
+          </section>
+
+          <section class="panel charts-panel is-collapsed" data-collapsible aria-labelledby="chartsHeading">
+            <div class="panel-head">
+              <div>
+                <p class="section-kicker">比較グラフ</p>
+                <h2 id="chartsHeading">主要比較から順に見る</h2>
+                <p class="panel-note">まず地域差と工賃差を見て、次に利用状況と人員配置を見る。</p>
+              </div>
+              <div class="panel-head-actions">
+                <button class="ghost-button panel-collapse-button" type="button" aria-expanded="false">開く</button>
+              </div>
+            </div>
+            <div class="chart-section">
+              <h3 class="chart-section-title">主要比較</h3>
+              <div class="chart-grid chart-grid-primary">
+                <article class="chart-card">
+                  <h3>市町村別 件数</h3>
+                  <div id="municipalityChart" class="bar-chart"></div>
+                </article>
+                <article class="chart-card">
+                  <h3>市町村別 平均工賃</h3>
+                  <div id="wageChart" class="bar-chart"></div>
+                </article>
+                <article class="chart-card">
+                  <h3>法人種別 件数</h3>
+                  <div id="corporationChart" class="bar-chart"></div>
+                </article>
+                <article class="chart-card">
+                  <h3>定員帯別 平均工賃</h3>
+                  <div id="capacityChart" class="bar-chart"></div>
+                </article>
+                <article class="chart-card">
+                  <h3>工賃 × 利用率</h3>
+                  <div id="utilizationScatter" class="scatter-chart"></div>
+                </article>
+                <article class="chart-card">
+                  <h3>工賃 × 定員に対する支援職員</h3>
+                  <div id="staffingScatter" class="scatter-chart"></div>
+                </article>
+              </div>
+            </div>
+            <details class="chart-group" open>
+              <summary>運営体制を見る</summary>
+              <div class="chart-grid">
+                <article class="chart-card">
+                  <h3>工賃と利用の4分類</h3>
+                  <div id="quadrantChart" class="bar-chart compact-chart"></div>
+                </article>
+                <article class="chart-card">
+                  <h3>人員詳細あり / なし</h3>
+                  <div id="wamCoverageChart" class="bar-chart compact-chart"></div>
+                </article>
+                <article class="chart-card">
+                  <h3>工賃と人員配置の4分類</h3>
+                  <div id="staffingQuadrantChart" class="bar-chart compact-chart"></div>
+                </article>
+                <article class="chart-card">
+                  <h3>主な職種の平均人数（常勤換算）</h3>
+                  <div id="staffingRoleChart" class="bar-chart"></div>
+                </article>
+                <article class="chart-card">
+                  <h3>送迎・食事・地域協働の平均工賃</h3>
+                  <div id="featureChart" class="bar-chart"></div>
+                </article>
+              </div>
+            </details>
+            <details class="chart-group">
+              <summary>差が大きい事業所と分布を見る</summary>
+              <div class="chart-grid">
+                <article class="chart-card">
+                  <h3>差が大きい事業所の分布</h3>
+                  <div id="outlierChart" class="bar-chart compact-chart"></div>
+                </article>
+                <article class="chart-card">
+                  <h3>平均工賃帯</h3>
+                  <div id="wageBandChart" class="bar-chart compact-chart"></div>
+                </article>
+                <article class="chart-card">
+                  <h3>報酬算定区分（R6年度）</h3>
+                  <div id="tierChart" class="bar-chart compact-chart"></div>
+                </article>
+              </div>
+            </details>
+          </section>
+
+          <section class="panel table-panel" aria-labelledby="tableHeading">
+            <div class="panel-head">
+              <div>
+                <p class="section-kicker">一覧比較</p>
+                <h2 id="tableHeading">要点だけで横比較する</h2>
+                <p class="panel-note">絞り込み後はまずここを見る。先頭列を固定し、事業所名から横に比較しやすくした。</p>
+              </div>
+              <p id="tableSummary" class="table-summary"></p>
+            </div>
+            <div class="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th><button type="button" data-sort-key="office_no">No.</button></th>
+                    <th><button type="button" data-sort-key="office_name">事業所名</button></th>
+                    <th><button type="button" data-sort-key="municipality">地域</button></th>
+                    <th><button type="button" data-sort-key="corporation_name">法人名</button></th>
+                    <th><button type="button" data-sort-key="average_wage_yen">平均工賃</button></th>
+                    <th><button type="button" data-sort-key="wage_ratio_to_overall_mean">平均との差</button></th>
+                    <th><button type="button" data-sort-key="daily_user_capacity_ratio">利用率</button></th>
+                    <th><button type="button" data-sort-key="wam_match_status">人員詳細</button></th>
+                    <th><button type="button" data-sort-key="wam_key_staff_fte_per_capacity">定員に対する支援職員</button></th>
+                    <th><button type="button" data-sort-key="wam_primary_activity_type">主活動</button></th>
+                    <th>注目</th>
+                    <th>詳細</th>
+                  </tr>
+                </thead>
+                <tbody id="recordsTableBody"></tbody>
+              </table>
+            </div>
+            <div id="recordsCardList" class="records-card-list" aria-label="モバイル一覧"></div>
+            <div class="pagination-row">
+              <button id="prevPageButton" class="ghost-button" type="button">前へ</button>
+              <p id="pageSummary"></p>
+              <button id="nextPageButton" class="ghost-button" type="button">次へ</button>
+            </div>
+          </section>
+
+          <section class="panel notes-panel is-collapsed" data-collapsible aria-labelledby="notesHeading">
+            <div class="panel-head">
+              <div>
+                <p class="section-kicker">注記と補足</p>
+                <h2 id="notesHeading">注記とデータの見方</h2>
+              </div>
+              <div class="panel-head-actions">
+                <button class="ghost-button panel-collapse-button" type="button" aria-expanded="false">開く</button>
+              </div>
+            </div>
+            <div id="issuesList" class="notes-list"></div>
+            <div id="notesList" class="notes-list"></div>
+          </section>
+        </main>
+      </div>
+    </div>
+
+    <template id="emptyStateTemplate">
+      <div class="empty-state">
+        <h3>条件に一致するデータがない</h3>
+        <p>絞り込み条件を緩めると一覧が表示される。</p>
+      </div>
+    </template>
+
+    <dialog id="filtersDialog" class="filters-dialog" aria-labelledby="filtersDialogHeading">
+      <div class="filters-dialog-shell">
+        <div class="dialog-head">
+          <div>
+            <p class="section-kicker">条件を絞る</p>
+            <h2 id="filtersDialogHeading">検索と絞り込み</h2>
+            <p class="panel-note">条件を調整して保存すると、一覧に反映して自動で閉じる。</p>
+          </div>
+          <button id="closeFiltersButton" class="ghost-button" type="button">閉じる</button>
+        </div>
+        <div class="filters-stack dialog-body">
+          <details class="filter-group" open>
+            <summary>よく使う条件</summary>
+            <div class="filters-grid">
+              <label class="field field-search">
+                <span>事業所・エリア検索</span>
+                <input
+                  id="searchInput"
+                  type="search"
+                  placeholder="事業所名 / 法人名 / 市区 / 住所 / No."
+                  autocomplete="off"
+                />
+              </label>
+              <label class="field">
+                <span>市町村</span>
+                <select id="municipalitySelect"></select>
+              </label>
+              <label class="field">
+                <span>エリア</span>
+                <select id="areaSelect"></select>
+              </label>
+              <label class="field">
+                <span>人員詳細</span>
+                <select id="wamMatchSelect"></select>
+              </label>
+              <label class="field">
+                <span>仕事不足の可能性</span>
+                <select id="workShortageRiskSelect"></select>
+              </label>
+              <label class="field">
+                <span>工賃の差が大きい</span>
+                <select id="outlierFlagSelect"></select>
+              </label>
+              <label class="field">
+                <span>人員配置の差が大きい</span>
+                <select id="staffingOutlierSelect"></select>
+              </label>
+              <label class="field">
+                <span>主活動</span>
+                <select id="primaryActivitySelect"></select>
+              </label>
+            </div>
+          </details>
+          <details class="filter-group">
+            <summary>詳細条件</summary>
+            <div class="filters-grid">
+              <label class="field">
+                <span>法人種別</span>
+                <select id="corporationTypeSelect"></select>
+              </label>
+              <label class="field">
+                <span>回答状態</span>
+                <select id="responseStatusSelect"></select>
+              </label>
+              <label class="field">
+                <span>定員帯</span>
+                <select id="capacityBandSelect"></select>
+              </label>
+              <label class="field">
+                <span>工賃と利用の位置</span>
+                <select id="quadrantSelect"></select>
+              </label>
+              <label class="field">
+                <span>送迎</span>
+                <select id="transportSelect"></select>
+              </label>
+              <label class="field">
+                <span>食事加算</span>
+                <select id="mealSupportSelect"></select>
+              </label>
+              <label class="field">
+                <span>管理者兼務</span>
+                <select id="managerMultiSelect"></select>
+              </label>
+            </div>
+          </details>
+          <div class="toggle-row dialog-toggle-row">
+            <label class="toggle">
+              <input id="newOnlyCheckbox" type="checkbox" />
+              <span>新設のみ</span>
+            </label>
+            <label class="toggle">
+              <input id="noufukuOnlyCheckbox" type="checkbox" />
+              <span>農福連携あり</span>
+            </label>
+            <label class="toggle">
+              <input id="wamOnlyCheckbox" type="checkbox" />
+              <span>人員詳細ありのみ</span>
+            </label>
+          </div>
+        </div>
+        <div class="dialog-actions">
+          <button id="resetFiltersDialogButton" class="ghost-button" type="button">条件を初期化</button>
+          <button id="saveFiltersButton" class="solid-button filter-search-button" type="button">保存</button>
+        </div>
+      </div>
+    </dialog>
+
+    <dialog id="guideDialog" class="guide-dialog" aria-labelledby="guideDialogHeading">
+      <div class="guide-dialog-shell">
+        <div class="dialog-head">
+          <div>
+            <p class="section-kicker">用語ガイド</p>
+            <h2 id="guideDialogHeading">現場向けの読み方をまとめて確認する</h2>
+            <p class="panel-note">画面内で使う言葉を、業務で判断しやすい言い方にそろえた。</p>
+          </div>
+          <button id="closeGuideButton" class="ghost-button" type="button">閉じる</button>
+        </div>
+        <div class="dialog-body">
+          <div class="term-grid">
+            <article class="term-card">
+              <h3>人員詳細あり</h3>
+              <p>福祉医療機構の公開情報と結び付いた状態で、送迎や職員数まで見比べられる。</p>
+            </article>
+            <article class="term-card">
+              <h3>常勤換算</h3>
+              <p>常勤1人を 1.0 人分として数えた人数。非常勤の合計も人分で見られる。</p>
+            </article>
+            <article class="term-card">
+              <h3>定員に対する支援職員</h3>
+              <p>定員に対して支援職員がどれくらいいるかを見る目安。数字が高いほど、職員配置は手厚い。</p>
+            </article>
+            <article class="term-card">
+              <h3>6:1 / 7.5:1 / 10:1</h3>
+              <p>6:1 は最も手厚い配置、7.5:1 は標準、10:1 は最低ライン。10:1 に近いほど欠員に弱い。</p>
+            </article>
+            <article class="term-card">
+              <h3>利用率</h3>
+              <p>定員に対して、平均で何人使っているか。高いほど空きが少ない。</p>
+            </article>
+            <article class="term-card">
+              <h3>平均との差</h3>
+              <p>1.00倍が平均。1.20倍なら平均より2割高く、0.80倍なら平均より2割低い。</p>
+            </article>
+            <article class="term-card">
+              <h3>差が大きい</h3>
+              <p>多くの事業所から離れた値。良し悪しではなく、先に確認したい目印である。</p>
+            </article>
+            <article class="term-card">
+              <h3>仕事不足の可能性</h3>
+              <p>工賃が低めで、利用率や人員配置のバランスも弱い状態。作業量不足の可能性がある目印である。</p>
+            </article>
+            <article class="term-card">
+              <h3>低工賃・低利用率・人員過剰</h3>
+              <p>工賃が低めで、利用率も低く、人員が重い状態。仕事量、営業導線、配置の見直しを早めにかけたい事業所である。</p>
+            </article>
+          </div>
+        </div>
+      </div>
+    </dialog>
+
+    <dialog id="detailDialog" class="detail-dialog" aria-labelledby="detailDialogHeading">
+      <div class="detail-dialog-shell">
+        <div class="dialog-head">
+          <div>
+            <p class="section-kicker">事業所詳細</p>
+            <h2 id="detailDialogHeading">選んだ事業所を深掘る</h2>
+            <p class="panel-note">一覧、優先カード、確認候補カードから選ぶとここで詳しく読める。</p>
+          </div>
+          <button id="closeDetailButton" class="ghost-button" type="button">閉じる</button>
+        </div>
+        <div id="detailDialogContent" class="detail-dialog-body"></div>
+      </div>
+    </dialog>
+
+    <dialog id="corporationDialog" class="detail-dialog" aria-labelledby="corporationDialogHeading">
+      <div class="detail-dialog-shell corporation-dialog-shell">
+        <div class="dialog-head">
+          <div>
+            <p class="section-kicker">法人別一覧</p>
+            <h2 id="corporationDialogHeading">法人が運営する事業所をまとめて見る</h2>
+            <p class="panel-note">法人名をクリックすると、北海道内で運営している事業所を一覧で確認できる。</p>
+          </div>
+          <button id="closeCorporationButton" class="ghost-button" type="button">閉じる</button>
+        </div>
+        <div id="corporationDialogContent" class="detail-dialog-body"></div>
+      </div>
+    </dialog>
+
+    <script src="./app.js" defer></script>
+  </body>
+</html>
