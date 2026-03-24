@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>大阪市 就労継続支援B型 利用者向けページ</title>
+    <meta
+      name="description"
+      content="大阪市の就労継続支援B型事業所を検索し、工賃やエリア、在宅利用可否で比較できる利用者向けページ"
+    />
+    <link rel="stylesheet" href="../styles.css" />
+  </head>
+  <body class="view-user" data-page-mode="user" data-app-root="..">
+    <div class="workspace">
+      <header class="topbar">
+        <div class="page-mode-row">
+          <div class="page-mode-label">
+            <span class="page-mode-badge">利用者向け</span>
+            <span>事業所を探して比べるページです</span>
+          </div>
+          <a class="page-mode-link" href="/jigyousya/">事業者向けページへ</a>
+        </div>
+        <div class="topbar-copy" id="topbarCopyUser">
+          <p class="section-kicker">大阪市 就労継続支援B型</p>
+          <h1 id="overviewHeading">事業所をくらべる</h1>
+          <p class="hero-lead">
+            大阪市内の就労継続支援B型事業所を、工賃やエリア、在宅利用可否で比較できます。気になる事業所は詳細を開いて、ホームページやInstagramも確認できます。
+          </p>
+        </div>
+      </header>
+
+      <section class="user-view" id="userView">
+        <div class="user-view-search-bar">
+          <input
+            id="userSearchInput"
+            type="search"
+            class="user-search-input"
+            placeholder="事業所名・エリア・住所で検索…"
+            autocomplete="off"
+          />
+          <select id="userAreaFilter" class="user-area-filter">
+            <option value="all">すべてのエリア</option>
+          </select>
+          <select id="userSortSelect" class="user-sort-select">
+            <option value="wage-desc">工賃が高い順</option>
+            <option value="wage-asc">工賃が低い順</option>
+            <option value="utilization-desc">利用率が高い順</option>
+            <option value="name-asc">名前順</option>
+          </select>
+        </div>
+        <p class="user-view-summary" id="userViewSummary"></p>
+        <div class="user-card-list" id="userCardList"></div>
+        <div class="user-view-pagination">
+          <button id="userPrevPage" class="ghost-button" type="button">前へ</button>
+          <p id="userPageSummary"></p>
+          <button id="userNextPage" class="ghost-button" type="button">次へ</button>
+        </div>
+      </section>
+    </div>
+
+    <template id="emptyStateTemplate">
+      <div class="empty-state">
+        <h3>条件に一致するデータがない</h3>
+        <p>検索条件を緩めると一覧が表示される。</p>
+      </div>
+    </template>
+
+    <dialog id="detailDialog" class="detail-dialog" aria-labelledby="detailDialogHeading">
+      <div class="detail-dialog-shell">
+        <div class="dialog-head">
+          <div>
+            <p class="section-kicker">事業所詳細</p>
+            <h2 id="detailDialogHeading">選んだ事業所を詳しく見る</h2>
+            <p class="panel-note">工賃や利用率、在宅利用の有無、外部リンクをまとめて確認できる。</p>
+          </div>
+          <button id="closeDetailButton" class="ghost-button" type="button">閉じる</button>
+        </div>
+        <div id="detailDialogContent" class="detail-dialog-body"></div>
+      </div>
+    </dialog>
+
+    <dialog id="corporationDialog" class="corporation-dialog" aria-labelledby="corporationDialogHeading">
+      <div class="corporation-dialog-shell">
+        <div class="dialog-head">
+          <div>
+            <p class="section-kicker">法人別の事業所一覧</p>
+            <h2 id="corporationDialogHeading">同じ法人が運営する事業所をまとめて見る</h2>
+            <p class="panel-note">法人名を押すと、大阪市内で同一法人が運営している事業所一覧を表示する。</p>
+          </div>
+          <button id="closeCorporationButton" class="ghost-button" type="button">閉じる</button>
+        </div>
+        <div id="corporationDialogContent" class="corporation-dialog-body"></div>
+      </div>
+    </dialog>
+
+    <dialog id="representativeDialog" class="corporation-dialog" aria-labelledby="representativeDialogHeading">
+      <div class="corporation-dialog-shell">
+        <div class="dialog-head">
+          <div>
+            <p class="section-kicker">代表者名の候補グループ</p>
+            <h2 id="representativeDialogHeading">同じ代表者名でまとまる法人候補を見る</h2>
+            <p class="panel-note">同姓同名の別人を含む可能性があるため、参考候補として使う。</p>
+          </div>
+          <button id="closeRepresentativeButton" class="ghost-button" type="button">閉じる</button>
+        </div>
+        <div id="representativeDialogContent" class="corporation-dialog-body"></div>
+      </div>
+    </dialog>
+
+    <script src="../app.js" defer></script>
+  </body>
+</html>

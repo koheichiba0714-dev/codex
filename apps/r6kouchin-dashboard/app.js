@@ -828,6 +828,7 @@ const state = {
   records: [],
   filteredRecords: [],
   dashboard: null,
+  pageMode: "user",
   sortKey: "wage_ratio_to_overall_mean",
   sortDirection: "desc",
   currentPage: 1,
@@ -850,6 +851,29 @@ const state = {
   userPage: 1,
   userPageSize: 24,
 };
+
+function getPageMode() {
+  const mode = document.body?.dataset.pageMode;
+  return mode === "operator" ? "operator" : "user";
+}
+
+function getAppRoot() {
+  return String(document.body?.dataset.appRoot || ".").replace(/\/$/, "") || ".";
+}
+
+function resolveAppPath(path) {
+  const normalized = String(path || "").replace(/^\.\//, "");
+  const root = getAppRoot();
+  return root === "." ? `./${normalized}` : `${root}/${normalized}`;
+}
+
+function isOperatorPage() {
+  return state.pageMode === "operator";
+}
+
+function isUserPage() {
+  return state.pageMode === "user";
+}
 
 /* ===== User View (利用者向けビュー) ===== */
 
@@ -908,6 +932,7 @@ function getUserViewRecords() {
 function renderUserView() {
   if (state.currentView !== "user") return;
   const records = getUserViewRecords();
+  state.filteredRecords = records;
   const totalPages = Math.max(1, Math.ceil(records.length / state.userPageSize));
   state.userPage = Math.min(state.userPage, totalPages);
   const start = (state.userPage - 1) * state.userPageSize;
@@ -1088,33 +1113,46 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 
 async function init() {
-  bindSectionNav();
-  bindFilterDialog();
+  state.pageMode = getPageMode();
   bindGuideDialog();
   bindDetailDialog();
   bindCorporationDialog();
   bindRepresentativeDialog();
-  bindPanelToggles();
-  bindMobileSidebar();
-  bindUserView();
-  const response = await fetch("./data/dashboard-data.json", { cache: "no-store" });
+  bindSharedRecordActions();
+  if (isOperatorPage()) {
+    bindSectionNav();
+    bindFilterDialog();
+    bindPanelToggles();
+    bindMobileSidebar();
+    renderLoadingState();
+  } else {
+    bindUserView();
+  }
+
+  const response = await fetch(resolveAppPath("data/dashboard-data.json"), { cache: "no-store" });
   if (!response.ok) {
     throw new Error("dashboard data could not be loaded");
   }
 
   const dashboard = await response.json();
   state.dashboard = dashboard;
-  renderLoadingState();
   state.records = await loadDashboardRecords(dashboard);
-  renderMeta(dashboard);
-  renderQuality(dashboard, state.records);
-  populateFilterOptions(state.records);
+  if (isOperatorPage()) {
+    renderMeta(dashboard);
+    renderQuality(dashboard, state.records);
+    populateFilterOptions(state.records);
+    bindEvents();
+    syncPresetButtons();
+    applyFilters();
+    switchCompareView(state.currentCompareView);
+    switchView("operator");
+    return;
+  }
+
   populateUserAreaFilter();
-  bindEvents();
-  syncPresetButtons();
-  applyFilters();
-  switchCompareView(state.currentCompareView);
+  syncSelectedRecord(getUserViewRecords());
   switchView("user");
+  renderUserView();
 }
 
 function bindSectionNav() {
@@ -1385,7 +1423,7 @@ async function loadDashboardRecords(dashboard) {
 
   const chunks = await Promise.all(
     chunkPaths.map(async (path) => {
-      const response = await fetch(`./${path}`, { cache: "no-store" });
+      const response = await fetch(resolveAppPath(path), { cache: "no-store" });
       if (!response.ok) {
         throw new Error(`record chunk could not be loaded: ${path}`);
       }
@@ -1476,7 +1514,9 @@ function bindEvents() {
       applyFilters();
     });
   });
+}
 
+function bindSharedRecordActions() {
   document.body.addEventListener("click", (event) => {
     const corporationSortTrigger = event.target.closest("[data-corporation-sort]");
     if (corporationSortTrigger) {
@@ -1944,9 +1984,11 @@ function selectRecord(officeNo, options = {}) {
   const record = findRecordByOffice(officeNo);
   if (!record) return;
   state.selectedOfficeNo = String(officeNo);
-  renderCharts(state.filteredRecords);
+  if (isOperatorPage()) {
+    renderCharts(state.filteredRecords);
+    renderTable(state.filteredRecords);
+  }
   renderDetail(record);
-  renderTable(state.filteredRecords);
   if (options.openDetail) {
     openDialogElement(document.getElementById("detailDialog"));
   }
