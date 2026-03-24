@@ -265,6 +265,10 @@ h1[id], h2[id] { scroll-margin-top: 24px; }
   margin-bottom: 12px;
 }
 
+.meta-strip-secondary {
+  margin-bottom: 0;
+}
+
 .meta-card {
   padding: 12px 14px;
   border-radius: var(--radius-md);
@@ -335,18 +339,19 @@ h1[id], h2[id] { scroll-margin-top: 24px; }
 /* Panel ordering — single column, detail is modal-only on PC */
 .filter-launch-panel { grid-column: 1 / -1; order: 1; }
 .panel-main { grid-column: 1 / -1; order: 2; }
-.table-panel { grid-column: 1 / -1; order: 3; }
+.strategy-panel { order: 3; }
+.table-panel { grid-column: 1 / -1; order: 4; }
 .detail-panel { display: none; }
 .insight-panel, .market-panel, .strategy-panel, .anomaly-panel, .charts-panel, .explain-panel, .notes-panel {
   grid-column: 1 / -1;
 }
-.insight-panel { order: 4; }
-.market-panel { order: 5; }
-.strategy-panel { order: 6; }
-.anomaly-panel { order: 7; }
-.charts-panel { order: 8; }
-.explain-panel { order: 9; }
-.notes-panel { order: 10; }
+.meta-strip-secondary { order: 5; }
+.insight-panel { order: 6; }
+.market-panel { order: 7; }
+.anomaly-panel { order: 8; }
+.charts-panel { order: 9; }
+.explain-panel { order: 10; }
+.notes-panel { order: 11; }
 
 /* Panel head */
 .panel-head {
@@ -369,6 +374,25 @@ h1[id], h2[id] { scroll-margin-top: 24px; }
   margin: 4px 0 0;
   color: var(--text-muted);
   font-size: 13px;
+}
+
+.context-note {
+  margin: 0 16px 4px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.panel-main > .context-note {
+  padding: 8px 10px;
+  margin: 12px 16px 0;
+}
+
+.panel-main > .stats-grid {
+  padding-top: 8px;
 }
 
 .panel-head-actions {
@@ -602,10 +626,10 @@ h1[id], h2[id] { scroll-margin-top: 24px; }
 /* --- Stats Grid --- */
 .stats-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
 }
-.panel-main .stats-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
+.panel-main .stats-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 
 .stat-card {
   padding: 10px 12px;
@@ -821,6 +845,12 @@ h1[id], h2[id] { scroll-margin-top: 24px; }
   border: 1px solid var(--border);
 }
 .chart-card h3 { font-size: 12px; font-weight: 600; margin-bottom: 10px; color: var(--text-secondary); }
+.chart-card-note {
+  margin: -4px 0 10px;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
 
 .chart-group {
   border: 1px solid var(--border);

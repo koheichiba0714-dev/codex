@@ -795,6 +795,8 @@ const FILTER_PRESETS = {
   },
 };
 const INITIAL_PRESET = "all";
+const KPI_PERIOD_LABEL = "令和6年度実績";
+const KPI_BASELINE_LABEL = "大阪市全体";
 
 function createDefaultFilters() {
   return {
@@ -2218,6 +2220,8 @@ function renderActiveFilterSummary(records) {
   const tagsRoot = document.getElementById("activeFilterTags");
   if (tagsRoot) {
     const tags = [
+      `期間: ${KPI_PERIOD_LABEL}`,
+      `比較: ${KPI_BASELINE_LABEL}`,
       ...(state.filters.municipality === "all" ? ["対象: 大阪市全域"] : []),
       ...(filters.length ? filters : ["条件なし"]),
     ];
@@ -2401,39 +2405,52 @@ function renderStrategyList(id, records, emptyLabel, buildReason) {
 function renderStats(records) {
   const wages = numericValues(records, "average_wage_yen");
   const wageStats = computeLocalStats(wages);
-  const sortedWages = [...wages].sort((a, b) => a - b);
-  const wageStdDev = computeStdDev(wages);
-  const p10 = percentile(sortedWages, 0.1);
-  const p25 = percentile(sortedWages, 0.25);
-  const p75 = percentile(sortedWages, 0.75);
   const utilizationMean = meanFor(records, "daily_user_capacity_ratio");
-  const avgDailyUsers = meanFor(records, "average_daily_users");
+  const overallWageMean = meanFor(state.records, "average_wage_yen");
+  const overallUtilizationStats = computeLocalStats(numericValues(state.records, "daily_user_capacity_ratio"));
+  const utilizationMedian = overallUtilizationStats.median;
   const homeUseActiveCount = records.filter((record) => record.home_use_active === true).length;
   const homeUseActiveRate = ratioOf(records, (record) => record.home_use_active === true);
-  const homeUseRateAmongActive = meanFor(
-    records.filter((record) => record.home_use_active === true && isNumber(record.home_use_user_ratio_decimal)),
-    "home_use_user_ratio_decimal"
-  );
   const workShortageCount = records.filter((record) => hasWorkShortageRisk(record)).length;
-  const corporationGroups = groupedCorporations(records);
-  const multiOfficeCorporationCount = corporationGroups.filter((group) => group.records.length >= 2).length;
-  const topWorkModel = buildGroupStats(records, (record) => deriveWorkModelLabel(record), "average_wage_yen", 5).sort(
-    (left, right) => (right.median ?? 0) - (left.median ?? 0)
-  )[0];
+  const recordShare = state.records.length ? records.length / state.records.length : null;
+  const wageDiffFromOverall = isNumber(wageStats.mean) && isNumber(overallWageMean) ? wageStats.mean - overallWageMean : null;
+  const utilizationDiffFromMedian =
+    isNumber(utilizationMean) && isNumber(utilizationMedian) ? utilizationMean - utilizationMedian : null;
+  const workShortageRatio = records.length ? workShortageCount / records.length : null;
+  const homeUseRateDiffFromOverall =
+    isNumber(homeUseActiveRate) && state.records.length
+      ? homeUseActiveRate - ratioOf(state.records, (record) => record.home_use_active === true)
+      : null;
 
   const cards = [
-    { label: "表示件数", value: formatCount(records.length), hint: `全 ${formatCount(state.records.length)} 件中` },
-    { label: "平均工賃", value: formatMaybeYen(wageStats.mean), hint: `標準偏差 ${formatMaybeYen(wageStdDev)}` },
-    { label: "中央値", value: formatMaybeYen(wageStats.median), hint: `P25: ${formatMaybeYen(p25)} / P75: ${formatMaybeYen(p75)}` },
-    { label: "上位10%の目安", value: formatMaybeYen(wageStats.p90), hint: `下位10%: ${formatMaybeYen(p10)}` },
-    { label: "平均利用率", value: formatPercent(utilizationMean), hint: "定員に対する平均利用人数" },
-    { label: "平均利用人数", value: formatDecimalUnit(avgDailyUsers, "人"), hint: "1日あたりの平均利用人数" },
-    { label: "在宅利用あり", value: formatCount(homeUseActiveCount), hint: `表示中の ${formatPercent(homeUseActiveRate)}` },
-    { label: "在宅利用ありの平均在宅率", value: formatPercent(homeUseRateAmongActive), hint: "在宅利用ありの事業所のみ" },
-    { label: "仕事不足の可能性", value: formatCount(workShortageCount), hint: "工賃と利用状況から確認候補を抽出" },
-    { label: "2拠点以上の法人", value: formatCount(multiOfficeCorporationCount), hint: "法人内比較ができる法人" },
-    { label: "工賃中央値が高い作業モデル", value: topWorkModel ? topWorkModel.label : "-", hint: topWorkModel ? `中央値 ${formatMaybeYen(topWorkModel.median)}` : "件数5件以上で比較" },
+    {
+      label: "対象事業所数",
+      value: formatCount(records.length),
+      hint: `${KPI_PERIOD_LABEL} / ${KPI_BASELINE_LABEL} ${formatCount(state.records.length)}件中 ${formatPercent(recordShare)}`,
+    },
+    {
+      label: "平均工賃",
+      value: formatMaybeYen(wageStats.mean),
+      hint: `単位: 月額円 / ${KPI_BASELINE_LABEL}平均との差 ${formatSignedYen(wageDiffFromOverall)}`,
+    },
+    {
+      label: "平均利用率",
+      value: formatPercent(utilizationMean),
+      hint: `単位: 定員比 / ${KPI_BASELINE_LABEL}中央値差 ${formatSignedPercentPoint(utilizationDiffFromMedian)}`,
+    },
+    {
+      label: "重点確認件数",
+      value: formatCount(workShortageCount),
+      hint: `低工賃・低利用率など / 表示中の ${formatPercent(workShortageRatio)} / 在宅あり率 ${formatPercent(homeUseActiveRate)} (${formatSignedPercentPoint(homeUseRateDiffFromOverall)})`,
+    },
   ];
+
+  const contextRoot = document.getElementById("statsContextNote");
+  if (contextRoot) {
+    contextRoot.textContent = `期間: ${KPI_PERIOD_LABEL} / 比較対象: ${KPI_BASELINE_LABEL} ${formatCount(
+      state.records.length
+    )}件 / 単位: 工賃は月額円、利用率は定員比`;
+  }
 
   document.getElementById("statsGrid").innerHTML = cards
     .map(
@@ -2449,8 +2466,7 @@ function renderStats(records) {
 }
 
 function renderCharts(records) {
-  renderBarChart("municipalityChart", topCounts(records, "municipality", 10), formatCountSuffix("件"));
-  renderBarChart("wageChart", topAverageWageByMunicipality(records, 8), formatCountSuffix("円", true));
+  renderBarChart("wageChart", topAverageWageByArea(records, 12), formatCountSuffix("円", true));
   renderBarChart("corporationChart", topCounts(records, "corporation_type_label", 6), formatCountSuffix("件"));
   renderBarChart("areaChart", topCounts(records.map((record) => ({ ...record, derived_area_label: getAreaLabel(record) })), "derived_area_label", 10), formatCountSuffix("件"));
   renderBarChart(
@@ -2501,6 +2517,7 @@ function renderCharts(records) {
 
 function renderBarChart(id, items, valueFormatter) {
   const root = document.getElementById(id);
+  if (!root) return;
   if (!items.length) {
     root.innerHTML = document.getElementById("emptyStateTemplate").innerHTML;
     return;
@@ -2522,6 +2539,7 @@ function renderBarChart(id, items, valueFormatter) {
 
 function renderScatterChart(id, records, config) {
   const root = document.getElementById(id);
+  if (!root) return;
   const points = records.filter(
     (record) => isNumber(record[config.xKey]) && isNumber(record[config.yKey])
   );
@@ -3299,6 +3317,22 @@ function topAverageWageByMunicipality(records, limit) {
     const bucket = buckets.get(record.municipality) ?? [];
     bucket.push(record.average_wage_yen);
     buckets.set(record.municipality, bucket);
+  });
+  return [...buckets.entries()]
+    .filter(([, values]) => values.length >= 5)
+    .map(([label, values]) => ({ label, value: values.reduce((sum, value) => sum + value, 0) / values.length }))
+    .sort((left, right) => right.value - left.value)
+    .slice(0, limit);
+}
+
+function topAverageWageByArea(records, limit) {
+  const buckets = new Map();
+  records.forEach((record) => {
+    const area = getAreaLabel(record);
+    if (!area || !isNumber(record.average_wage_yen)) return;
+    const bucket = buckets.get(area) ?? [];
+    bucket.push(record.average_wage_yen);
+    buckets.set(area, bucket);
   });
   return [...buckets.entries()]
     .filter(([, values]) => values.length >= 5)

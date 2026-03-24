@@ -66,25 +66,6 @@
           </div>
         </header>
 
-        <section class="meta-strip operator-only" aria-label="データ概要">
-          <article class="meta-card">
-            <span class="meta-label">データ更新</span>
-            <strong id="updatedAt">-</strong>
-          </article>
-          <article class="meta-card">
-            <span class="meta-label">収録件数</span>
-            <strong id="totalRecords">-</strong>
-          </article>
-          <article class="meta-card">
-            <span class="meta-label">ホームページあり</span>
-            <strong id="homepageCount">-</strong>
-          </article>
-          <article class="meta-card">
-            <span class="meta-label">Instagramあり</span>
-            <strong id="instagramCount">-</strong>
-          </article>
-        </section>
-
         <!-- 利用者向けビュー -->
         <section class="user-view" id="userView">
           <div class="user-view-search-bar">
@@ -147,12 +128,12 @@
                   <p>市町村、エリア、工賃水準、主活動で絞る。</p>
                 </article>
                 <article class="quickstart-card">
-                  <strong>2. 一覧で比べる</strong>
-                  <p>絞った結果をすぐ下の一覧で横比較する。</p>
+                  <strong>2. 重点候補を見る</strong>
+                  <p>高工賃・低利用率など、先に見る候補を絞る。</p>
                 </article>
                 <article class="quickstart-card">
-                  <strong>3. 詳細を開く</strong>
-                  <p>気になる事業所だけモーダルで深掘りする。</p>
+                  <strong>3. 一覧で比べる</strong>
+                  <p>候補を一覧で横比較し、詳細だけモーダルで開く。</p>
                 </article>
               </div>
             </div>
@@ -163,9 +144,10 @@
               <div>
                 <p class="section-kicker">全体把握</p>
                 <h2 id="summaryHeading">ひと目で分かる主要指標</h2>
-                <p class="panel-note">よくある水準、工賃の差、利用状況を先に押さえる。</p>
+                <p class="panel-note">期間: 令和6年度実績。工賃は月額、利用率は定員比。比較対象は大阪市全体。</p>
               </div>
             </div>
+            <p id="statsContextNote" class="context-note"></p>
             <section class="stats-grid" id="statsGrid" aria-label="集計カード"></section>
           </section>
 
@@ -191,20 +173,20 @@
             </div>
           </section>
 
-          <section class="panel insight-panel" data-collapsible aria-labelledby="insightHeading">
+          <section class="panel insight-panel is-collapsed" data-collapsible aria-labelledby="insightHeading">
             <div class="panel-head">
               <div>
                 <p class="section-kicker">要点</p>
                 <h2 id="insightHeading">最初に押さえる状況</h2>
               </div>
               <div class="panel-head-actions">
-                <button class="ghost-button panel-collapse-button" type="button" aria-expanded="true">閉じる</button>
+                <button class="ghost-button panel-collapse-button" type="button" aria-expanded="false">開く</button>
               </div>
             </div>
             <div id="insightList" class="insight-grid"></div>
           </section>
 
-          <section class="panel market-panel" data-collapsible aria-labelledby="marketHeading">
+          <section class="panel market-panel is-collapsed" data-collapsible aria-labelledby="marketHeading">
             <div class="panel-head">
               <div>
                 <p class="section-kicker">勝ち筋分析</p>
@@ -212,7 +194,7 @@
                 <p class="panel-note">競合密度、定員充足、主活動、在宅、法人展開をまとめて見て、次の打ち手を探す。</p>
               </div>
               <div class="panel-head-actions">
-                <button class="ghost-button panel-collapse-button" type="button" aria-expanded="true">閉じる</button>
+                <button class="ghost-button panel-collapse-button" type="button" aria-expanded="false">開く</button>
               </div>
             </div>
             <div id="marketList" class="market-grid"></div>
@@ -275,58 +257,61 @@
             <div id="anomalyList" class="anomaly-grid"></div>
           </section>
 
-          <section class="panel charts-panel" data-collapsible aria-labelledby="chartsHeading">
+          <section class="panel charts-panel is-collapsed" data-collapsible aria-labelledby="chartsHeading">
             <div class="panel-head">
               <div>
                 <p class="section-kicker">比較グラフ</p>
                 <h2 id="chartsHeading">主要比較から順に見る</h2>
-                <p class="panel-note">まず地域差と工賃差を見て、次に利用状況を見る。</p>
+                <p class="panel-note">初期表示は判断に直結する3つだけ。補助グラフは必要なときに開く。</p>
               </div>
               <div class="panel-head-actions">
-                <button class="ghost-button panel-collapse-button" type="button" aria-expanded="true">閉じる</button>
+                <button class="ghost-button panel-collapse-button" type="button" aria-expanded="false">開く</button>
               </div>
             </div>
             <div class="chart-section">
               <h3 class="chart-section-title">主要比較</h3>
               <div class="chart-grid chart-grid-primary">
                 <article class="chart-card">
-                  <h3>市町村別 件数</h3>
-                  <div id="municipalityChart" class="bar-chart"></div>
-                </article>
-                <article class="chart-card">
-                  <h3>市町村別 平均工賃</h3>
+                  <h3>区別 平均工賃</h3>
+                  <p class="chart-card-note">単位: 円/月。比較対象: 表示中の事業所。件数5件以上の区のみ。</p>
                   <div id="wageChart" class="bar-chart"></div>
                 </article>
                 <article class="chart-card">
-                  <h3>法人種別 件数</h3>
-                  <div id="corporationChart" class="bar-chart"></div>
-                </article>
-                <article class="chart-card">
-                  <h3>定員帯別 平均工賃</h3>
-                  <div id="capacityChart" class="bar-chart"></div>
-                </article>
-                <article class="chart-card">
                   <h3>工賃 × 利用率</h3>
+                  <p class="chart-card-note">縦軸: 平均工賃。横軸: 利用率。高工賃・低利用率候補を見つける。</p>
                   <div id="utilizationScatter" class="scatter-chart"></div>
+                </article>
+                <article class="chart-card">
+                  <h3>平均工賃帯の分布</h3>
+                  <p class="chart-card-note">平均では見えないボリューム帯を確認する。単位: 件数。</p>
+                  <div id="wageBandChart" class="bar-chart compact-chart"></div>
                 </article>
               </div>
             </div>
-            <details class="chart-group" open>
-              <summary>利用状況を見る</summary>
+            <details class="chart-group">
+              <summary>補助比較を開く</summary>
               <div class="chart-grid">
                 <article class="chart-card">
                   <h3>工賃と利用の4分類</h3>
                   <div id="quadrantChart" class="bar-chart compact-chart"></div>
+                </article>
+                <article class="chart-card">
+                  <h3>区別 件数</h3>
+                  <div id="areaChart" class="bar-chart compact-chart"></div>
+                </article>
+                <article class="chart-card">
+                  <h3>定員帯別 平均工賃</h3>
+                  <div id="capacityChart" class="bar-chart compact-chart"></div>
+                </article>
+                <article class="chart-card">
+                  <h3>法人種別 件数</h3>
+                  <div id="corporationChart" class="bar-chart compact-chart"></div>
                 </article>
               </div>
             </details>
             <details class="chart-group">
               <summary>競合と勝ち筋を見る</summary>
               <div class="chart-grid">
-                <article class="chart-card">
-                  <h3>エリア別 件数</h3>
-                  <div id="areaChart" class="bar-chart compact-chart"></div>
-                </article>
                 <article class="chart-card">
                   <h3>作業モデル別 工賃中央値</h3>
                   <div id="activityMedianChart" class="bar-chart compact-chart"></div>
@@ -347,10 +332,6 @@
                 <article class="chart-card">
                   <h3>差が大きい事業所の分布</h3>
                   <div id="outlierChart" class="bar-chart compact-chart"></div>
-                </article>
-                <article class="chart-card">
-                  <h3>平均工賃帯</h3>
-                  <div id="wageBandChart" class="bar-chart compact-chart"></div>
                 </article>
               </div>
             </details>
@@ -391,6 +372,25 @@
               <p id="pageSummary"></p>
               <button id="nextPageButton" class="ghost-button" type="button">次へ</button>
             </div>
+          </section>
+
+          <section class="meta-strip operator-only meta-strip-secondary" aria-label="参考情報">
+            <article class="meta-card">
+              <span class="meta-label">データ更新</span>
+              <strong id="updatedAt">-</strong>
+            </article>
+            <article class="meta-card">
+              <span class="meta-label">収録件数</span>
+              <strong id="totalRecords">-</strong>
+            </article>
+            <article class="meta-card">
+              <span class="meta-label">ホームページあり</span>
+              <strong id="homepageCount">-</strong>
+            </article>
+            <article class="meta-card">
+              <span class="meta-label">Instagramあり</span>
+              <strong id="instagramCount">-</strong>
+            </article>
           </section>
 
           <section class="panel notes-panel is-collapsed" data-collapsible aria-labelledby="notesHeading">
