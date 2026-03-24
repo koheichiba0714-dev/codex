@@ -831,6 +831,7 @@ const state = {
   sortKey: "wage_ratio_to_overall_mean",
   sortDirection: "desc",
   currentPage: 1,
+  currentCompareView: "table",
   filters: createPresetFilters(INITIAL_PRESET),
   draftFilters: createPresetFilters(INITIAL_PRESET),
   selectedOfficeNo: "339",
@@ -1062,6 +1063,24 @@ function bindUserView() {
   });
 }
 
+function switchCompareView(viewName) {
+  state.currentCompareView = viewName === "priority" ? "priority" : "table";
+
+  document.querySelectorAll("[data-compare-view]").forEach((button) => {
+    const isActive = button.getAttribute("data-compare-view") === state.currentCompareView;
+    button.classList.toggle("is-active", isActive);
+    button.setAttribute("aria-selected", String(isActive));
+  });
+
+  document.querySelectorAll("[data-compare-panel]").forEach((panel) => {
+    const isActive = panel.getAttribute("data-compare-panel") === state.currentCompareView;
+    panel.classList.toggle("is-active", isActive);
+    panel.hidden = !isActive;
+  });
+
+  renderCompareSummary(state.filteredRecords);
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   init().catch((error) => {
     renderError(error);
@@ -1094,6 +1113,7 @@ async function init() {
   bindEvents();
   syncPresetButtons();
   applyFilters();
+  switchCompareView(state.currentCompareView);
   switchView("user");
 }
 
@@ -1431,6 +1451,14 @@ function bindEvents() {
       const { preset } = button.dataset;
       if (!preset) return;
       applyPreset(preset);
+    });
+  });
+
+  document.querySelectorAll("[data-compare-view]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const viewName = button.getAttribute("data-compare-view");
+      if (!viewName) return;
+      switchCompareView(viewName);
     });
   });
 
@@ -1943,6 +1971,21 @@ function applyFilters() {
   renderAnomalies(filtered);
   renderDetail(getSelectedRecord());
   renderTable(filtered);
+  renderCompareSummary(filtered);
+}
+
+function renderCompareSummary(records) {
+  const root = document.getElementById("compareSummary");
+  if (!root) return;
+
+  if (state.currentCompareView === "priority") {
+    const summary = document.getElementById("strategySummary")?.textContent?.trim();
+    root.textContent = summary || "重点候補を表示";
+    return;
+  }
+
+  const pageCount = Math.max(1, Math.ceil(records.length / PAGE_SIZE));
+  root.textContent = `${formatCount(records.length)} 件 / ${formatCount(pageCount)} ページ`;
 }
 
 function matchesFilters(record, filters) {
@@ -2114,6 +2157,7 @@ function renderLoadingState() {
   document.getElementById("openSelectedDetailButton").disabled = true;
   document.getElementById("focusSelectedButton").disabled = true;
   document.getElementById("activeFilterSummary").textContent = "データを読み込み中...";
+  document.getElementById("compareSummary").textContent = "データを読み込み中...";
   const filterTags = document.getElementById("activeFilterTags");
   if (filterTags) {
     filterTags.innerHTML = "";
