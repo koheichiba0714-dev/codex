@@ -3051,7 +3051,7 @@ function renderUserDetailDialog(dialogRoot, record, options) {
         </ul>
       </article>
       <article class="detail-card detail-card-highlight">
-        <h3>見学前に確認したいこと</h3>
+        <h3>見学前にまず確認したい3点</h3>
         <ul class="detail-list">
           ${visitChecklist.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}
         </ul>
@@ -3132,25 +3132,31 @@ function describeUserHomeUse(record) {
 }
 
 function buildUserVisitChecklist(record, homepageUrl, instagramUrl) {
-  const items = [
-    `工賃の目安は月額 ${formatWageText(record.average_wage_yen)}。実際の作業時間や通所頻度で変わるため、見学時に聞きたい`,
-    `${record.wam_primary_activity_type ? `主活動は「${record.wam_primary_activity_type}」` : "主活動の記載は少ない"}。自分に合う作業か確認したい`,
-    record.home_use_active === true
-      ? "在宅利用があるため、利用できる条件や頻度を確認したい"
-      : "在宅利用の可否や、通所頻度の目安を確認したい",
-  ];
+  const items = [];
+
+  items.push(
+    `作業内容: ${record.wam_primary_activity_type ? `「${record.wam_primary_activity_type}」が中心` : "公開情報が少ない"}ので、自分に合うか見学で確かめたい`
+  );
+
+  if (record.home_use_active === true) {
+    items.push("通い方: 在宅利用の条件と、通所との組み合わせ方を確認したい");
+  } else if (record.home_use_active === false) {
+    items.push("通い方: 通所中心なので、週何日から始められるか確認したい");
+  } else {
+    items.push("通い方: 在宅利用の可否と、通所頻度の目安を確認したい");
+  }
 
   if (!homepageUrl && !instagramUrl) {
-    items.push("ホームページやSNSが少ないため、見学前に電話で雰囲気や活動内容を確認したい");
+    items.push("事前情報: ホームページやSNSが少ないため、見学前に雰囲気や一日の流れを聞きたい");
+  } else if (record.is_new_office) {
+    items.push("事前情報: 新設事業所のため、今の利用状況や立ち上がり状況を確認したい");
+  } else if (isNumber(record.average_wage_yen)) {
+    items.push(`工賃: 公開上は月額 ${formatWageText(record.average_wage_yen)}。実際の作業時間や通所頻度でどう変わるか聞きたい`);
   } else {
-    items.push("ホームページやSNSで最近の活動を見てから見学すると、質問しやすい");
+    items.push("工賃: 公開情報が少ないため、工賃の目安と作業時間を確認したい");
   }
 
-  if (record.is_new_office) {
-    items.push("新設事業所のため、今の利用状況や立ち上がり状況を確認したい");
-  }
-
-  return items;
+  return items.slice(0, 3);
 }
 
 function renderCorporationDialog(corporationKey) {
