@@ -3530,6 +3530,9 @@ function detailKpi(label, value, hint) {
 }
 
 function getAreaLabel(record) {
+  if (record.osaka_city_ward) {
+    return record.osaka_city_ward;
+  }
   const city = String(record.wam_office_address_city ?? "");
   const line = String(record.wam_office_address_line ?? "");
   const addressText = `${city}${line}`;

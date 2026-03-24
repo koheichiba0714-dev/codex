@@ -9,7 +9,10 @@
     "app_record_field_count": 62,
     "app_record_chunk_size": 250,
     "total_records": 885,
-    "scope": "大阪市"
+    "scope": "大阪市",
+    "osaka_city_ward_generated_at": "2026-03-24T17:58:39+09:00",
+    "osaka_city_ward_coverage_count": 885,
+    "osaka_city_ward_unknown_count": 0
   },
   "summary": {
     "record_count": 1976,
