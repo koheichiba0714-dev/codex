@@ -50,6 +50,16 @@
             <option value="name-asc">名前順</option>
           </select>
         </div>
+        <div class="user-view-toggle-row" aria-label="かんたん絞り込み">
+          <label class="toggle user-view-toggle">
+            <input id="userHomeUseOnlyCheckbox" type="checkbox" />
+            <span>在宅利用ありだけ</span>
+          </label>
+          <label class="toggle user-view-toggle">
+            <input id="userTransportOnlyCheckbox" type="checkbox" />
+            <span>送迎ありだけ</span>
+          </label>
+        </div>
         <p class="user-view-summary" id="userViewSummary"></p>
         <div class="user-card-list" id="userCardList"></div>
         <div class="user-view-pagination">

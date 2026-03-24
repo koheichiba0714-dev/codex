@@ -848,6 +848,8 @@ const state = {
   userSearchQuery: "",
   userAreaFilter: "all",
   userSort: "wage-desc",
+  userHomeUseOnly: false,
+  userTransportOnly: false,
   userPage: 1,
   userPageSize: 24,
 };
@@ -912,6 +914,14 @@ function getUserViewRecords() {
     records = records.filter((r) => getAreaLabel(r) === state.userAreaFilter);
   }
 
+  if (state.userHomeUseOnly) {
+    records = records.filter((r) => r.home_use_active === true);
+  }
+
+  if (state.userTransportOnly) {
+    records = records.filter((r) => r.wam_transport_available === true);
+  }
+
   switch (state.userSort) {
     case "wage-desc":
       records.sort((a, b) => (b.average_wage_yen ?? -1) - (a.average_wage_yen ?? -1));
@@ -946,8 +956,13 @@ function renderUserView() {
 
   const summaryEl = document.getElementById("userViewSummary");
   if (summaryEl) {
-    summaryEl.textContent = `${formatCount(records.length)}件の事業所が見つかりました` +
-      (state.userAreaFilter !== "all" ? `（${state.userAreaFilter}）` : "") +
+    const activeFilters = [];
+    if (state.userAreaFilter !== "all") activeFilters.push(state.userAreaFilter);
+    if (state.userHomeUseOnly) activeFilters.push("在宅利用ありだけ");
+    if (state.userTransportOnly) activeFilters.push("送迎ありだけ");
+    summaryEl.textContent =
+      `${formatCount(records.length)}件の事業所が見つかりました` +
+      (activeFilters.length ? `（${activeFilters.join(" / ")}）` : "") +
       ` / 並び順: ${getUserSortLabel(state.userSort)}`;
   }
 
@@ -1123,6 +1138,24 @@ function bindUserView() {
   if (sortSelect) {
     sortSelect.addEventListener("change", () => {
       state.userSort = sortSelect.value;
+      state.userPage = 1;
+      renderUserView();
+    });
+  }
+
+  const homeUseOnly = document.getElementById("userHomeUseOnlyCheckbox");
+  if (homeUseOnly) {
+    homeUseOnly.addEventListener("change", () => {
+      state.userHomeUseOnly = homeUseOnly.checked;
+      state.userPage = 1;
+      renderUserView();
+    });
+  }
+
+  const transportOnly = document.getElementById("userTransportOnlyCheckbox");
+  if (transportOnly) {
+    transportOnly.addEventListener("change", () => {
+      state.userTransportOnly = transportOnly.checked;
       state.userPage = 1;
       renderUserView();
     });
