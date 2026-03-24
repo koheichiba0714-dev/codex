@@ -2794,6 +2794,19 @@ function renderDetail(record) {
 
   if (!dialogRoot) return;
 
+  if (isUserPage()) {
+    renderUserDetailDialog(dialogRoot, record, {
+      homepageUrl,
+      instagramUrl,
+      websiteSearchUrl,
+      instagramSearchUrl,
+      homepageSource,
+      instagramSource,
+      corporationActionButton,
+    });
+    return;
+  }
+
   const comparisonContext = getDetailComparisonContext(record);
   const peer = computePeerBenchmark(record, comparisonContext.records);
   const revPerPoint = revenuePerUtilizationPoint(record);
@@ -2979,6 +2992,165 @@ function renderDetail(record) {
       </article>
     </div>
   `;
+}
+
+function renderUserDetailDialog(dialogRoot, record, options) {
+  const {
+    homepageUrl,
+    instagramUrl,
+    websiteSearchUrl,
+    instagramSearchUrl,
+    homepageSource,
+    instagramSource,
+    corporationActionButton,
+  } = options;
+  const activityLabel = record.wam_primary_activity_type ?? "主活動の記載なし";
+  const activityDetail = record.wam_primary_activity_detail ?? "";
+  const workModel = deriveWorkModelLabel(record);
+  const availability = describeUserAvailability(record);
+  const homeUseGuide = describeUserHomeUse(record);
+  const visitChecklist = buildUserVisitChecklist(record, homepageUrl, instagramUrl);
+  const address = composeAddress(record);
+  const officeNumber = record.wam_office_number ?? record.office_no ?? "-";
+
+  dialogRoot.innerHTML = `
+    <div class="detail-hero">
+      <div>
+        <p class="section-kicker">${escapeHtml(getAreaLabel(record) || record.municipality || "-")} / No.${escapeHtml(record.office_no ?? "-")}</p>
+        <h3>${escapeHtml(record.office_name ?? "-")}</h3>
+        <p class="detail-subtitle">${corporationLinkButton(record, "entity-link-button detail-entity-link")} / ${escapeHtml(record.corporation_type_label ?? "-")}</p>
+      </div>
+      <div class="detail-cta">
+        ${homepageUrl ? `<a class="solid-button link-button" href="${escapeAttribute(homepageUrl)}" target="_blank" rel="noreferrer">ホームページ</a>` : `<a class="solid-button link-button" href="${escapeAttribute(websiteSearchUrl)}" target="_blank" rel="noreferrer">Webで探す</a>`}
+        ${instagramUrl ? `<a class="ghost-button link-button" href="${escapeAttribute(instagramUrl)}" target="_blank" rel="noreferrer">Instagram</a>` : `<a class="ghost-button link-button" href="${escapeAttribute(instagramSearchUrl)}" target="_blank" rel="noreferrer">Instagramを探す</a>`}
+      </div>
+    </div>
+    <div class="detail-kpi-grid">
+      ${detailKpi("月額平均工賃", formatWageText(record.average_wage_yen), "公開されている平均工賃")}
+      ${detailKpi("定員", formatIntegerUnit(record.capacity, "名"), `平均利用 ${formatNumber(record.average_daily_users)} 名`)}
+      ${detailKpi("利用の混み具合", availability.label, availability.hint)}
+      ${detailKpi("在宅利用", homeUseGuide.label, homeUseGuide.hint)}
+    </div>
+    <div class="detail-grid">
+      <article class="detail-card">
+        <h3>この事業所で分かること</h3>
+        <ul class="detail-list">
+          <li>主活動: ${escapeHtml(activityLabel)}</li>
+          <li>作業モデル: ${escapeHtml(workModel)}</li>
+          <li>${activityDetail ? `活動の説明: ${escapeHtml(activityDetail)}` : "活動の詳しい説明はホームページや見学で確認したい"}</li>
+          <li>${record.remarks ? `備考: ${escapeHtml(record.remarks)}` : "備考の公開情報は少ない"}</li>
+        </ul>
+      </article>
+      <article class="detail-card">
+        <h3>通いやすさ・連絡先</h3>
+        <ul class="detail-list">
+          <li>エリア: ${escapeHtml(getAreaLabel(record) || record.municipality || "-")}</li>
+          <li>住所: ${escapeHtml(address || "-")}</li>
+          <li>電話: ${escapeHtml(record.wam_office_phone ?? "-")}</li>
+          <li>事業所番号: ${escapeHtml(officeNumber)}</li>
+        </ul>
+      </article>
+      <article class="detail-card detail-card-highlight">
+        <h3>見学前に確認したいこと</h3>
+        <ul class="detail-list">
+          ${visitChecklist.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}
+        </ul>
+      </article>
+      <article class="detail-card">
+        <h3>外部リンク</h3>
+        <ul class="detail-list">
+          <li>ホームページ: ${homepageUrl ? `<a class="link-button" href="${escapeAttribute(homepageUrl)}" target="_blank" rel="noreferrer">開く</a>` : "未登録"}${homepageSource ? ` / ${escapeHtml(homepageSource)}` : ""}</li>
+          <li>Instagram: ${instagramUrl ? `<a class="link-button" href="${escapeAttribute(instagramUrl)}" target="_blank" rel="noreferrer">開く</a>` : "未登録"}${instagramSource ? ` / ${escapeHtml(instagramSource)}` : ""}</li>
+          <li>検索補助: <a class="link-button" href="${escapeAttribute(websiteSearchUrl)}" target="_blank" rel="noreferrer">Webで探す</a> / <a class="link-button" href="${escapeAttribute(instagramSearchUrl)}" target="_blank" rel="noreferrer">Instagramを探す</a></li>
+        </ul>
+      </article>
+      <article class="detail-card">
+        <h3>同じ法人の事業所も見る</h3>
+        <ul class="detail-list">
+          <li>同じ法人の他事業所を比べると、通いやすい拠点や雰囲気の違いを見つけやすい。</li>
+        </ul>
+        <div class="selected-office-actions">
+          ${corporationActionButton || ""}
+        </div>
+      </article>
+    </div>
+  `;
+}
+
+function describeUserAvailability(record) {
+  if (!isNumber(record.capacity) || !isNumber(record.average_daily_users)) {
+    return {
+      label: "見学時に確認",
+      hint: "空き状況は公開データだけでは確定しにくい",
+    };
+  }
+
+  const remaining = record.capacity - record.average_daily_users;
+  if (remaining >= 5) {
+    return {
+      label: "比較的余裕あり",
+      hint: `平均利用 ${formatNumber(record.average_daily_users)} 名 / 定員まであと ${formatNumber(remaining)} 名程度`,
+    };
+  }
+  if (remaining >= 2) {
+    return {
+      label: "少し余裕あり",
+      hint: `平均利用 ${formatNumber(record.average_daily_users)} 名 / 定員まであと ${formatNumber(remaining)} 名程度`,
+    };
+  }
+  if (remaining >= 0) {
+    return {
+      label: "埋まり気味",
+      hint: `平均利用 ${formatNumber(record.average_daily_users)} 名 / 空きは見学時に確認したい`,
+    };
+  }
+  return {
+    label: "利用者が多め",
+    hint: `平均利用人数が定員を上回って見えるため、受け入れ状況は直接確認したい`,
+  };
+}
+
+function describeUserHomeUse(record) {
+  if (record.home_use_active === true) {
+    return {
+      label: "あり",
+      hint: isNumber(record.home_use_user_ratio_decimal)
+        ? `在宅率 ${formatPercent(record.home_use_user_ratio_decimal)} / 条件は見学時に確認`
+        : "条件は見学時に確認したい",
+    };
+  }
+  if (record.home_use_active === false) {
+    return {
+      label: "なし",
+      hint: "通所中心の利用を想定",
+    };
+  }
+  return {
+    label: "公開情報なし",
+    hint: "在宅利用の可否は直接確認したい",
+  };
+}
+
+function buildUserVisitChecklist(record, homepageUrl, instagramUrl) {
+  const items = [
+    `工賃の目安は月額 ${formatWageText(record.average_wage_yen)}。実際の作業時間や通所頻度で変わるため、見学時に聞きたい`,
+    `${record.wam_primary_activity_type ? `主活動は「${record.wam_primary_activity_type}」` : "主活動の記載は少ない"}。自分に合う作業か確認したい`,
+    record.home_use_active === true
+      ? "在宅利用があるため、利用できる条件や頻度を確認したい"
+      : "在宅利用の可否や、通所頻度の目安を確認したい",
+  ];
+
+  if (!homepageUrl && !instagramUrl) {
+    items.push("ホームページやSNSが少ないため、見学前に電話で雰囲気や活動内容を確認したい");
+  } else {
+    items.push("ホームページやSNSで最近の活動を見てから見学すると、質問しやすい");
+  }
+
+  if (record.is_new_office) {
+    items.push("新設事業所のため、今の利用状況や立ち上がり状況を確認したい");
+  }
+
+  return items;
 }
 
 function renderCorporationDialog(corporationKey) {
