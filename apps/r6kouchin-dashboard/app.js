@@ -370,6 +370,268 @@ function buildWorkShortageSignals(record) {
   return signals;
 }
 
+/* ─────────────────────────────────────────────
+   加算シミュレーション（令和6年度 就労B型）
+   ───────────────────────────────────────────── */
+
+const OSAKA_UNIT_YEN = 10.96;
+const KASAN_WORKING_DAYS = 22;
+
+function computeKasanSimulation(record) {
+  const results = [];
+  const users = record.average_daily_users;
+  const capacity = record.capacity ?? record.wam_office_capacity;
+  const wage = record.average_wage_yen;
+  const hasUsers = isNumber(users) && users > 0;
+  const hasCapacity = isNumber(capacity) && capacity > 0;
+
+  // 1. 送迎加算(I) — 21単位/片道/人
+  if (record.wam_transport_available === false) {
+    const unitPerUserMonth = 21 * 2 * OSAKA_UNIT_YEN * KASAN_WORKING_DAYS;
+    results.push({
+      name: "送迎加算(I)",
+      status: "未取得",
+      monthlyPerUser: Math.round(unitPerUserMonth),
+      monthlyTotal: hasUsers ? Math.round(unitPerUserMonth * users) : null,
+      confidence: "high",
+      source: "WAM送迎「なし」",
+      note: "片道21単位×往復。利用者の送迎手段を確保すれば取得可能。車両・ドライバーのコストとの比較が必要。",
+      requirement: "平均10人以上の送迎、または定員の50%以上",
+    });
+  } else if (record.wam_transport_available === true) {
+    results.push({
+      name: "送迎加算(I)",
+      status: "取得済み",
+      monthlyPerUser: null,
+      monthlyTotal: null,
+      confidence: "high",
+      source: "WAM送迎「あり」",
+      note: null,
+      requirement: null,
+    });
+  }
+
+  // 2. 食事提供体制加算 — 30単位/日/人
+  if (record.wam_meal_support_addon === false) {
+    const unitPerUserMonth = 30 * OSAKA_UNIT_YEN * KASAN_WORKING_DAYS;
+    results.push({
+      name: "食事提供体制加算",
+      status: "未取得",
+      monthlyPerUser: Math.round(unitPerUserMonth),
+      monthlyTotal: hasUsers ? Math.round(unitPerUserMonth * users) : null,
+      confidence: "high",
+      source: "WAM食事提供「なし」",
+      note: "食事の提供体制を整えれば取得可能。外部委託でも可。利用者負担との兼ね合いを確認。",
+      requirement: "食事の提供体制を整備し、栄養士等を配置または委託",
+    });
+  } else if (record.wam_meal_support_addon === true) {
+    results.push({
+      name: "食事提供体制加算",
+      status: "取得済み",
+      monthlyPerUser: null,
+      monthlyTotal: null,
+      confidence: "high",
+      source: "WAM食事提供「あり」",
+      note: null,
+      requirement: null,
+    });
+  }
+
+  // 3. 地域協働加算 — 30単位/日/人
+  if (record.wam_regional_collaboration_addon === false) {
+    const unitPerUserMonth = 30 * OSAKA_UNIT_YEN * KASAN_WORKING_DAYS;
+    results.push({
+      name: "地域協働加算",
+      status: "未取得",
+      monthlyPerUser: Math.round(unitPerUserMonth),
+      monthlyTotal: hasUsers ? Math.round(unitPerUserMonth * users) : null,
+      confidence: "high",
+      source: "WAM地域協働「なし」",
+      note: "地域の企業・団体と連携した取り組みで取得可能。地域への貢献活動、販路開拓等。",
+      requirement: "地域の企業等と共同受注や販路開拓の取組を実施",
+    });
+  } else if (record.wam_regional_collaboration_addon === true) {
+    results.push({
+      name: "地域協働加算",
+      status: "取得済み",
+      monthlyPerUser: null,
+      monthlyTotal: null,
+      confidence: "high",
+      source: "WAM地域協働「あり」",
+      note: null,
+      requirement: null,
+    });
+  }
+
+  // 4. 目標工賃達成指導員配置加算 — 定員20以下: 84単位/日, 21以上: 53単位/日
+  if (hasCapacity && isNumber(wage)) {
+    const staffRatio = record.wam_key_staff_fte_per_capacity;
+    const hasGoodStaffing = isNumber(staffRatio) && staffRatio >= 0.15;
+    const kasanUnits = capacity <= 20 ? 84 : 53;
+    const unitPerUserMonth = kasanUnits * OSAKA_UNIT_YEN * KASAN_WORKING_DAYS;
+    if (hasGoodStaffing && wage >= 10000) {
+      results.push({
+        name: "目標工賃達成指導員配置加算",
+        status: "確認推奨",
+        monthlyPerUser: Math.round(unitPerUserMonth),
+        monthlyTotal: hasUsers ? Math.round(unitPerUserMonth * users) : null,
+        confidence: "medium",
+        source: "人員配置比率と工賃水準から推定",
+        note: `人員配置 ${formatNumber(staffRatio * capacity)}人 / 定員${capacity}名（比率 ${(staffRatio * 100).toFixed(1)}%）。工賃向上計画の策定と専任指導員の配置が条件。`,
+        requirement: "工賃向上計画の策定・専任の目標工賃達成指導員を1名以上配置",
+      });
+    }
+  }
+
+  // 5. 福祉専門職員配置等加算 — 加算(I): 15単位/日, (II): 10単位/日, (III): 6単位/日
+  if (isNumber(record.wam_welfare_staff_fte_total) && hasCapacity) {
+    const staffTotal = record.wam_welfare_staff_fte_total;
+    const ratio = record.wam_key_staff_fte_per_capacity;
+    if (isNumber(ratio)) {
+      let kasanLevel = null;
+      let kasanUnits = 0;
+      if (ratio >= 0.35) {
+        kasanLevel = "I";
+        kasanUnits = 15;
+      } else if (ratio >= 0.25) {
+        kasanLevel = "II";
+        kasanUnits = 10;
+      } else if (ratio >= 0.15) {
+        kasanLevel = "III";
+        kasanUnits = 6;
+      }
+      if (kasanLevel) {
+        const unitPerUserMonth = kasanUnits * OSAKA_UNIT_YEN * KASAN_WORKING_DAYS;
+        results.push({
+          name: `福祉専門職員配置等加算(${kasanLevel})`,
+          status: "確認推奨",
+          monthlyPerUser: Math.round(unitPerUserMonth),
+          monthlyTotal: hasUsers ? Math.round(unitPerUserMonth * users) : null,
+          confidence: "medium",
+          source: `職員FTE ${formatNumber(staffTotal)}人 / 配置比率 ${(ratio * 100).toFixed(1)}%`,
+          note: "社会福祉士・介護福祉士等の有資格者配置率から推定。実際の有資格者数の確認が必要。",
+          requirement: kasanLevel === "I" ? "有資格者が常勤換算で職員の35%以上" : kasanLevel === "II" ? "有資格者が常勤換算で職員の25%以上" : "常勤率75%以上かつ勤続3年以上30%以上",
+        });
+      }
+    }
+  }
+
+  // 6. 在宅時生活支援サービス加算 — 300単位/日
+  if (record.home_use_active === true && isNumber(record.home_use_user_ratio_decimal) && record.home_use_user_ratio_decimal > 0) {
+    const homeUsers = hasUsers ? Math.round(users * record.home_use_user_ratio_decimal) : null;
+    results.push({
+      name: "在宅時生活支援サービス加算",
+      status: "確認推奨",
+      monthlyPerUser: Math.round(300 * OSAKA_UNIT_YEN * KASAN_WORKING_DAYS),
+      monthlyTotal: homeUsers ? Math.round(300 * OSAKA_UNIT_YEN * KASAN_WORKING_DAYS * homeUsers) : null,
+      confidence: "medium",
+      source: `在宅利用あり（在宅率 ${(record.home_use_user_ratio_decimal * 100).toFixed(1)}%）`,
+      note: `在宅利用者 推定${homeUsers ?? "-"}名。在宅利用者への生活支援を実施していれば取得可能。`,
+      requirement: "在宅利用者に対する生活支援（電話・訪問等）を月2回以上実施",
+    });
+  }
+
+  // 集計
+  const opportunities = results.filter((r) => r.status !== "取得済み");
+  const totalMonthlyOpportunity = opportunities.reduce((sum, r) => sum + (r.monthlyTotal ?? 0), 0);
+  const acquired = results.filter((r) => r.status === "取得済み");
+
+  return {
+    items: results,
+    opportunities,
+    acquired,
+    totalMonthlyOpportunity,
+    totalAnnualOpportunity: totalMonthlyOpportunity * 12,
+  };
+}
+
+/* ─────────────────────────────────────────────
+   利用者の流れ分析
+   ───────────────────────────────────────────── */
+
+function computeUserFlowAnalysis(record, records) {
+  const capacity = record.capacity ?? record.wam_office_capacity;
+  const users = record.average_daily_users;
+  const utilization = record.daily_user_capacity_ratio;
+  const tier = getWageTier(record.average_wage_yen);
+  const areaLabel = getAreaLabel(record);
+
+  // 機会損失の算出
+  let opportunityCost = null;
+  if (isNumber(capacity) && isNumber(users) && tier && users < capacity) {
+    const emptySlots = capacity - users;
+    const dailyRevPerUser = tier.unitYen;
+    opportunityCost = {
+      emptySlots: Math.round(emptySlots * 10) / 10,
+      monthlyLoss: Math.round(emptySlots * dailyRevPerUser * KASAN_WORKING_DAYS),
+      annualLoss: Math.round(emptySlots * dailyRevPerUser * KASAN_WORKING_DAYS * 12),
+      dailyRevPerUser,
+    };
+  }
+
+  // 同エリア競合分析
+  const areaRecords = areaLabel ? records.filter((r) => getAreaLabel(r) === areaLabel) : [];
+  const areaWithUtilization = areaRecords.filter((r) => isNumber(r.daily_user_capacity_ratio) && isNumber(r.average_wage_yen));
+  const areaHighUtil = areaWithUtilization
+    .filter((r) => r.daily_user_capacity_ratio >= 0.85 && String(r.office_no) !== String(record.office_no))
+    .sort((a, b) => b.daily_user_capacity_ratio - a.daily_user_capacity_ratio);
+
+  // 高利用率事業所の共通パターン
+  const highUtilTop = areaHighUtil.slice(0, 10);
+  const patterns = {
+    total: highUtilTop.length,
+    withHomepage: highUtilTop.filter((r) => r.homepage_url || r.wam_office_url).length,
+    withTransport: highUtilTop.filter((r) => r.wam_transport_available === true).length,
+    withHomeUse: highUtilTop.filter((r) => r.home_use_active === true).length,
+    withMeal: highUtilTop.filter((r) => r.wam_meal_support_addon === true).length,
+    avgWage: meanFor(highUtilTop, "average_wage_yen"),
+    avgCapacity: meanFor(highUtilTop, "capacity"),
+  };
+
+  // この事業所にないが、高利用率事業所が持っている特徴
+  const advantages = [];
+  if (!record.homepage_url && !record.wam_office_url && patterns.total > 0 && patterns.withHomepage / patterns.total >= 0.5) {
+    advantages.push({ feature: "ホームページ", detail: `高利用率事業所の${Math.round(patterns.withHomepage / patterns.total * 100)}%が保有`, impact: "high" });
+  }
+  if (record.wam_transport_available !== true && patterns.total > 0 && patterns.withTransport / patterns.total >= 0.5) {
+    advantages.push({ feature: "送迎", detail: `高利用率事業所の${Math.round(patterns.withTransport / patterns.total * 100)}%が実施`, impact: "high" });
+  }
+  if (record.home_use_active !== true && patterns.total > 0 && patterns.withHomeUse / patterns.total >= 0.5) {
+    advantages.push({ feature: "在宅利用", detail: `高利用率事業所の${Math.round(patterns.withHomeUse / patterns.total * 100)}%が対応`, impact: "medium" });
+  }
+  if (record.wam_meal_support_addon !== true && patterns.total > 0 && patterns.withMeal / patterns.total >= 0.5) {
+    advantages.push({ feature: "食事提供", detail: `高利用率事業所の${Math.round(patterns.withMeal / patterns.total * 100)}%が実施`, impact: "medium" });
+  }
+
+  // ベンチマーク先（同エリアの上位3事業所）
+  const benchmarks = areaHighUtil.slice(0, 3).map((r) => ({
+    officeName: r.office_name,
+    officeNo: r.office_no,
+    wage: r.average_wage_yen,
+    utilization: r.daily_user_capacity_ratio,
+    hasHomepage: !!(r.homepage_url || r.wam_office_url),
+    hasTransport: r.wam_transport_available === true,
+    hasHomeUse: r.home_use_active === true,
+    activity: r.wam_primary_activity_type,
+  }));
+
+  // 利用率改善のインパクト
+  const utilizationGap = isNumber(utilization) ? Math.max(0, 1.0 - utilization) : null;
+  const potentialUsers = isNumber(utilizationGap) && isNumber(capacity) ? capacity * utilizationGap : null;
+
+  return {
+    opportunityCost,
+    areaLabel,
+    areaTotal: areaRecords.length,
+    areaHighUtilCount: areaHighUtil.length,
+    patterns,
+    advantages,
+    benchmarks,
+    utilizationGap,
+    potentialUsers: potentialUsers ? Math.round(potentialUsers * 10) / 10 : null,
+  };
+}
+
 function buildMarketCards(records) {
   const areaGroups = [...groupRecords(records, (record) => getAreaLabel(record)).entries()]
     .map(([label, items]) => ({
@@ -512,9 +774,6 @@ function computeStdDev(values) {
 
 const FILTER_PRESETS = {
   all: {},
-  "osaka-city": {
-    municipality: "大阪市",
-  },
   "high-wage": {
     outlierFlag: "high",
   },
@@ -535,7 +794,7 @@ const FILTER_PRESETS = {
     responseStatus: "unanswered",
   },
 };
-const INITIAL_PRESET = "osaka-city";
+const INITIAL_PRESET = "all";
 
 function createDefaultFilters() {
   return {
@@ -580,7 +839,226 @@ const state = {
   selectedRepresentativeLabel: null,
   activePreset: INITIAL_PRESET,
   corporationGroupIndex: null,
+  /* User view state */
+  currentView: "user",
+  userSearchQuery: "",
+  userAreaFilter: "all",
+  userSort: "wage-desc",
+  userPage: 1,
+  userPageSize: 24,
 };
+
+/* ===== User View (利用者向けビュー) ===== */
+
+function switchView(viewName) {
+  state.currentView = viewName;
+  document.body.classList.remove("view-user", "view-operator");
+  document.body.classList.add(`view-${viewName}`);
+
+  document.querySelectorAll(".view-toggle-tab").forEach((tab) => {
+    const isActive = tab.dataset.view === viewName;
+    tab.classList.toggle("is-active", isActive);
+    tab.setAttribute("aria-selected", String(isActive));
+  });
+
+  if (viewName === "user") {
+    renderUserView();
+  }
+}
+
+function getUserViewRecords() {
+  let records = state.records.filter((r) => r.response_status !== "unanswered");
+
+  if (state.userSearchQuery) {
+    const q = state.userSearchQuery.toLowerCase();
+    records = records.filter((r) => {
+      const haystack = [
+        r.office_name, r.corporation_name, r.municipality,
+        getAreaLabel(r), r.wam_office_address_city, r.wam_office_address_line,
+        composeAddress(r), r.wam_primary_activity_type, r.wam_primary_activity_detail,
+      ].filter(Boolean).join(" ").toLowerCase();
+      return haystack.includes(q);
+    });
+  }
+
+  if (state.userAreaFilter !== "all") {
+    records = records.filter((r) => getAreaLabel(r) === state.userAreaFilter);
+  }
+
+  switch (state.userSort) {
+    case "wage-desc":
+      records.sort((a, b) => (b.average_wage_yen ?? -1) - (a.average_wage_yen ?? -1));
+      break;
+    case "wage-asc":
+      records.sort((a, b) => (a.average_wage_yen ?? Infinity) - (b.average_wage_yen ?? Infinity));
+      break;
+    case "utilization-desc":
+      records.sort((a, b) => (b.daily_user_capacity_ratio ?? -1) - (a.daily_user_capacity_ratio ?? -1));
+      break;
+    case "name-asc":
+      records.sort((a, b) => (a.office_name ?? "").localeCompare(b.office_name ?? "", "ja"));
+      break;
+  }
+  return records;
+}
+
+function renderUserView() {
+  if (state.currentView !== "user") return;
+  const records = getUserViewRecords();
+  const totalPages = Math.max(1, Math.ceil(records.length / state.userPageSize));
+  state.userPage = Math.min(state.userPage, totalPages);
+  const start = (state.userPage - 1) * state.userPageSize;
+  const page = records.slice(start, start + state.userPageSize);
+
+  const summaryEl = document.getElementById("userViewSummary");
+  if (summaryEl) {
+    summaryEl.textContent = `${formatCount(records.length)}件の事業所が見つかりました` +
+      (state.userAreaFilter !== "all" ? `（${state.userAreaFilter}）` : "");
+  }
+
+  const container = document.getElementById("userCardList");
+  if (!container) return;
+
+  container.innerHTML = page.map((r, idx) => {
+    const globalRank = start + idx + 1;
+    const wage = r.average_wage_yen;
+    const hasWage = isNumber(wage);
+    const area = getAreaLabel(r) ?? r.municipality ?? "";
+    const activity = r.wam_primary_activity_type ?? "";
+    const detail = r.wam_primary_activity_detail ?? "";
+    const hasTransport = r.wam_transport_available;
+    const hasHome = r.home_use_active;
+    const hasHp = Boolean(safeExternalUrl(r.homepage_url));
+    const utilRatio = r.daily_user_capacity_ratio;
+    const capacity = r.capacity;
+    const address = composeAddress(r);
+
+    let rankClass = "";
+    if (state.userSort === "wage-desc" || state.userSort === "wage-asc") {
+      if (globalRank === 1) rankClass = "user-card-rank-gold";
+      else if (globalRank === 2) rankClass = "user-card-rank-silver";
+      else if (globalRank === 3) rankClass = "user-card-rank-bronze";
+    }
+
+    const tags = [];
+    if (area) tags.push(`<span class="user-card-tag user-card-tag-area">${escapeHtml(area)}</span>`);
+    if (activity) tags.push(`<span class="user-card-tag user-card-tag-activity">${escapeHtml(activity)}</span>`);
+    if (hasTransport) tags.push(`<span class="user-card-tag user-card-tag-transport">送迎あり</span>`);
+    if (hasHome) tags.push(`<span class="user-card-tag user-card-tag-home">在宅利用可</span>`);
+
+    const stats = [];
+    if (isNumber(utilRatio)) stats.push(`<span class="user-card-stat">利用率 <strong>${percentFormatter.format(utilRatio * 100)}%</strong></span>`);
+    if (isNumber(capacity)) stats.push(`<span class="user-card-stat">定員 <strong>${capacity}名</strong></span>`);
+
+    const links = [];
+    if (hasHp) links.push(`<a href="${escapeAttribute(safeExternalUrl(r.homepage_url))}" target="_blank" rel="noopener" class="user-card-link" onclick="event.stopPropagation()">ホームページ</a>`);
+
+    return `
+      <article class="user-facility-card" data-office-no="${escapeAttribute(r.office_no)}">
+        <div class="user-card-header">
+          <div style="display:flex;align-items:center;gap:8px;min-width:0;">
+            ${rankClass ? `<span class="user-card-rank ${rankClass}">${globalRank}</span>` : ""}
+            <h3 class="user-card-name">${escapeHtml(r.office_name ?? "名称不明")}</h3>
+          </div>
+          <div class="user-card-wage">
+            ${hasWage
+              ? `<div class="user-card-wage-amount">${formatCount(Math.round(wage))}<span style="font-size:13px;font-weight:600;">円</span></div>
+                 <div class="user-card-wage-label">月額平均工賃</div>`
+              : `<div class="user-card-no-wage">工賃非公開</div>`}
+          </div>
+        </div>
+        ${tags.length ? `<div class="user-card-meta">${tags.join("")}</div>` : ""}
+        ${detail ? `<p class="user-card-description">${escapeHtml(detail)}</p>` : ""}
+        ${address ? `<p class="user-card-description" style="font-size:12px;">${escapeHtml(address)}</p>` : ""}
+        ${stats.length ? `<div class="user-card-stats">${stats.join("")}</div>` : ""}
+        ${links.length ? `<div class="user-card-links">${links.join("")}</div>` : ""}
+      </article>`;
+  }).join("");
+
+  /* Card click → open detail dialog */
+  container.querySelectorAll(".user-facility-card").forEach((card) => {
+    card.addEventListener("click", () => {
+      const officeNo = card.dataset.officeNo;
+      const record = state.records.find((r) => String(r.office_no) === String(officeNo));
+      if (record) {
+        state.selectedOfficeNo = record.office_no;
+        renderDetail(record);
+        openDialogElement(document.getElementById("detailDialog"));
+      }
+    });
+  });
+
+  /* Pagination */
+  const pageSummary = document.getElementById("userPageSummary");
+  if (pageSummary) pageSummary.textContent = `${state.userPage} / ${totalPages}`;
+  const prevBtn = document.getElementById("userPrevPage");
+  const nextBtn = document.getElementById("userNextPage");
+  if (prevBtn) prevBtn.disabled = state.userPage <= 1;
+  if (nextBtn) nextBtn.disabled = state.userPage >= totalPages;
+}
+
+function populateUserAreaFilter() {
+  const select = document.getElementById("userAreaFilter");
+  if (!select) return;
+  const areas = new Map();
+  state.records.forEach((r) => {
+    const area = getAreaLabel(r);
+    if (area) areas.set(area, (areas.get(area) ?? 0) + 1);
+  });
+  const sorted = [...areas.entries()].sort((a, b) => b[1] - a[1]);
+  select.innerHTML = `<option value="all">すべてのエリア（${formatCount(state.records.length)}件）</option>` +
+    sorted.map(([area, count]) => `<option value="${escapeAttribute(area)}">${escapeHtml(area)}（${count}件）</option>`).join("");
+}
+
+function bindUserView() {
+  /* View toggle tabs */
+  document.querySelectorAll(".view-toggle-tab").forEach((tab) => {
+    tab.addEventListener("click", () => switchView(tab.dataset.view));
+  });
+
+  /* Search */
+  const searchInput = document.getElementById("userSearchInput");
+  if (searchInput) {
+    let debounceTimer;
+    searchInput.addEventListener("input", () => {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        state.userSearchQuery = searchInput.value.trim();
+        state.userPage = 1;
+        renderUserView();
+      }, 250);
+    });
+  }
+
+  /* Area filter */
+  const areaFilter = document.getElementById("userAreaFilter");
+  if (areaFilter) {
+    areaFilter.addEventListener("change", () => {
+      state.userAreaFilter = areaFilter.value;
+      state.userPage = 1;
+      renderUserView();
+    });
+  }
+
+  /* Sort */
+  const sortSelect = document.getElementById("userSortSelect");
+  if (sortSelect) {
+    sortSelect.addEventListener("change", () => {
+      state.userSort = sortSelect.value;
+      state.userPage = 1;
+      renderUserView();
+    });
+  }
+
+  /* Pagination */
+  document.getElementById("userPrevPage")?.addEventListener("click", () => {
+    if (state.userPage > 1) { state.userPage--; renderUserView(); }
+  });
+  document.getElementById("userNextPage")?.addEventListener("click", () => {
+    const totalPages = Math.max(1, Math.ceil(getUserViewRecords().length / state.userPageSize));
+    if (state.userPage < totalPages) { state.userPage++; renderUserView(); }
+  });
+}
 
 document.addEventListener("DOMContentLoaded", () => {
   init().catch((error) => {
@@ -597,6 +1075,7 @@ async function init() {
   bindRepresentativeDialog();
   bindPanelToggles();
   bindMobileSidebar();
+  bindUserView();
   const response = await fetch("./data/dashboard-data.json", { cache: "no-store" });
   if (!response.ok) {
     throw new Error("dashboard data could not be loaded");
@@ -609,9 +1088,11 @@ async function init() {
   renderMeta(dashboard);
   renderQuality(dashboard, state.records);
   populateFilterOptions(state.records);
+  populateUserAreaFilter();
   bindEvents();
   syncPresetButtons();
   applyFilters();
+  switchView("user");
 }
 
 function bindSectionNav() {
@@ -1689,9 +2170,9 @@ function renderQuality(dashboard, records = state.records) {
   const wageStats = computeLocalStats(numericValues(records, "average_wage_yen"));
 
   const summaryCards = [
-    `<article class="note-card"><strong>表示対象</strong><p>工賃データは大阪府全域 ${formatCount(
+    `<article class="note-card"><strong>表示対象</strong><p>大阪市内の就労継続支援B型 ${formatCount(
       records.length
-    )} 件を表示している。大阪市以外は参考比較で見られる。</p></article>`,
+    )} 件を表示している。</p></article>`,
     `<article class="note-card"><strong>差が大きい事業所の見つけ方</strong><p>表示中データの真ん中あたりの工賃は ${formatMaybeYen(
       wageStats.median
     )}。そこから大きく離れた工賃を確認候補として表示している。</p></article>`,
@@ -1737,7 +2218,7 @@ function renderActiveFilterSummary(records) {
   const tagsRoot = document.getElementById("activeFilterTags");
   if (tagsRoot) {
     const tags = [
-      ...(state.filters.municipality === "all" ? ["対象: 大阪府全域"] : []),
+      ...(state.filters.municipality === "all" ? ["対象: 大阪市全域"] : []),
       ...(filters.length ? filters : ["条件なし"]),
     ];
     tagsRoot.innerHTML = tags
@@ -2220,6 +2701,8 @@ function renderDetail(record) {
   const corporationProfile = computeCorporationProfile(record);
   const homeUseProfile = computeHomeUseProfile(record, comparisonContext.records);
   const workShortageSignals = buildWorkShortageSignals(record);
+  const kasanSim = computeKasanSimulation(record);
+  const userFlow = computeUserFlowAnalysis(record, state.records);
 
   dialogRoot.innerHTML = `
     <div class="detail-hero">
@@ -2270,6 +2753,32 @@ function renderDetail(record) {
         <ul class="detail-list">
           ${revPerPoint ? `<li>利用率1%改善: 月 ${formatMaybeYen(revPerPoint)} の増収</li>` : "<li>利用率改善の試算に必要な値が不足している</li>"}
           <li>主活動: ${escapeHtml(record.wam_primary_activity_type ?? "-")} ${record.wam_primary_activity_detail ? `（${escapeHtml(record.wam_primary_activity_detail)}）` : ""}</li>
+        </ul>
+      </article>
+      <article class="detail-card detail-card-highlight">
+        <h3>加算シミュレーション</h3>
+        ${kasanSim.opportunities.length > 0 ? `
+        <p class="kasan-impact-summary">未取得の加算を取得した場合の推定増収: <strong>月 ${formatMaybeYen(kasanSim.totalMonthlyOpportunity)}</strong>（年 ${formatMaybeYen(kasanSim.totalAnnualOpportunity)}）</p>
+        ` : ""}
+        <ul class="detail-list">
+          ${kasanSim.items.map((item) => `<li>
+            <span class="kasan-status kasan-status-${item.status === "取得済み" ? "acquired" : item.status === "確認推奨" ? "check" : "opportunity"}">${escapeHtml(item.status)}</span>
+            <strong>${escapeHtml(item.name)}</strong>
+            ${item.monthlyPerUser ? `— 1人あたり月 ${formatMaybeYen(item.monthlyPerUser)}${item.monthlyTotal ? ` / 全体で月 ${formatMaybeYen(item.monthlyTotal)}` : ""}` : ""}
+            ${item.note ? `<br><small>${escapeHtml(item.note)}</small>` : ""}
+            ${item.requirement ? `<br><small class="kasan-requirement">要件: ${escapeHtml(item.requirement)}</small>` : ""}
+          </li>`).join("")}
+        </ul>
+        <p class="kasan-disclaimer"><small>※ 推定値です。実際の取得可否は行政書士・社労士にご確認ください。大阪市の地域単価 ${OSAKA_UNIT_YEN}円/単位、月${KASAN_WORKING_DAYS}日で試算。</small></p>
+      </article>
+      <article class="detail-card detail-card-highlight">
+        <h3>利用者の流れ分析</h3>
+        <ul class="detail-list">
+          ${userFlow.opportunityCost ? `<li><strong>定員空きの機会損失:</strong> ${formatNumber(userFlow.opportunityCost.emptySlots)}人分 × 月${formatMaybeYen(userFlow.opportunityCost.dailyRevPerUser * KASAN_WORKING_DAYS)} = <strong>月 ${formatMaybeYen(userFlow.opportunityCost.monthlyLoss)}</strong>（年 ${formatMaybeYen(userFlow.opportunityCost.annualLoss)}）</li>` : "<li>定員充足済み — 空き枠なし</li>"}
+          <li>同エリア（${escapeHtml(userFlow.areaLabel ?? "-")}）: ${formatCount(userFlow.areaTotal)}事業所中、利用率85%以上は ${formatCount(userFlow.areaHighUtilCount)}事業所</li>
+          ${userFlow.advantages.length > 0 ? `<li><strong>高利用率事業所が持つ特徴で、この事業所にないもの:</strong><ul>${userFlow.advantages.map((a) => `<li>${escapeHtml(a.feature)} — ${escapeHtml(a.detail)}</li>`).join("")}</ul></li>` : "<li>高利用率事業所と比較して、主要な特徴差は検出されなかった。</li>"}
+          ${userFlow.benchmarks.length > 0 ? `<li><strong>同エリアのベンチマーク先（利用率上位）:</strong><ul>${userFlow.benchmarks.map((b) => `<li>${escapeHtml(b.officeName)}（No.${b.officeNo}）— 工賃 ${formatMaybeYen(b.wage)} / 利用率 ${formatPercent(b.utilization)}${b.hasHomepage ? " / HP有" : ""}${b.hasTransport ? " / 送迎有" : ""}${b.hasHomeUse ? " / 在宅有" : ""}</li>`).join("")}</ul></li>` : ""}
+          ${userFlow.patterns.total > 0 ? `<li>高利用率事業所の平均工賃: ${formatMaybeYen(userFlow.patterns.avgWage)} / 平均定員: ${formatNumber(userFlow.patterns.avgCapacity)}名</li>` : ""}
         </ul>
       </article>
       <article class="detail-card">
@@ -2415,7 +2924,7 @@ function renderCorporationDialog(corporationKey) {
       <div>
         <p class="section-kicker">法人名からまとめて確認</p>
         <h3>${escapeHtml(state.selectedCorporationLabel)}</h3>
-        <p class="detail-subtitle">${escapeHtml(corporationTypeLabel)} / 大阪府内で ${formatCount(records.length)} 事業所${representativeLabel ? ` / 代表者 ${escapeHtml(representativeLabel)}` : ""}</p>
+        <p class="detail-subtitle">${escapeHtml(corporationTypeLabel)} / 大阪市内で ${formatCount(records.length)} 事業所${representativeLabel ? ` / 代表者 ${escapeHtml(representativeLabel)}` : ""}</p>
       </div>
       <div class="selected-office-actions">
         ${representativeGroups.length > 1 ? `<button class="ghost-button" type="button" data-open-representative="${escapeAttribute(representativeLabel)}">同じ代表者名の法人候補</button>` : ""}
@@ -2432,7 +2941,7 @@ function renderCorporationDialog(corporationKey) {
       <article class="corporation-summary-card">
         <span>運営事業所数</span>
         <strong>${formatCount(records.length)}</strong>
-        <em>大阪府全体</em>
+        <em>大阪市全体</em>
       </article>
       <article class="corporation-summary-card">
         <span>現在の一覧に出ている数</span>
@@ -2529,7 +3038,7 @@ function renderRepresentativeDialog(representativeName) {
       <article class="corporation-summary-card">
         <span>候補事業所数</span>
         <strong>${formatCount(officeCount)}</strong>
-        <em>大阪府内の対象事業所</em>
+        <em>大阪市内の対象事業所</em>
       </article>
       <article class="corporation-summary-card">
         <span>平均工賃の平均</span>
@@ -2892,17 +3401,17 @@ function getDetailComparisonContext(record) {
     const usesAllRecords = filteredCount === state.records.length;
     return {
       records: state.filteredRecords,
-      label: usesAllRecords ? `大阪府全体 ${formatCount(filteredCount)}件` : `現在の絞り込み結果 ${formatCount(filteredCount)}件`,
+      label: usesAllRecords ? `大阪市全体 ${formatCount(filteredCount)}件` : `現在の絞り込み結果 ${formatCount(filteredCount)}件`,
       note: usesAllRecords
-        ? "平均との差・中央値差と比較率は大阪府全体との比較で表示している。"
+        ? "平均との差・中央値差と比較率は大阪市全体との比較で表示している。"
         : "平均との差・中央値差と比較率は現在の絞り込み結果を母集団にしている。絞り込みを変えると比較値も変わる。",
     };
   }
 
   return {
     records: state.records,
-    label: `大阪府全体 ${formatCount(state.records.length)}件`,
-    note: "この事業所は現在の一覧外のため、大阪府全体を母集団にして比較している。",
+    label: `大阪市全体 ${formatCount(state.records.length)}件`,
+    note: "この事業所は現在の一覧外のため、大阪市全体を母集団にして比較している。",
   };
 }
 
@@ -3097,10 +3606,7 @@ function downloadFilteredCsv() {
   state.filteredRecords.forEach((record) => {
     const row = headers.map(([key]) => {
       const value = record[key];
-      if (
-        key === "response_status" ||
-        key === "wage_outlier_flag"
-      ) {
+      if (key === "wage_outlier_flag") {
         return escapeCsvCell(labelForSelect(value ?? "none"));
       }
       if (key === "derived_work_shortage_risk") {

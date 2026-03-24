@@ -3,10 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>大阪府 就労継続支援B型 ダッシュボード</title>
+    <title>大阪市 就労継続支援B型 ダッシュボード</title>
     <meta
       name="description"
-      content="大阪府の就労継続支援B型データを比較し、絞り込みから一覧比較、事業所詳細まで見られる運営向けダッシュボード"
+      content="大阪市の就労継続支援B型データを比較し、絞り込みから一覧比較、事業所詳細まで見られる運営向けダッシュボード"
     />
     <link rel="stylesheet" href="./styles.css" />
   </head>
@@ -18,7 +18,7 @@
           <span class="brand-mark">工</span>
           <div>
             <strong>工賃ダッシュボード</strong>
-            <p>大阪府比較 / 事業所リンク付き</p>
+            <p>大阪市比較 / 事業所リンク付き</p>
           </div>
         </div>
         <nav class="sidebar-nav">
@@ -37,21 +37,36 @@
 
       <div class="workspace">
         <header class="topbar">
-          <div class="topbar-copy">
-            <p class="section-kicker">大阪府 就労継続支援B型</p>
-            <h1 id="overviewHeading">運営ダッシュボード</h1>
+          <div class="view-toggle" role="tablist" aria-label="ビュー切り替え">
+            <button class="view-toggle-tab is-active" role="tab" aria-selected="true" data-view="user" type="button">
+              <span class="view-toggle-icon">🔍</span>事業所を探す<span class="view-toggle-badge">利用者向け</span>
+            </button>
+            <button class="view-toggle-tab" role="tab" aria-selected="false" data-view="operator" type="button">
+              <span class="view-toggle-icon">📊</span>運営を分析する<span class="view-toggle-badge">経営者向け</span>
+            </button>
+          </div>
+          <div class="topbar-copy" id="topbarCopyUser">
+            <p class="section-kicker">大阪市 就労継続支援B型</p>
+            <h1 id="overviewHeading">事業所をくらべる</h1>
             <p class="hero-lead">
-              まず条件を絞り、次に一覧で比べ、最後に気になる事業所だけ深掘りする。大阪府全体を参考比較しながら、ホームページやInstagramもあわせて確認できる。
+              大阪市内の就労継続支援B型事業所の工賃を比較できます。エリアや条件で絞り込んで、自分に合った事業所を探しましょう。
             </p>
           </div>
-          <div class="topbar-actions">
+          <div class="topbar-copy topbar-copy-hidden" id="topbarCopyOperator">
+            <p class="section-kicker">大阪市 就労継続支援B型</p>
+            <h1>運営ダッシュボード</h1>
+            <p class="hero-lead">
+              まず条件を絞り、次に一覧で比べ、最後に気になる事業所だけ深掘りする。大阪市全体を比較しながら、ホームページやInstagramもあわせて確認できる。
+            </p>
+          </div>
+          <div class="topbar-actions topbar-copy-hidden" id="topbarActionsOperator">
             <button id="openFiltersButton" class="solid-button filter-search-button" type="button">絞り込み検索</button>
             <button id="downloadCsvButton" class="ghost-button" type="button">絞り込み結果をCSV出力</button>
             <button id="openGuideButton" class="ghost-button" type="button">用語ガイド</button>
           </div>
         </header>
 
-        <section class="meta-strip" aria-label="データ概要">
+        <section class="meta-strip operator-only" aria-label="データ概要">
           <article class="meta-card">
             <span class="meta-label">データ更新</span>
             <strong id="updatedAt">-</strong>
@@ -70,13 +85,42 @@
           </article>
         </section>
 
-        <main class="dashboard-grid">
+        <!-- 利用者向けビュー -->
+        <section class="user-view" id="userView">
+          <div class="user-view-search-bar">
+            <input
+              id="userSearchInput"
+              type="search"
+              class="user-search-input"
+              placeholder="事業所名・エリア・住所で検索…"
+              autocomplete="off"
+            />
+            <select id="userAreaFilter" class="user-area-filter">
+              <option value="all">すべてのエリア</option>
+            </select>
+            <select id="userSortSelect" class="user-sort-select">
+              <option value="wage-desc">工賃が高い順</option>
+              <option value="wage-asc">工賃が低い順</option>
+              <option value="utilization-desc">利用率が高い順</option>
+              <option value="name-asc">名前順</option>
+            </select>
+          </div>
+          <p class="user-view-summary" id="userViewSummary"></p>
+          <div class="user-card-list" id="userCardList"></div>
+          <div class="user-view-pagination">
+            <button id="userPrevPage" class="ghost-button" type="button">前へ</button>
+            <p id="userPageSummary"></p>
+            <button id="userNextPage" class="ghost-button" type="button">次へ</button>
+          </div>
+        </section>
+
+        <main class="dashboard-grid" id="operatorView">
           <section class="panel filter-launch-panel" aria-labelledby="filtersHeading">
             <div class="panel-head">
               <div>
                 <p class="section-kicker">条件を絞る</p>
                 <h2 id="filtersHeading">対象を絞り込む</h2>
-                <p class="panel-note">初期表示は大阪市。詳細条件はポップアップで開き、ここでは今の条件とよく使う切り替えだけを見る。</p>
+                <p class="panel-note">初期表示は全体。詳細条件はポップアップで開き、ここでは今の条件とよく使う切り替えだけを見る。</p>
               </div>
               <div class="panel-head-actions">
                 <button id="openFiltersPanelButton" class="solid-button filter-search-button" type="button">絞り込み検索</button>
@@ -85,8 +129,7 @@
             </div>
             <div class="filter-launch-body">
               <div class="preset-row" aria-label="クイック切り替え">
-                <button class="preset-chip" data-preset="all" type="button">全体</button>
-                <button class="preset-chip is-active" data-preset="osaka-city" type="button">大阪市</button>
+                <button class="preset-chip is-active" data-preset="all" type="button">全体</button>
                 <button class="preset-chip" data-preset="high-wage" type="button">工賃高め</button>
                 <button class="preset-chip" data-preset="high-wage-low-util" type="button">高工賃・低利用率</button>
                 <button class="preset-chip" data-preset="fix-priority" type="button">低工賃・低利用率・人員過剰</button>
@@ -232,7 +275,7 @@
             <div id="anomalyList" class="anomaly-grid"></div>
           </section>
 
-          <section class="panel charts-panel is-collapsed" data-collapsible aria-labelledby="chartsHeading">
+          <section class="panel charts-panel" data-collapsible aria-labelledby="chartsHeading">
             <div class="panel-head">
               <div>
                 <p class="section-kicker">比較グラフ</p>
@@ -240,7 +283,7 @@
                 <p class="panel-note">まず地域差と工賃差を見て、次に利用状況を見る。</p>
               </div>
               <div class="panel-head-actions">
-                <button class="ghost-button panel-collapse-button" type="button" aria-expanded="false">開く</button>
+                <button class="ghost-button panel-collapse-button" type="button" aria-expanded="true">閉じる</button>
               </div>
             </div>
             <div class="chart-section">
@@ -519,7 +562,7 @@
           <div>
             <p class="section-kicker">法人別の事業所一覧</p>
             <h2 id="corporationDialogHeading">同じ法人が運営する事業所をまとめて見る</h2>
-            <p class="panel-note">法人名を押すと、大阪府内で同一法人が運営している事業所一覧を表示する。</p>
+            <p class="panel-note">法人名を押すと、大阪市内で同一法人が運営している事業所一覧を表示する。</p>
           </div>
           <button id="closeCorporationButton" class="ghost-button" type="button">閉じる</button>
         </div>

@@ -1,12 +1,12 @@
 /* ============================================================
    工賃ダッシュボード — 業務システム Light Theme
    ============================================================ */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+JP:wght@400;500;600;700;800&display=swap');
 
 /* --- Design Tokens --- */
 :root {
   color-scheme: light;
-  --font: 'Inter', 'BIZ UDPGothic', 'Hiragino Sans', sans-serif;
+  --font: 'Noto Sans JP', 'Inter', 'BIZ UDPGothic', 'Hiragino Sans', sans-serif;
 
   /* Backgrounds */
   --bg-body: #ffffff;
@@ -80,7 +80,7 @@ html {
 
 body {
   font-family: var(--font);
-  font-size: 14px;
+  font-size: 15px;
   line-height: 1.5;
   color: var(--text-primary);
   background: var(--bg-body);
@@ -198,9 +198,9 @@ h1[id], h2[id] { scroll-margin-top: 24px; }
 
 /* --- Topbar --- */
 .topbar {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
   gap: 16px;
   padding: 14px 16px;
   background: var(--bg-card);
@@ -210,7 +210,10 @@ h1[id], h2[id] { scroll-margin-top: 24px; }
   margin-bottom: 12px;
 }
 
-.topbar-copy, .topbar-actions { min-width: 0; }
+.topbar-copy {
+  min-width: 0;
+  max-width: 72ch;
+}
 
 .topbar-copy h1 {
   font-size: clamp(1.1rem, 2vw, 1.45rem);
@@ -221,16 +224,18 @@ h1[id], h2[id] { scroll-margin-top: 24px; }
 
 .hero-lead {
   color: var(--text-secondary);
-  font-size: 13px;
+  font-size: 14px;
   max-width: 65ch;
   line-height: 1.6;
 }
 
 .topbar-actions {
+  min-width: 0;
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
   justify-content: flex-end;
+  justify-self: end;
   flex-shrink: 0;
 }
 
@@ -238,7 +243,6 @@ h1[id], h2[id] { scroll-margin-top: 24px; }
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.06em;
-  text-transform: uppercase;
   color: var(--text-muted);
 }
 
@@ -364,7 +368,7 @@ h1[id], h2[id] { scroll-margin-top: 24px; }
 .panel-note, .filter-summary, .table-summary, #pageSummary {
   margin: 4px 0 0;
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .panel-head-actions {
@@ -377,12 +381,23 @@ h1[id], h2[id] { scroll-margin-top: 24px; }
 .panel .section-kicker {
   display: inline-flex;
   align-items: center;
+  gap: 6px;
   padding: 3px 8px;
   border-radius: var(--radius-full);
   background: var(--bg-elevated);
   border: 1px solid var(--border);
   color: var(--text-secondary);
   font-size: 10px;
+}
+
+.panel .section-kicker::before {
+  content: '';
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--panel-accent, var(--border-strong));
+  flex-shrink: 0;
 }
 
 .panel-collapse-button { min-width: 68px; }
@@ -602,7 +617,7 @@ h1[id], h2[id] { scroll-margin-top: 24px; }
   transition: all var(--duration) var(--ease);
 }
 .stat-card:hover { background: var(--bg-card-hover); border-color: var(--border-strong); transform: translateY(-1px); }
-.stat-card p, .stat-card em { color: var(--text-muted); font-size: 10px; font-style: normal; }
+.stat-card p, .stat-card em { color: var(--text-muted); font-size: 11px; font-style: normal; }
 .stat-card strong { font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.2; }
 .panel-main .stat-card strong { font-size: 18px; }
 
@@ -624,7 +639,7 @@ h1[id], h2[id] { scroll-margin-top: 24px; }
 }
 .insight-card:hover { background: var(--bg-card-hover); transform: translateY(-1px); }
 .insight-card h3 { font-size: 12px; font-weight: 600; margin-bottom: 4px; color: var(--accent-hover); }
-.insight-card p { font-size: 12px; color: var(--text-secondary); line-height: 1.6; }
+.insight-card p { font-size: 13px; color: var(--text-secondary); line-height: 1.6; }
 
 .market-grid {
   display: grid;
@@ -658,7 +673,7 @@ h1[id], h2[id] { scroll-margin-top: 24px; }
 }
 
 .market-summary {
-  font-size: 12px;
+  font-size: 13px;
   color: var(--text-primary);
   line-height: 1.6;
 }
@@ -670,7 +685,7 @@ h1[id], h2[id] { scroll-margin-top: 24px; }
 }
 
 .market-points li {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--text-secondary);
   line-height: 1.55;
   padding-left: 12px;
@@ -864,7 +879,7 @@ table {
   width: 100%;
   border-collapse: separate;
   border-spacing: 0;
-  font-size: 13px;
+  font-size: 14px;
 }
 
 thead { position: sticky; top: 0; z-index: 5; }
@@ -902,6 +917,30 @@ tbody td {
   vertical-align: middle;
   white-space: nowrap;
 }
+
+/* Sticky first 2 columns (No. + 事業所名) */
+thead th:nth-child(1),
+tbody td:nth-child(1) {
+  position: sticky;
+  left: 0;
+  z-index: 4;
+}
+thead th:nth-child(1) { background: #f5f6f8; z-index: 6; }
+tbody tr:nth-child(even) td:nth-child(1) { background: #f8f9fb; }
+tbody tr:nth-child(odd) td:nth-child(1) { background: #fff; }
+tbody tr:hover td:nth-child(1) { background: rgba(237,242,255,1); }
+
+thead th:nth-child(2),
+tbody td:nth-child(2) {
+  position: sticky;
+  left: 52px;
+  z-index: 4;
+  border-right: 2px solid var(--border-strong);
+}
+thead th:nth-child(2) { background: #f5f6f8; z-index: 6; }
+tbody tr:nth-child(even) td:nth-child(2) { background: #f8f9fb; }
+tbody tr:nth-child(odd) td:nth-child(2) { background: #fff; }
+tbody tr:hover td:nth-child(2) { background: rgba(237,242,255,1); }
 
 .row-selected { background: rgba(37,99,235,0.06) !important; }
 .row-high-outlier { border-left: 3px solid var(--warning); }
@@ -1240,6 +1279,66 @@ dialog[open] {
   line-height: 1.6;
 }
 
+/* --- 加算シミュレーション & 利用者の流れ --- */
+.detail-card-highlight {
+  grid-column: 1 / -1;
+  border: 1.5px solid var(--accent);
+  background: linear-gradient(135deg, var(--bg-card) 0%, color-mix(in srgb, var(--accent) 4%, var(--bg-card)) 100%);
+}
+.detail-card-highlight h3 { color: var(--accent); }
+
+.kasan-impact-summary {
+  font-size: 13px;
+  padding: 8px 12px;
+  margin-bottom: 12px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  line-height: 1.6;
+}
+.kasan-impact-summary strong { color: var(--accent); font-size: 15px; }
+
+.kasan-status {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 1px 7px;
+  border-radius: 9999px;
+  margin-right: 4px;
+  vertical-align: middle;
+}
+.kasan-status-acquired { background: #e0f5e9; color: #1a7d3f; }
+.kasan-status-opportunity { background: #fff3e0; color: #b86e00; }
+.kasan-status-check { background: #e3f2fd; color: #1565c0; }
+
+.kasan-requirement {
+  color: var(--text-secondary);
+  font-style: italic;
+}
+.kasan-disclaimer {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.detail-card-highlight .detail-list li {
+  margin-bottom: 8px;
+  line-height: 1.7;
+}
+.detail-card-highlight .detail-list li strong {
+  color: var(--text-primary);
+}
+.detail-card-highlight .detail-list ul {
+  margin: 4px 0 0 16px;
+  list-style: disc;
+}
+.detail-card-highlight .detail-list ul li {
+  margin-bottom: 2px;
+  font-size: 12px;
+}
+
 .detail-list { list-style: none; display: grid; gap: 6px; }
 .detail-list li { font-size: 12px; color: var(--text-secondary); line-height: 1.5; padding-left: 12px; position: relative; }
 .detail-list li::before { content: '·'; position: absolute; left: 0; color: var(--text-muted); font-weight: 700; }
@@ -1486,8 +1585,11 @@ dialog[open] {
   }
   .sidebar.is-open { left: 0; }
   .workspace { padding: 16px; }
-  .topbar { flex-direction: column; }
-  .topbar-actions { justify-content: flex-start; }
+  .topbar { grid-template-columns: 1fr; }
+  .topbar-actions {
+    justify-self: start;
+    justify-content: flex-start;
+  }
   .meta-strip { grid-template-columns: 1fr; }
   .dashboard-grid { grid-template-columns: 1fr; }
   .filter-launch-body { grid-template-columns: 1fr; }
@@ -1535,7 +1637,7 @@ dialog[open] {
 
   /* Mobile menu button */
   .mobile-menu-toggle {
-    display: block;
+    display: flex;
     position: fixed;
     top: 12px;
     left: 12px;
@@ -1547,7 +1649,6 @@ dialog[open] {
     border: 1px solid var(--border);
     color: var(--text-primary);
     cursor: pointer;
-    display: flex;
     align-items: center;
     justify-content: center;
     font-size: 18px;
@@ -1577,3 +1678,278 @@ dialog[open] {
 
 /* --- Selection --- */
 ::selection { background: var(--accent-soft); color: var(--accent-hover); }
+
+/* ===== View Toggle ===== */
+.view-toggle {
+  display: flex;
+  gap: 4px;
+  grid-column: 1 / -1;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 4px;
+  width: fit-content;
+}
+.view-toggle-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 20px;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+.view-toggle-tab:hover { background: var(--bg-card); color: var(--text-primary); }
+.view-toggle-tab.is-active {
+  background: var(--accent);
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(37,99,235,0.25);
+}
+.view-toggle-icon { font-size: 16px; }
+.view-toggle-badge {
+  font-size: 11px;
+  font-weight: 500;
+  opacity: 0.7;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(255,255,255,0.15);
+}
+.view-toggle-tab:not(.is-active) .view-toggle-badge {
+  background: var(--bg-panel);
+}
+.topbar-copy-hidden { display: none !important; }
+
+/* ===== User View ===== */
+.user-view {
+  display: none;
+  flex-direction: column;
+  gap: 16px;
+  padding: 0;
+}
+.user-view.is-active { display: flex; }
+
+.user-view-search-bar {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.user-search-input {
+  flex: 1 1 280px;
+  padding: 12px 16px;
+  border: 1.5px solid var(--border);
+  border-radius: 10px;
+  font-size: 15px;
+  background: var(--bg-card);
+  color: var(--text-primary);
+  transition: border-color 0.2s;
+}
+.user-search-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.user-search-input::placeholder { color: var(--text-secondary); }
+.user-area-filter,
+.user-sort-select {
+  padding: 12px 14px;
+  border: 1.5px solid var(--border);
+  border-radius: 10px;
+  font-size: 14px;
+  background: var(--bg-card);
+  color: var(--text-primary);
+  cursor: pointer;
+  min-width: 160px;
+}
+.user-view-summary {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+/* User Card List */
+.user-card-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 14px;
+}
+.user-facility-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  transition: box-shadow 0.2s, border-color 0.2s;
+  cursor: pointer;
+}
+.user-facility-card:hover {
+  border-color: var(--accent);
+  box-shadow: 0 4px 16px rgba(37,99,235,0.10);
+}
+.user-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+.user-card-name {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0;
+  line-height: 1.4;
+}
+.user-card-wage {
+  flex-shrink: 0;
+  text-align: right;
+}
+.user-card-wage-amount {
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--accent);
+  line-height: 1;
+}
+.user-card-wage-label {
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-top: 2px;
+}
+.user-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.user-card-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  background: var(--bg-panel);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+}
+.user-card-tag-area { background: #eff6ff; color: #1d4ed8; border-color: #bfdbfe; }
+.user-card-tag-activity { background: #f0fdf4; color: #166534; border-color: #bbf7d0; }
+.user-card-tag-transport { background: #fefce8; color: #854d0e; border-color: #fef08a; }
+.user-card-tag-home { background: #faf5ff; color: #7e22ce; border-color: #e9d5ff; }
+.user-card-description {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  margin: 0;
+}
+.user-card-stats {
+  display: flex;
+  gap: 16px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.user-card-stat strong {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+.user-card-links {
+  display: flex;
+  gap: 8px;
+  margin-top: auto;
+}
+.user-card-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: none;
+  color: var(--accent);
+  background: var(--accent-soft);
+  transition: background 0.2s;
+}
+.user-card-link:hover { background: var(--accent); color: #fff; }
+
+.user-view-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 12px 0;
+}
+
+/* Wage rank badge */
+.user-card-rank {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  font-size: 13px;
+  font-weight: 800;
+  flex-shrink: 0;
+}
+.user-card-rank-gold { background: #fef3c7; color: #b45309; }
+.user-card-rank-silver { background: #e5e7eb; color: #374151; }
+.user-card-rank-bronze { background: #fed7aa; color: #9a3412; }
+
+/* Operator-only elements hidden in user view */
+body.view-user .operator-only { display: none !important; }
+body.view-user .admin-layout { grid-template-columns: minmax(0, 1fr); }
+body.view-user .sidebar { display: none !important; }
+body.view-user .workspace {
+  width: 100%;
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 24px clamp(16px, 2.5vw, 32px);
+}
+body.view-user .topbar,
+body.view-user #userView {
+  width: 100%;
+}
+body.view-user #operatorView { display: none !important; }
+body.view-user .mobile-menu-toggle { display: none !important; }
+
+/* User-view hidden in operator mode */
+body.view-operator #userView { display: none !important; }
+body.view-operator #topbarCopyUser { display: none !important; }
+body.view-operator #topbarCopyOperator { display: flex !important; flex-direction: column; }
+body.view-operator #topbarActionsOperator { display: flex !important; }
+
+/* Default: user view active */
+body.view-user #topbarCopyUser { display: flex; flex-direction: column; }
+body.view-user #userView { display: flex; }
+
+/* No wage data placeholder */
+.user-card-no-wage {
+  font-size: 14px;
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+@media (max-width: 600px) {
+  .view-toggle { width: 100%; }
+  .view-toggle-tab { flex: 1; justify-content: center; padding: 10px 12px; font-size: 13px; }
+  .view-toggle-badge { display: none; }
+  .user-card-list { grid-template-columns: 1fr; }
+  .user-view-search-bar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .user-search-input {
+    width: 100%;
+    flex: none;
+  }
+  .user-area-filter, .user-sort-select { width: 100%; min-width: 0; }
+}
