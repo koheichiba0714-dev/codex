@@ -922,6 +922,12 @@ function getUserViewRecords() {
     case "utilization-desc":
       records.sort((a, b) => (b.daily_user_capacity_ratio ?? -1) - (a.daily_user_capacity_ratio ?? -1));
       break;
+    case "home-use-first":
+      records.sort((a, b) => compareBooleans(b.home_use_active, a.home_use_active) || compareNumbersDesc(a.average_wage_yen, b.average_wage_yen));
+      break;
+    case "availability-desc":
+      records.sort((a, b) => compareNumbersDesc(userAvailabilityRemaining(a), userAvailabilityRemaining(b)) || compareNumbersDesc(a.average_wage_yen, b.average_wage_yen));
+      break;
     case "name-asc":
       records.sort((a, b) => (a.office_name ?? "").localeCompare(b.office_name ?? "", "ja"));
       break;
@@ -941,7 +947,8 @@ function renderUserView() {
   const summaryEl = document.getElementById("userViewSummary");
   if (summaryEl) {
     summaryEl.textContent = `${formatCount(records.length)}件の事業所が見つかりました` +
-      (state.userAreaFilter !== "all" ? `（${state.userAreaFilter}）` : "");
+      (state.userAreaFilter !== "all" ? `（${state.userAreaFilter}）` : "") +
+      ` / 並び順: ${getUserSortLabel(state.userSort)}`;
   }
 
   const container = document.getElementById("userCardList");
@@ -960,6 +967,7 @@ function renderUserView() {
     const utilRatio = r.daily_user_capacity_ratio;
     const capacity = r.capacity;
     const address = composeAddress(r);
+    const availability = describeUserAvailability(r);
 
     let rankClass = "";
     if (state.userSort === "wage-desc" || state.userSort === "wage-asc") {
@@ -973,10 +981,12 @@ function renderUserView() {
     if (activity) tags.push(`<span class="user-card-tag user-card-tag-activity">${escapeHtml(activity)}</span>`);
     if (hasTransport) tags.push(`<span class="user-card-tag user-card-tag-transport">送迎あり</span>`);
     if (hasHome) tags.push(`<span class="user-card-tag user-card-tag-home">在宅利用可</span>`);
+    if (availability.label) tags.push(`<span class="user-card-tag ${escapeAttribute(userAvailabilityTagClass(availability.label))}">${escapeHtml(availability.label)}</span>`);
 
     const stats = [];
     if (isNumber(utilRatio)) stats.push(`<span class="user-card-stat">利用率 <strong>${percentFormatter.format(utilRatio * 100)}%</strong></span>`);
     if (isNumber(capacity)) stats.push(`<span class="user-card-stat">定員 <strong>${capacity}名</strong></span>`);
+    if (isNumber(userAvailabilityRemaining(r))) stats.push(`<span class="user-card-stat">空き目安 <strong>${formatNumber(userAvailabilityRemaining(r))}名</strong></span>`);
 
     const links = [];
     if (hasHp) links.push(`<a href="${escapeAttribute(safeExternalUrl(r.homepage_url))}" target="_blank" rel="noopener" class="user-card-link" onclick="event.stopPropagation()">ホームページ</a>`);
@@ -1023,6 +1033,46 @@ function renderUserView() {
   const nextBtn = document.getElementById("userNextPage");
   if (prevBtn) prevBtn.disabled = state.userPage <= 1;
   if (nextBtn) nextBtn.disabled = state.userPage >= totalPages;
+}
+
+function compareNumbersDesc(left, right) {
+  const normalizedLeft = isNumber(left) ? left : Number.NEGATIVE_INFINITY;
+  const normalizedRight = isNumber(right) ? right : Number.NEGATIVE_INFINITY;
+  return normalizedRight - normalizedLeft;
+}
+
+function compareBooleans(left, right) {
+  return Number(Boolean(left)) - Number(Boolean(right));
+}
+
+function userAvailabilityRemaining(record) {
+  if (!isNumber(record?.capacity) || !isNumber(record?.average_daily_users)) return null;
+  return Math.max(record.capacity - record.average_daily_users, 0);
+}
+
+function getUserSortLabel(sortKey) {
+  switch (sortKey) {
+    case "wage-desc":
+      return "工賃が高い順";
+    case "wage-asc":
+      return "工賃が低い順";
+    case "utilization-desc":
+      return "利用率が高い順";
+    case "home-use-first":
+      return "在宅利用あり順";
+    case "availability-desc":
+      return "空きがありそう順";
+    case "name-asc":
+      return "名前順";
+    default:
+      return "工賃が高い順";
+  }
+}
+
+function userAvailabilityTagClass(label) {
+  if (label === "比較的余裕あり" || label === "少し余裕あり") return "user-card-tag-availability-good";
+  if (label === "埋まり気味" || label === "利用者が多め") return "user-card-tag-availability-tight";
+  return "user-card-tag-availability-neutral";
 }
 
 function populateUserAreaFilter() {
