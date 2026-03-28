@@ -550,16 +550,16 @@ h1[id], h2[id] { scroll-margin-top: 24px; }
 .filter-launch-panel { grid-column: 1 / -1; order: 1; }
 .panel-main { grid-column: 1 / -1; order: 2; }
 .executive-panel { grid-column: 1 / -1; order: 3; }
-.compare-panel { grid-column: 1 / -1; order: 4; }
+.charts-panel { order: 4; }
+.compare-panel { grid-column: 1 / -1; order: 5; }
 .detail-panel { display: none; }
 .insight-panel, .market-panel, .compare-panel, .anomaly-panel, .charts-panel, .explain-panel, .notes-panel, .executive-panel {
   grid-column: 1 / -1;
 }
-.meta-strip-secondary { order: 5; }
-.insight-panel { order: 6; }
-.market-panel { order: 7; }
-.anomaly-panel { order: 8; }
-.charts-panel { order: 9; }
+.meta-strip-secondary { order: 6; }
+.insight-panel { order: 7; }
+.market-panel { order: 8; }
+.anomaly-panel { order: 9; }
 .explain-panel { order: 10; }
 .notes-panel { order: 11; }
 
@@ -658,6 +658,10 @@ h1[id], h2[id] { scroll-margin-top: 24px; }
 .charts-panel > :not(.panel-head),
 .notes-panel > :not(.panel-head) {
   padding: 12px 16px 16px;
+}
+
+.detail-panel {
+  display: none !important;
 }
 
 /* --- Panel Accents --- */
@@ -831,6 +835,91 @@ h1[id], h2[id] { scroll-margin-top: 24px; }
   border: 1px solid var(--border);
   font-size: 11px;
   color: var(--text-secondary);
+}
+
+.saved-view-row {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background:
+    linear-gradient(180deg, rgba(37,99,235,0.05) 0%, rgba(37,99,235,0.01) 100%),
+    var(--bg-card);
+}
+
+.saved-view-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.section-kicker-mini {
+  margin-bottom: 6px;
+}
+
+.saved-view-note {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.saved-view-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.saved-view-card {
+  display: inline-flex;
+  align-items: stretch;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: #fff;
+}
+
+.saved-view-card.is-active {
+  border-color: var(--border-accent);
+  box-shadow: 0 0 0 1px rgba(37,99,235,0.12);
+}
+
+.saved-view-main {
+  display: grid;
+  gap: 2px;
+  border: none;
+  background: transparent;
+  padding: 10px 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.saved-view-main strong {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.saved-view-main span {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.saved-view-remove {
+  border: none;
+  border-left: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  min-width: 34px;
+  cursor: pointer;
+}
+
+.saved-view-empty {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 12px;
 }
 
 /* --- Stats Grid --- */
@@ -1126,6 +1215,48 @@ h1[id], h2[id] { scroll-margin-top: 24px; }
   display: grid;
   gap: 6px;
   padding-bottom: 8px;
+}
+
+.column-picker {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+}
+
+.column-picker summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 10px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.column-picker summary::-webkit-details-marker {
+  display: none;
+}
+
+.column-toggle-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0 12px 12px;
+}
+
+.column-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--border);
+  background: #fff;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.column-toggle input {
+  margin: 0;
 }
 
 .strategy-grid {
@@ -1795,6 +1926,19 @@ dialog[open] {
   margin-bottom: 4px;
 }
 
+.detail-comparison-controls {
+  display: grid;
+  gap: 8px;
+  justify-items: end;
+}
+
+.detail-scope-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
 .detail-comparison-list {
   display: grid;
   gap: 10px;
@@ -2027,6 +2171,10 @@ dialog[open] {
     align-items: flex-start;
     flex-direction: column;
   }
+  .saved-view-head {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
   .meta-strip { grid-template-columns: 1fr; }
   .dashboard-grid { grid-template-columns: 1fr; }
   .filter-launch-body { grid-template-columns: 1fr; }
@@ -2053,6 +2201,12 @@ dialog[open] {
   .detail-comparison-head {
     display: grid;
     grid-template-columns: 1fr;
+  }
+  .detail-comparison-controls {
+    justify-items: start;
+  }
+  .detail-scope-row {
+    justify-content: flex-start;
   }
 
   /* Table → cards */

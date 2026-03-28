@@ -822,6 +822,10 @@ const FILTER_PRESETS = {
 const INITIAL_PRESET = "all";
 const KPI_PERIOD_LABEL = "令和6年度実績";
 const KPI_BASELINE_LABEL = "大阪市全体";
+const SAVED_VIEWS_STORAGE_KEY = "r6kouchin.operator.saved-views.v1";
+const TABLE_COLUMNS_STORAGE_KEY = "r6kouchin.operator.visible-columns.v1";
+const MAX_SAVED_VIEWS = 3;
+const DEFAULT_VISIBLE_COLUMNS = ["area", "corporation", "wage", "utilization", "activity", "attention"];
 
 function createDefaultFilters() {
   return {
@@ -849,6 +853,56 @@ function createPresetFilters(preset) {
   return { ...createDefaultFilters(), ...(FILTER_PRESETS[preset] ?? {}) };
 }
 
+function readStorageJson(key, fallback) {
+  try {
+    const raw = window.localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function writeStorageJson(key, value) {
+  try {
+    window.localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    // localStorage is optional; fail closed without blocking the UI
+  }
+}
+
+function loadSavedViews() {
+  const items = readStorageJson(SAVED_VIEWS_STORAGE_KEY, []);
+  if (!Array.isArray(items)) return [];
+  return items
+    .filter((item) => item && typeof item === "object" && item.id && item.filters)
+    .slice(0, MAX_SAVED_VIEWS)
+    .map((item) => ({
+      id: String(item.id),
+      label: String(item.label || "保存ビュー"),
+      filters: { ...createDefaultFilters(), ...item.filters },
+      preset: typeof item.preset === "string" ? item.preset : detectActivePreset({ ...createDefaultFilters(), ...item.filters }),
+      compareView: item.compareView === "priority" ? "priority" : "table",
+      sortKey: typeof item.sortKey === "string" ? item.sortKey : state.sortKey,
+      sortDirection: item.sortDirection === "asc" ? "asc" : "desc",
+    }));
+}
+
+function persistSavedViews() {
+  writeStorageJson(SAVED_VIEWS_STORAGE_KEY, state.savedViews.slice(0, MAX_SAVED_VIEWS));
+}
+
+function loadVisibleColumns() {
+  const saved = readStorageJson(TABLE_COLUMNS_STORAGE_KEY, DEFAULT_VISIBLE_COLUMNS);
+  if (!Array.isArray(saved)) return [...DEFAULT_VISIBLE_COLUMNS];
+  const allowed = new Set(getOptionalTableColumns().map((column) => column.key));
+  const filtered = saved.filter((key) => allowed.has(key));
+  return filtered.length ? filtered : [...DEFAULT_VISIBLE_COLUMNS];
+}
+
+function persistVisibleColumns() {
+  writeStorageJson(TABLE_COLUMNS_STORAGE_KEY, state.visibleColumns);
+}
+
 const state = {
   records: [],
   filteredRecords: [],
@@ -860,6 +914,9 @@ const state = {
   currentCompareView: "table",
   filters: createPresetFilters(INITIAL_PRESET),
   draftFilters: createPresetFilters(INITIAL_PRESET),
+  savedViews: [],
+  visibleColumns: [...DEFAULT_VISIBLE_COLUMNS],
+  detailComparisonScope: "auto",
   selectedOfficeNo: "339",
   selectedCorporationKey: null,
   selectedCorporationLabel: null,
@@ -1212,6 +1269,7 @@ function switchCompareView(viewName) {
   });
 
   renderCompareSummary(state.filteredRecords);
+  renderSavedViews();
 }
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -1222,6 +1280,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
 async function init() {
   state.pageMode = getPageMode();
+  if (isOperatorPage()) {
+    state.savedViews = loadSavedViews();
+    state.visibleColumns = loadVisibleColumns();
+  }
   bindGuideDialog();
   bindDetailDialog();
   bindCorporationDialog();
@@ -1616,24 +1678,76 @@ function bindEvents() {
     });
   });
 
-  document.querySelectorAll("th button[data-sort-key]").forEach((button) => {
-    button.addEventListener("click", () => {
-      const { sortKey } = button.dataset;
-      if (!sortKey) return;
-      if (state.sortKey === sortKey) {
-        state.sortDirection = state.sortDirection === "asc" ? "desc" : "asc";
-      } else {
-        state.sortKey = sortKey;
-        state.sortDirection = defaultDirection(sortKey);
-      }
-      state.currentPage = 1;
-      applyFilters();
-    });
+  document.getElementById("saveCurrentViewButton")?.addEventListener("click", saveCurrentView);
+  document.getElementById("columnToggleList")?.addEventListener("change", (event) => {
+    const checkbox = event.target.closest("input[data-column-key]");
+    if (!checkbox) return;
+    const { columnKey } = checkbox.dataset;
+    if (!columnKey) return;
+    const next = new Set(state.visibleColumns);
+    if (checkbox.checked) {
+      next.add(columnKey);
+    } else {
+      next.delete(columnKey);
+    }
+    state.visibleColumns = getOptionalTableColumns()
+      .map((column) => column.key)
+      .filter((key) => next.has(key));
+    if (!state.visibleColumns.length) {
+      state.visibleColumns = [...DEFAULT_VISIBLE_COLUMNS];
+      renderColumnPicker();
+    }
+    persistVisibleColumns();
+    renderTable(state.filteredRecords);
+  });
+
+  document.body.addEventListener("click", (event) => {
+    const sortButton = event.target.closest("th button[data-sort-key]");
+    if (!sortButton) return;
+    const { sortKey } = sortButton.dataset;
+    if (!sortKey) return;
+    if (state.sortKey === sortKey) {
+      state.sortDirection = state.sortDirection === "asc" ? "desc" : "asc";
+    } else {
+      state.sortKey = sortKey;
+      state.sortDirection = defaultDirection(sortKey);
+    }
+    state.currentPage = 1;
+    applyFilters();
   });
 }
 
 function bindSharedRecordActions() {
   document.body.addEventListener("click", (event) => {
+    const savedViewTrigger = event.target.closest("[data-apply-saved-view]");
+    if (savedViewTrigger) {
+      const savedViewId = savedViewTrigger.getAttribute("data-apply-saved-view");
+      if (savedViewId) {
+        applySavedView(savedViewId);
+      }
+      return;
+    }
+
+    const removeSavedViewTrigger = event.target.closest("[data-remove-saved-view]");
+    if (removeSavedViewTrigger) {
+      const savedViewId = removeSavedViewTrigger.getAttribute("data-remove-saved-view");
+      if (savedViewId) {
+        removeSavedView(savedViewId);
+      }
+      return;
+    }
+
+    const detailScopeTrigger = event.target.closest("[data-detail-scope]");
+    if (detailScopeTrigger) {
+      const nextScope = detailScopeTrigger.getAttribute("data-detail-scope");
+      const record = getSelectedRecord();
+      if (nextScope && record) {
+        state.detailComparisonScope = nextScope;
+        renderDetail(record);
+      }
+      return;
+    }
+
     const executiveTrigger = event.target.closest("[data-executive-target]");
     if (executiveTrigger) {
       const preset = executiveTrigger.getAttribute("data-executive-preset");
@@ -1754,6 +1868,84 @@ function applyPreset(preset) {
   syncPresetButtons();
   state.currentPage = 1;
   applyFilters();
+}
+
+function buildSavedViewLabel(filters) {
+  const filtersForLabel = [];
+  if (filters.municipality !== "all") filtersForLabel.push(filters.municipality);
+  if (filters.area !== "all") filtersForLabel.push(filters.area);
+  if (filters.quadrant !== "all") filtersForLabel.push(labelForSelect(filters.quadrant));
+  if (filters.workShortageRisk !== "all") filtersForLabel.push(labelForSelect(filters.workShortageRisk));
+  if (filters.workModel !== "all") filtersForLabel.push(filters.workModel);
+  if (filters.primaryActivity !== "all") filtersForLabel.push(filters.primaryActivity);
+  if (filters.search) filtersForLabel.push(`検索:${filters.search}`);
+  if (filters.newOnly) filtersForLabel.push("新設");
+  if (filters.homeUseOnly) filtersForLabel.push("在宅");
+  return filtersForLabel.slice(0, 3).join(" / ") || "大阪市全体";
+}
+
+function renderSavedViews() {
+  const root = document.getElementById("savedViewList");
+  if (!root) return;
+  if (!state.savedViews.length) {
+    root.innerHTML = `<p class="saved-view-empty">まだ保存した見方はありません。よく使う条件で保存しておくと、次回すぐ戻れます。</p>`;
+    return;
+  }
+
+  root.innerHTML = state.savedViews
+    .map((view) => {
+      const isActive = areFiltersEqual(view.filters, state.filters) && view.compareView === state.currentCompareView;
+      return `
+        <div class="saved-view-card ${isActive ? "is-active" : ""}">
+          <button class="saved-view-main" type="button" data-apply-saved-view="${escapeAttribute(view.id)}">
+            <strong>${escapeHtml(view.label)}</strong>
+            <span>${escapeHtml(view.compareView === "priority" ? "重点候補" : "一覧比較")}</span>
+          </button>
+          <button class="saved-view-remove" type="button" aria-label="保存ビューを削除" data-remove-saved-view="${escapeAttribute(view.id)}">×</button>
+        </div>
+      `;
+    })
+    .join("");
+}
+
+function saveCurrentView() {
+  const nextView = {
+    id: `${Date.now()}`,
+    label: buildSavedViewLabel(state.filters),
+    filters: cloneFilters(state.filters),
+    preset: state.activePreset,
+    compareView: state.currentCompareView,
+    sortKey: state.sortKey,
+    sortDirection: state.sortDirection,
+  };
+
+  state.savedViews = [nextView, ...state.savedViews.filter((view) => !areFiltersEqual(view.filters, nextView.filters))].slice(
+    0,
+    MAX_SAVED_VIEWS
+  );
+  persistSavedViews();
+  renderSavedViews();
+}
+
+function applySavedView(savedViewId) {
+  const savedView = state.savedViews.find((view) => view.id === savedViewId);
+  if (!savedView) return;
+  state.filters = cloneFilters(savedView.filters);
+  state.draftFilters = cloneFilters(savedView.filters);
+  state.activePreset = savedView.preset ?? detectActivePreset(savedView.filters);
+  state.sortKey = savedView.sortKey ?? state.sortKey;
+  state.sortDirection = savedView.sortDirection ?? state.sortDirection;
+  syncFilterControls(state.draftFilters);
+  syncPresetButtons();
+  state.currentPage = 1;
+  applyFilters();
+  switchCompareView(savedView.compareView);
+}
+
+function removeSavedView(savedViewId) {
+  state.savedViews = state.savedViews.filter((view) => view.id !== savedViewId);
+  persistSavedViews();
+  renderSavedViews();
 }
 
 function syncFilterControls(filters = state.filters) {
@@ -2138,6 +2330,7 @@ function applyFilters() {
   syncSelectedRecord(filtered);
 
   renderActiveFilterSummary(filtered);
+  renderSavedViews();
   renderStats(filtered);
   renderExecutive(filtered);
   renderInsights(filtered);
@@ -2146,6 +2339,7 @@ function applyFilters() {
   renderCharts(filtered);
   renderAnomalies(filtered);
   renderDetail(getSelectedRecord());
+  renderColumnPicker();
   renderTable(filtered);
   renderCompareSummary(filtered);
 }
@@ -2338,6 +2532,10 @@ function renderLoadingState() {
   if (filterTags) {
     filterTags.innerHTML = "";
   }
+  const savedViewList = document.getElementById("savedViewList");
+  if (savedViewList) {
+    savedViewList.innerHTML = loadingCard;
+  }
   const executiveList = document.getElementById("executiveList");
   if (executiveList) {
     executiveList.innerHTML = loadingCard;
@@ -2351,6 +2549,10 @@ function renderLoadingState() {
   document.getElementById("fixList").innerHTML = loadingCard;
   document.getElementById("highHighList").innerHTML = loadingCard;
   document.getElementById("statsGrid").innerHTML = loadingCard;
+  const columnToggleList = document.getElementById("columnToggleList");
+  if (columnToggleList) {
+    columnToggleList.innerHTML = loadingCard;
+  }
   document.getElementById("recordsCardList").innerHTML = loadingCard;
   [
     "municipalityChart",
@@ -2439,8 +2641,8 @@ function renderActiveFilterSummary(records) {
   if (state.filters.homeUseOnly) filters.push("在宅利用あり");
 
   document.getElementById("activeFilterSummary").textContent = filters.length
-    ? `${formatCount(records.length)} 件を表示中。`
-    : `${formatCount(records.length)} 件を表示中。追加条件なし。`;
+    ? `対象 ${formatCount(records.length)} 件 / 期間 ${KPI_PERIOD_LABEL} / 比較対象 ${KPI_BASELINE_LABEL}`
+    : `対象 ${formatCount(records.length)} 件 / 期間 ${KPI_PERIOD_LABEL} / 比較対象 ${KPI_BASELINE_LABEL} / 追加条件なし`;
   const tagsRoot = document.getElementById("activeFilterTags");
   if (tagsRoot) {
     const tags = [
@@ -2599,26 +2801,8 @@ function renderExecutive(records) {
     }))
     .filter((item) => item.label)
     .sort((left, right) => right.count - left.count);
-  const areaCountMedian = areaGroups.length ? median(areaGroups.map((item) => item.count).sort((a, b) => a - b)) : null;
   const wageValues = numericValues(records, "average_wage_yen").sort((left, right) => left - right);
   const overallWageMean = meanFor(records, "average_wage_yen");
-  const overallWageMedian = computeLocalStats(wageValues).median;
-  const overallUtilizationMean = meanFor(records, "daily_user_capacity_ratio");
-  const leadingWorkModels = buildGroupStats(records, (record) => deriveWorkModelLabel(record), "average_wage_yen", 5)
-    .sort((left, right) => (right.median ?? 0) - (left.median ?? 0))
-    .slice(0, 3);
-  const opportunityArea = areaGroups
-    .filter(
-      (item) =>
-        item.count >= 3 &&
-        isNumber(item.medianWage) &&
-        isNumber(item.utilizationMean) &&
-        isNumber(areaCountMedian) &&
-        item.count <= areaCountMedian &&
-        item.medianWage >= overallWageMedian &&
-        item.utilizationMean >= overallUtilizationMean
-    )
-    .sort((left, right) => (right.medianWage ?? 0) + (right.utilizationMean ?? 0) * 10000 - ((left.medianWage ?? 0) + (left.utilizationMean ?? 0) * 10000))[0];
   const reviewArea = [...areaGroups]
     .filter((item) => item.shortageCount > 0)
     .sort((left, right) => (right.shortageCount ?? 0) - (left.shortageCount ?? 0) || (right.openSlots ?? 0) - (left.openSlots ?? 0))[0];
@@ -2640,18 +2824,18 @@ function renderExecutive(records) {
 
   const cards = [
     {
-      kicker: "稼働改善余地",
-      title: "利用率が戻るとどこまで伸びるか",
-      metric: isNumber(monthlyUpside10) ? formatMaybeYen(monthlyUpside10) : "-",
-      metricHint: "利用率10%改善時の月次目安",
+      kicker: "攻める候補",
+      title: "高工賃・低利用率",
+      metric: formatCount(growthCandidates.length),
+      metricHint: "候補件数",
       summary:
-        lowUtilizationRecords.length > 0
-          ? `利用率70%未満の ${formatCount(lowUtilizationRecords.length)} 件で、利用率を10%戻すと月 ${formatMaybeYen(monthlyUpside10)} の改善余地がある。`
-          : "今の条件では、利用率改善余地が大きい事業所は多くない。",
+        growthCandidates.length > 0
+          ? `工賃は高いのに利用率が低めの候補が ${formatCount(growthCandidates.length)} 件ある。工賃を落とさず利用率を戻せる余地を先に見る。`
+          : "今の条件では、高工賃・低利用率の候補は少ない。",
       bullets: [
-        isNumber(lowUtilOpenSlots)
-          ? `対象事業所の空きは合計 ${formatDecimalUnit(lowUtilOpenSlots, "人")}。${isNumber(lowUtilOpenSlotsMean) ? `1事業所あたり平均 ${formatDecimalUnit(lowUtilOpenSlotsMean, "人")} の余地がある。` : ""}`
-          : "空き人数の比較に必要な値が不足している。",
+        isNumber(monthlyUpside10)
+          ? `候補全体で利用率を10%戻せると、月 ${formatMaybeYen(monthlyUpside10)} の改善余地になる。`
+          : "改善余地の試算に必要な値が不足している。",
         growthCandidates[0]
           ? `高工賃・低利用率の先頭候補は ${growthCandidates[0].office_name}。工賃 ${formatWageText(growthCandidates[0].average_wage_yen)} / 利用率 ${formatPercent(growthCandidates[0].daily_user_capacity_ratio)}。`
           : "高工賃・低利用率の候補は今の条件では限定的。",
@@ -2662,56 +2846,14 @@ function renderExecutive(records) {
       targetId: "tableHeading",
     },
     {
-      kicker: "上位群との差",
-      title: "工賃のベンチマーク差を把握する",
-      metric: formatSignedYen(topQuartileGap),
-      metricHint: "上位25%中央値との差",
-      summary:
-        isNumber(topQuartileMedian)
-          ? `上位25%の中央値は ${formatMaybeYen(topQuartileMedian)}。表示中平均との差が、次に目指す工賃水準の目安になる。`
-          : "工賃の上位群を比較するだけの件数がまだ足りない。",
-      bullets: [
-        highHighCandidates.length
-          ? `高工賃・高利用率の好事例は ${formatCount(highHighCandidates.length)} 件。先頭候補は ${highHighCandidates[0].office_name}。`
-          : "今の条件では、明確な好事例はまだ少ない。",
-        growthCandidates.length
-          ? `高工賃・低利用率は ${formatCount(growthCandidates.length)} 件。単価を保ったまま稼働を伸ばせる候補として分けて追える。`
-          : "高工賃・低利用率の候補は限定的。",
-      ],
-      buttonLabel: "好事例を見る",
-      preset: "high-wage-high-util",
-      compareView: "priority",
-      targetId: "tableHeading",
-    },
-    {
-      kicker: "勝ち筋",
-      title: "強い作業モデルを先に押さえる",
-      metric: leadingWorkModels[0] ? formatMaybeYen(leadingWorkModels[0].median) : "-",
-      metricHint: leadingWorkModels[0]?.label ?? "作業モデル未取得",
-      summary:
-        leadingWorkModels[0]
-          ? `${leadingWorkModels[0].label} が中央値ベースで最も強い。高工賃の理由を作業モデル単位で見にいける。`
-          : "主活動の公開情報が少なく、強い作業モデルをまだ読み切れない。",
-      bullets: [
-        leadingWorkModels[1]
-          ? `次点は ${leadingWorkModels[1].label}（中央値 ${formatMaybeYen(leadingWorkModels[1].median)}）。`
-          : "次点の作業モデルを比べるだけの件数はまだ少ない。",
-        opportunityArea
-          ? `${opportunityArea.label} は ${formatCount(opportunityArea.count)}件でも中央値工賃 ${formatMaybeYen(opportunityArea.medianWage)} / 平均利用率 ${formatPercent(opportunityArea.utilizationMean)}。`
-          : "区別の強弱は比較グラフとベンチマーク欄で追える。",
-      ],
-      buttonLabel: "作業モデルを見る",
-      targetId: "marketHeading",
-    },
-    {
-      kicker: "要見直し候補",
-      title: "仕事不足寄りの事業所を先に切る",
+      kicker: "立て直す候補",
+      title: "低工賃・低利用率・仕事不足寄り",
       metric: formatCount(fixCandidates.length),
       metricHint: "候補件数",
       summary:
         fixCandidates.length > 0
-          ? `低工賃・低利用率・仕事不足寄りは ${formatCount(fixCandidates.length)} 件。営業、作業開拓、体験導線の立て直しを先に当てたい。`
-          : "今の条件では、強い見直しシグナルは限定的。",
+          ? `低工賃・低利用率・仕事不足寄りは ${formatCount(fixCandidates.length)} 件ある。営業、仕事開拓、体験導線のどこを先に直すかを見分けたい。`
+          : "今の条件では、強い立て直し候補は多くない。",
       bullets: [
         isNumber(fixOpenSlots)
           ? `候補全体の空きは合計 ${formatDecimalUnit(fixOpenSlots, "人")}。仕事不足の可能性は ${formatCount(shortageRecords.length)} 件。`
@@ -2722,8 +2864,30 @@ function renderExecutive(records) {
             ? `密集区は ${denseAreas.join(" / ")}。区別の平均工賃と件数は比較グラフで確認できる。`
             : "区別の比較に必要な住所情報が不足している。",
       ],
-      buttonLabel: "見直し候補を見る",
+      buttonLabel: "立て直し候補を見る",
       preset: "fix-priority",
+      compareView: "priority",
+      targetId: "tableHeading",
+    },
+    {
+      kicker: "真似る候補",
+      title: "高工賃・高利用率",
+      metric: formatCount(highHighCandidates.length),
+      metricHint: "候補件数",
+      summary:
+        highHighCandidates.length > 0
+          ? `工賃も利用率も強い候補が ${formatCount(highHighCandidates.length)} 件ある。自分の事業所と似た条件の好事例を先に押さえる。`
+          : "今の条件では、明確な好事例はまだ少ない。",
+      bullets: [
+        isNumber(topQuartileMedian)
+          ? `上位25%の中央値は ${formatMaybeYen(topQuartileMedian)}。表示平均との差 ${formatSignedYen(topQuartileGap)} が次の目安になる。`
+          : "上位群との差を出すだけの件数がまだ足りない。",
+        highHighCandidates[0]
+          ? `先頭候補は ${highHighCandidates[0].office_name}。工賃 ${formatWageText(highHighCandidates[0].average_wage_yen)} / 利用率 ${formatPercent(highHighCandidates[0].daily_user_capacity_ratio)}。`
+          : "具体的なベンチマーク候補は今の条件では限定的。",
+      ],
+      buttonLabel: "好事例を見る",
+      preset: "high-wage-high-util",
       compareView: "priority",
       targetId: "tableHeading",
     },
@@ -2818,13 +2982,9 @@ function renderStats(records) {
   const utilizationDiffFromMedian =
     isNumber(utilizationMean) && isNumber(utilizationMedian) ? utilizationMean - utilizationMedian : null;
   const utilizationOpportunity = computeUtilizationOpportunity(records, 0.85);
+  const priorityCount = growthCandidates.length + fixCandidates.length;
 
   const cards = [
-    {
-      label: "対象事業所数",
-      value: formatCount(records.length),
-      hint: `${KPI_PERIOD_LABEL} / ${KPI_BASELINE_LABEL} ${formatCount(state.records.length)}件中 ${formatPercent(recordShare)} / 回答済み ${formatCount(answeredCount)}件`,
-    },
     {
       label: "平均工賃",
       value: formatMaybeYen(wageStats.mean),
@@ -2838,15 +2998,20 @@ function renderStats(records) {
     {
       label: "利用率改善余地",
       value: formatMaybeYen(utilizationOpportunity.monthlyUpside),
-      hint: `利用率85%までの月額試算 / 高工賃・低利用率 ${formatCount(growthCandidates.length)}件 / 仕事不足寄り ${formatCount(fixCandidates.length)}件`,
+      hint: "単位: 月額円 / 利用率85%まで戻した場合の試算",
+    },
+    {
+      label: "重点候補件数",
+      value: formatCount(priorityCount),
+      hint: `高工賃・低利用率 ${formatCount(growthCandidates.length)}件 / 低工賃・低利用率・仕事不足寄り ${formatCount(fixCandidates.length)}件`,
     },
   ];
 
   const contextRoot = document.getElementById("statsContextNote");
   if (contextRoot) {
-    contextRoot.textContent = `期間: ${KPI_PERIOD_LABEL} / 比較対象: ${KPI_BASELINE_LABEL} ${formatCount(
+    contextRoot.textContent = `対象 ${formatCount(records.length)}件 / ${KPI_BASELINE_LABEL} ${formatCount(
       state.records.length
-    )}件 / 単位: 工賃は月額円、利用率は定員比`;
+    )}件中 ${formatPercent(recordShare)} / 回答済み ${formatCount(answeredCount)}件 / 単位: 工賃は月額円、利用率は定員比`;
   }
 
   document.getElementById("statsGrid").innerHTML = cards
@@ -3199,7 +3364,12 @@ function renderDetail(record) {
             <h3>主要指標と平均との差・中央値差</h3>
             <p class="detail-card-note">比較対象: ${escapeHtml(comparisonContext.label)}</p>
           </div>
-          <p class="detail-card-note">${escapeHtml(comparisonContext.note)}</p>
+          <div class="detail-comparison-controls">
+            <div class="detail-scope-row">
+              ${renderDetailComparisonScopeButtons(record, comparisonContext)}
+            </div>
+            <p class="detail-card-note">${escapeHtml(comparisonContext.note)}</p>
+          </div>
         </div>
         <div class="detail-comparison-list">
           ${renderDetailComparisonRows(record, comparisonContext)}
@@ -3732,9 +3902,120 @@ function renderRepresentativeDialog(representativeName) {
   `;
 }
 
+function getOptionalTableColumns() {
+  return [
+    {
+      key: "area",
+      label: "区・市",
+      sortKey: "municipality",
+      className: "",
+      renderCell: (record) => escapeHtml(getAreaLabel(record) || record.municipality || "-"),
+    },
+    {
+      key: "corporation",
+      label: "法人名",
+      sortKey: "corporation_name",
+      className: "",
+      renderCell: (record) => corporationLinkButton(record, "entity-link-button table-entity-link"),
+    },
+    {
+      key: "wage",
+      label: "平均工賃",
+      sortKey: "average_wage_yen",
+      className: "numeric",
+      renderCell: (record) => formatWage(record.average_wage_yen, record.average_wage_error),
+    },
+    {
+      key: "gap",
+      label: "平均との差",
+      sortKey: "wage_ratio_to_overall_mean",
+      className: "numeric",
+      renderCell: (record) => formatRatio(record.wage_ratio_to_overall_mean),
+    },
+    {
+      key: "utilization",
+      label: "利用率",
+      sortKey: "daily_user_capacity_ratio",
+      className: "numeric",
+      renderCell: (record) => formatPercent(record.daily_user_capacity_ratio),
+    },
+    {
+      key: "homeUse",
+      label: "在宅率",
+      sortKey: "home_use_user_ratio_decimal",
+      className: "numeric",
+      renderCell: (record) => formatPercent(record.home_use_user_ratio_decimal),
+    },
+    {
+      key: "activity",
+      label: "主活動",
+      sortKey: "wam_primary_activity_type",
+      className: "",
+      renderCell: (record) => escapeHtml(record.wam_primary_activity_type ?? "-"),
+    },
+    {
+      key: "attention",
+      label: "注目",
+      sortKey: null,
+      className: "",
+      renderCell: (record) => `<div class="attention-cell">${attentionBadges(record)}</div>`,
+    },
+  ];
+}
+
+function getVisibleTableColumns() {
+  const selected = new Set(state.visibleColumns);
+  return [
+    {
+      key: "officeNo",
+      label: "No.",
+      sortKey: "office_no",
+      className: "numeric",
+      renderCell: (record) => formatNullable(record.office_no),
+    },
+    {
+      key: "officeName",
+      label: "事業所名",
+      sortKey: "office_name",
+      className: "",
+      renderCell: (record) => escapeHtml(record.office_name ?? "-"),
+    },
+    ...getOptionalTableColumns().filter((column) => selected.has(column.key)),
+    {
+      key: "detail",
+      label: "詳細",
+      sortKey: null,
+      className: "",
+      renderCell: (record) => `<button class="table-link" data-select-office="${escapeHtml(record.office_no)}" type="button">詳細</button>`,
+    },
+  ];
+}
+
+function renderColumnPicker() {
+  const root = document.getElementById("columnToggleList");
+  if (!root) return;
+
+  root.innerHTML = getOptionalTableColumns()
+    .map(
+      (column) => `
+        <label class="column-toggle">
+          <input
+            type="checkbox"
+            data-column-key="${escapeAttribute(column.key)}"
+            ${state.visibleColumns.includes(column.key) ? "checked" : ""}
+          />
+          <span>${escapeHtml(column.label)}</span>
+        </label>
+      `
+    )
+    .join("");
+}
+
 function renderTable(records) {
+  const tableHead = document.getElementById("recordsTableHead");
   const tableBody = document.getElementById("recordsTableBody");
   const cardList = document.getElementById("recordsCardList");
+  const columns = getVisibleTableColumns();
   const pageCount = Math.max(1, Math.ceil(records.length / PAGE_SIZE));
   const startIndex = (state.currentPage - 1) * PAGE_SIZE;
   const pagedRecords = records.slice(startIndex, startIndex + PAGE_SIZE);
@@ -3743,9 +4024,23 @@ function renderTable(records) {
   document.getElementById("pageSummary").textContent = `${formatCount(state.currentPage)} / ${formatCount(pageCount)} ページ`;
   document.getElementById("prevPageButton").disabled = state.currentPage <= 1;
   document.getElementById("nextPageButton").disabled = state.currentPage >= pageCount;
+  if (tableHead) {
+    tableHead.innerHTML = `
+      <tr>
+        ${columns
+          .map((column) => {
+            const sortLabel = column.sortKey && state.sortKey === column.sortKey
+              ? `${column.label} ${state.sortDirection === "asc" ? "▲" : "▼"}`
+              : column.label;
+            return `<th>${column.sortKey ? `<button type="button" data-sort-key="${escapeAttribute(column.sortKey)}">${escapeHtml(sortLabel)}</button>` : escapeHtml(column.label)}</th>`;
+          })
+          .join("")}
+      </tr>
+    `;
+  }
 
   if (!pagedRecords.length) {
-    tableBody.innerHTML = `<tr><td colspan="11">${document.getElementById("emptyStateTemplate").innerHTML}</td></tr>`;
+    tableBody.innerHTML = `<tr><td colspan="${columns.length}">${document.getElementById("emptyStateTemplate").innerHTML}</td></tr>`;
     if (cardList) {
       cardList.innerHTML = document.getElementById("emptyStateTemplate").innerHTML;
     }
@@ -3756,17 +4051,9 @@ function renderTable(records) {
     .map(
       (record) => `
         <tr class="${rowClass(record)}">
-          <td class="numeric">${formatNullable(record.office_no)}</td>
-          <td>${escapeHtml(record.office_name ?? "-")}</td>
-          <td>${escapeHtml(getAreaLabel(record) || record.municipality || "-")}</td>
-          <td>${corporationLinkButton(record, "entity-link-button table-entity-link")}</td>
-          <td class="numeric">${formatWage(record.average_wage_yen, record.average_wage_error)}</td>
-          <td class="numeric">${formatRatio(record.wage_ratio_to_overall_mean)}</td>
-          <td class="numeric">${formatPercent(record.daily_user_capacity_ratio)}</td>
-          <td class="numeric">${formatPercent(record.home_use_user_ratio_decimal)}</td>
-          <td>${escapeHtml(record.wam_primary_activity_type ?? "-")}</td>
-          <td><div class="attention-cell">${attentionBadges(record)}</div></td>
-          <td><button class="table-link" data-select-office="${escapeHtml(record.office_no)}" type="button">詳細</button></td>
+          ${columns
+            .map((column) => `<td class="${escapeAttribute(column.className || "")}">${column.renderCell(record)}</td>`)
+            .join("")}
         </tr>
       `
     )
@@ -4114,25 +4401,87 @@ function buildActionNotes(record) {
   return notes.slice(0, 6);
 }
 
-function getDetailComparisonContext(record) {
+function buildDetailComparisonContexts(record) {
   const filteredCount = state.filteredRecords.length;
   const recordInFiltered = state.filteredRecords.some((item) => String(item.office_no) === String(record.office_no));
+  const overallContext = {
+    key: "overall",
+    records: state.records,
+    label: `大阪市全体 ${formatCount(state.records.length)}件`,
+    note: "大阪市全体を母集団にして比較している。",
+  };
+  const contexts = {
+    overall: overallContext,
+  };
+
   if (filteredCount && recordInFiltered) {
     const usesAllRecords = filteredCount === state.records.length;
-    return {
+    contexts.filtered = {
+      key: "filtered",
       records: state.filteredRecords,
       label: usesAllRecords ? `大阪市全体 ${formatCount(filteredCount)}件` : `現在の絞り込み結果 ${formatCount(filteredCount)}件`,
       note: usesAllRecords
-        ? "平均との差・中央値差と比較率は大阪市全体との比較で表示している。"
-        : "平均との差・中央値差と比較率は現在の絞り込み結果を母集団にしている。絞り込みを変えると比較値も変わる。",
+        ? "現在の一覧が大阪市全体なので、大阪市全体との比較になる。"
+        : "今の一覧に出ている事業所だけを母集団にして比較している。絞り込みを変えると比較値も変わる。",
     };
   }
 
-  return {
-    records: state.records,
-    label: `大阪市全体 ${formatCount(state.records.length)}件`,
-    note: "この事業所は現在の一覧外のため、大阪市全体を母集団にして比較している。",
-  };
+  const areaLabel = getAreaLabel(record);
+  const areaRecords = areaLabel
+    ? state.records.filter((item) => getAreaLabel(item) === areaLabel)
+    : [];
+  if (areaLabel && areaRecords.length >= 5) {
+    contexts.area = {
+      key: "area",
+      records: areaRecords,
+      label: `${areaLabel} ${formatCount(areaRecords.length)}件`,
+      note: `同じ区・市にある事業所だけで比べている。`,
+    };
+  }
+
+  const workModelLabel = deriveWorkModelLabel(record);
+  const workModelRecords = workModelLabel
+    ? state.records.filter((item) => deriveWorkModelLabel(item) === workModelLabel)
+    : [];
+  if (workModelLabel && workModelRecords.length >= 5) {
+    contexts.workModel = {
+      key: "workModel",
+      records: workModelRecords,
+      label: `${workModelLabel} ${formatCount(workModelRecords.length)}件`,
+      note: "同じ作業モデルだけで比べている。",
+    };
+  }
+
+  contexts.auto = contexts.filtered ?? overallContext;
+  return contexts;
+}
+
+function getDetailComparisonContext(record) {
+  const contexts = buildDetailComparisonContexts(record);
+  return contexts[state.detailComparisonScope] ?? contexts.auto ?? contexts.overall;
+}
+
+function renderDetailComparisonScopeButtons(record, activeContext) {
+  const contexts = buildDetailComparisonContexts(record);
+  const options = [
+    { key: "auto", label: "自動" },
+    { key: "filtered", label: "今の一覧" },
+    { key: "overall", label: "大阪市全体" },
+    { key: "area", label: "同じ区・市" },
+    { key: "workModel", label: "同じ作業モデル" },
+  ].filter((option) => contexts[option.key]);
+
+  return options
+    .map(
+      (option) => `
+        <button
+          class="preset-chip ${activeContext.key === option.key ? "is-active" : ""}"
+          type="button"
+          data-detail-scope="${escapeAttribute(option.key)}"
+        >${escapeHtml(option.label)}</button>
+      `
+    )
+    .join("");
 }
 
 function getDetailComparisonMetricConfigs() {
