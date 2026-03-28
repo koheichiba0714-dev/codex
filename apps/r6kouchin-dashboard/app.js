@@ -789,150 +789,6 @@ function buildMarketCards(records) {
   ];
 }
 
-function buildManagementBoardCards(records) {
-  const growthCandidates = records
-    .filter(
-      (record) =>
-        isNumber(record.average_wage_yen) &&
-        isNumber(record.daily_user_capacity_ratio) &&
-        (record.wage_ratio_to_municipality_mean ?? record.wage_ratio_to_overall_mean ?? 0) >= 1.1 &&
-        record.daily_user_capacity_ratio < 0.8
-    )
-    .sort((left, right) => growthScore(right) - growthScore(left))
-    .slice(0, 12);
-  const growthOpportunity = computeUtilizationOpportunity(growthCandidates, 0.85);
-
-  const fixCandidates = records
-    .filter(
-      (record) =>
-        isNumber(record.average_wage_yen) &&
-        isNumber(record.daily_user_capacity_ratio) &&
-        (record.wage_ratio_to_municipality_mean ?? record.wage_ratio_to_overall_mean ?? 1) < 0.9 &&
-        record.daily_user_capacity_ratio < 0.75 &&
-        hasWorkShortageRisk(record)
-    )
-    .sort((left, right) => fixScore(right) - fixScore(left))
-    .slice(0, 12);
-  const fixOpenSlots = sumComputed(fixCandidates, (record) => availableCapacity(record));
-  const fixMedianGap = computeLocalStats(
-    fixCandidates
-      .map((record) =>
-        isNumber(record.average_wage_yen) && isNumber(record.wage_ratio_to_overall_mean)
-          ? record.average_wage_yen - record.average_wage_yen / record.wage_ratio_to_overall_mean
-          : null
-      )
-      .filter(isNumber)
-  ).mean;
-
-  const activityStats = buildGroupStats(records, (record) => deriveWorkModelLabel(record), "average_wage_yen", 5)
-    .sort((left, right) => (right.median ?? 0) - (left.median ?? 0));
-  const topActivity = activityStats[0];
-  const secondActivity = activityStats[1];
-
-  const areaGroups = [...groupRecords(records, (record) => getAreaLabel(record)).entries()]
-    .map(([label, items]) => ({
-      label,
-      count: items.length,
-      medianWage: computeLocalStats(numericValues(items, "average_wage_yen")).median,
-      utilizationMean: meanFor(items, "daily_user_capacity_ratio"),
-    }))
-    .filter((item) => item.label)
-    .sort((left, right) => right.count - left.count);
-  const areaCountMedian = areaGroups.length ? median(areaGroups.map((item) => item.count).sort((a, b) => a - b)) : null;
-  const overallWageMedian = computeLocalStats(numericValues(records, "average_wage_yen")).median;
-  const overallUtilizationMean = meanFor(records, "daily_user_capacity_ratio");
-  const opportunityArea = areaGroups
-    .filter(
-      (item) =>
-        item.count >= 3 &&
-        isNumber(item.medianWage) &&
-        isNumber(item.utilizationMean) &&
-        isNumber(areaCountMedian) &&
-        item.count <= areaCountMedian &&
-        item.medianWage >= overallWageMedian &&
-        item.utilizationMean >= overallUtilizationMean
-    )
-    .sort(
-      (left, right) =>
-        (right.medianWage ?? 0) + (right.utilizationMean ?? 0) * 10000 - ((left.medianWage ?? 0) + (left.utilizationMean ?? 0) * 10000)
-    )[0];
-  const denseArea = areaGroups[0];
-
-  return [
-    {
-      title: "稼働改善余地",
-      kicker: "高工賃・低利用率の候補",
-      metricValue: formatMaybeYen(growthOpportunity.monthlyUpside),
-      metricLabel: "利用率85%までの月額試算",
-      summary: growthOpportunity.count
-        ? `${formatCount(growthOpportunity.count)}件で、今の工賃水準を保ったまま利用率を85%まで伸ばすと月 ${formatMaybeYen(growthOpportunity.monthlyUpside)} の上振れ余地がある。`
-        : "高工賃だが利用率に伸びしろがある事業所は、今の条件では目立っていない。",
-      bullets: growthOpportunity.count
-        ? [
-            `${escapeInlineOfficeSummary(growthOpportunity.candidates[0]?.record)} が最大候補で、単独でも月 ${formatMaybeYen(growthOpportunity.candidates[0]?.monthlyUpside)} の試算。`,
-            growthOpportunity.candidates[1]
-              ? `${escapeInlineOfficeSummary(growthOpportunity.candidates[1]?.record)} も候補。上位2件で月 ${formatMaybeYen((growthOpportunity.candidates[0]?.monthlyUpside ?? 0) + (growthOpportunity.candidates[1]?.monthlyUpside ?? 0))}。`
-              : "一覧比較の重点候補タブから、対象事業所をそのまま確認できる。",
-          ]
-        : ["一覧比較で利用率順に並べると、次に深掘りする先を確認しやすい。"],
-    },
-    {
-      title: "立て直し優先",
-      kicker: "低工賃・低利用率・仕事不足",
-      metricValue: formatCount(fixCandidates.length),
-      metricLabel: "確認候補",
-      summary: fixCandidates.length
-        ? `${formatCount(fixCandidates.length)}件が、工賃・利用率とも弱く、仕事不足の可能性も重なっている。`
-        : "今の条件では、立て直し優先の候補は強く出ていない。",
-      bullets: [
-        isNumber(fixOpenSlots)
-          ? `候補全体で定員まで合計 ${formatCount(Math.round(fixOpenSlots))}人分の空きがある。`
-          : "定員差の公開情報は一部不足している。",
-        isNumber(fixMedianGap)
-          ? `平均との差は平均で ${formatSignedYen(fixMedianGap)}。同業比較での見直し余地が大きい。`
-          : "平均との差の集計は十分な件数で取れなかった。",
-      ],
-    },
-    {
-      title: "勝ち筋モデル",
-      kicker: "主活動・作業モデルの比較",
-      metricValue: topActivity ? formatMaybeYen(topActivity.median) : "-",
-      metricLabel: topActivity ? `${topActivity.label} の中央値` : "件数不足",
-      summary: topActivity
-        ? `${topActivity.label} が最も高工賃で、中央値 ${formatMaybeYen(topActivity.median)}。件数は ${formatCount(topActivity.count)}件。`
-        : "主活動の公開情報が少なく、勝ち筋モデルはまだ読み切れない。",
-      bullets: [
-        secondActivity
-          ? `次点は ${secondActivity.label} で中央値 ${formatMaybeYen(secondActivity.median)}。`
-          : "比較できる作業モデルがまだ少ない。",
-        "重点候補とあわせて見ると、『高工賃なのに埋まり切っていないモデル』を探しやすい。",
-      ],
-    },
-    {
-      title: "狙い目エリア",
-      kicker: "競合密度 × 工賃 × 利用率",
-      metricValue: opportunityArea ? formatCount(opportunityArea.count) : (denseArea ? formatCount(denseArea.count) : "-"),
-      metricLabel: opportunityArea ? `${opportunityArea.label} の競合件数` : "比較エリア件数",
-      summary: opportunityArea
-        ? `${opportunityArea.label} は競合 ${formatCount(opportunityArea.count)}件と密集しすぎず、中央値工賃 ${formatMaybeYen(opportunityArea.medianWage)}、平均利用率 ${formatPercent(opportunityArea.utilizationMean)}。`
-        : denseArea
-          ? `${denseArea.label} が最も件数の多いエリアで、競争の基準点として見やすい。`
-          : "エリア比較に必要な区情報が足りない。",
-      bullets: [
-        denseArea ? `${denseArea.label} は ${formatCount(denseArea.count)}件で最密集。勝ち筋の比較軸として使いやすい。` : "密集エリアの比較はまだ難しい。",
-        "詳細を開くと、各事業所ごとに同じ区・同じ主活動の件数を確認できる。",
-      ],
-    },
-  ];
-}
-
-function escapeInlineOfficeSummary(record) {
-  if (!record) return "対象事業所";
-  const officeName = compactInlineText(record.office_name) || "事業所名不明";
-  const areaLabel = getAreaLabel(record) || record.municipality || "-";
-  return `${officeName}（${areaLabel}）`;
-}
-
 /** 工賃の標準偏差を計算 */
 function computeStdDev(values) {
   if (values.length < 2) return null;
@@ -2606,57 +2462,67 @@ function renderInsights(records) {
     return;
   }
 
-  const wages = numericValues(records, "average_wage_yen");
-  const wageStats = computeLocalStats(wages);
-
-  // 好事例
+  const growthCandidates = getGrowthCandidates(records);
+  const fixCandidates = getFixCandidates(records);
+  const highHighCandidates = getHighHighCandidates(records);
+  const areaStats = buildAreaMarketStats(records, 5);
+  const highWageAreas = [...areaStats].sort((left, right) => (right.wageMean ?? 0) - (left.wageMean ?? 0)).slice(0, 3);
+  const crowdedAreas = [...areaStats].sort((left, right) => right.count - left.count).slice(0, 3);
   const topPerformers = topPerformerActivities(records, 3);
   const activityStats = buildGroupStats(records, (record) => deriveWorkModelLabel(record), "average_wage_yen", 5).sort(
     (left, right) => (right.median ?? 0) - (left.median ?? 0)
   );
-  const homeUseRecords = records.filter((record) => record.home_use_active === true);
-  const nonHomeUseRecords = records.filter((record) => record.home_use_active === false);
-
-  // 利用率1%改善のインパクト
-  const lowUtilRecords = records.filter((r) => isNumber(r.daily_user_capacity_ratio) && r.daily_user_capacity_ratio < 0.7);
-  const avgRevPerPoint = lowUtilRecords.length
-    ? Math.round(lowUtilRecords.reduce((s, r) => s + (revenuePerUtilizationPoint(r) ?? 0), 0) / lowUtilRecords.length)
-    : null;
+  const knownActivityCount = records.filter((record) => getPrimaryActivityLabel(record) !== "主活動未取得").length;
 
   const insights = [
     {
-      title: "工賃の中心",
-      body: wageStats.median != null
-        ? `表示中の工賃の中心は ${formatMaybeYen(wageStats.median)} で、平均は ${formatMaybeYen(wageStats.mean)}。中心値から大きく離れた事業所を先に確認しやすい。`
-        : "工賃データなし。",
+      kicker: "攻める候補",
+      title: "高工賃なのにまだ伸びる事業所",
+      value: `${formatCount(growthCandidates.length)}件`,
+      body: "平均との差110%以上で、利用率80%未満の事業所を先に確認する。",
+      bullets: growthCandidates.length
+        ? growthCandidates.slice(0, 3).map(executiveOfficeBullet)
+        : ["表示中には高工賃・低利用率候補が少ない。"],
     },
     {
-      title: "利用率の改善余地",
-      body: avgRevPerPoint != null
-        ? `利用率70%未満の ${formatCount(lowUtilRecords.length)} 事業所の場合、利用率を1%改善すると平均で月 ${formatMaybeYen(avgRevPerPoint)} の増収。10%改善なら月 ${formatMaybeYen(avgRevPerPoint * 10)} の差になる。`
-        : "利用率データが不足。",
+      kicker: "立て直し優先",
+      title: "低工賃・低利用率が重なる事業所",
+      value: `${formatCount(fixCandidates.length)}件`,
+      body: "仕事不足の可能性を含めて、先に原因確認したい候補をまとめる。",
+      bullets: fixCandidates.length
+        ? fixCandidates.slice(0, 3).map(executiveOfficeBullet)
+        : ["表示中には立て直し優先候補が少ない。"],
     },
     {
-      title: "高工賃の好事例",
-      body: topPerformers.length
-        ? topPerformers.map((p) => `${p.name}（${formatWageText(p.wage)}）: ${p.detail}`).join(" / ")
-        : "工賃が高い事業所の作業内容が確認できない。",
+      kicker: "区の相場",
+      title: "高単価区と競争が激しい区",
+      value: highWageAreas[0] ? `${highWageAreas[0].label} ${formatMaybeYen(highWageAreas[0].wageMean)}` : "-",
+      body: crowdedAreas[0]
+        ? `件数最多は ${crowdedAreas[0].label} の ${formatCount(crowdedAreas[0].count)}件。高単価区と競争区を切り分けて見る。`
+        : "区別の比較に十分な件数がない。",
+      bullets: highWageAreas.length
+        ? highWageAreas.map(executiveAreaBullet)
+        : ["区別の比較に十分な件数がない。"],
     },
     {
-      title: "主活動の勝ち筋",
-      body: activityStats.length
-        ? `${activityStats
-            .slice(0, 2)
-            .map((item) => `${item.label} は中央値 ${formatMaybeYen(item.median)}`)
-            .join(" / ")}`
-        : "主活動の公開情報が少なく、勝ち筋を読み切れない。",
+      kicker: "主活動の勝ち筋",
+      title: "工賃中央値が高い作業モデル",
+      value: activityStats[0] ? `${activityStats[0].label} ${formatMaybeYen(activityStats[0].median)}` : "-",
+      body: `主活動の公開ありは ${formatCount(knownActivityCount)} / ${formatCount(records.length)}件。中央値ベースで比較。`,
+      bullets: activityStats.length
+        ? activityStats.slice(0, 3).map((item) => `${item.label} / 中央値 ${formatMaybeYen(item.median)} / ${formatCount(item.count)}件`)
+        : topPerformers.length
+          ? topPerformers.map((item) => `${item.activity ?? "活動不明"} / ${item.name} / ${formatWageText(item.wage)}`)
+          : ["主活動の公開情報が少なく、勝ち筋比較が薄い。"],
     },
     {
-      title: "在宅の使い方",
-      body:
-        homeUseRecords.length && nonHomeUseRecords.length
-          ? `在宅ありの平均工賃は ${formatMaybeYen(meanFor(homeUseRecords, "average_wage_yen"))}、在宅なしは ${formatMaybeYen(meanFor(nonHomeUseRecords, "average_wage_yen"))}。在宅の有無で工賃差が出るかを確認しやすい。`
-          : "在宅あり/なしの比較に十分な件数がない。",
+      kicker: "ベンチマーク先",
+      title: "高工賃・高利用率の好事例",
+      value: `${formatCount(highHighCandidates.length)}件`,
+      body: "工賃も利用率も強い事業所を、そのままベンチマーク先として追える。",
+      bullets: highHighCandidates.length
+        ? highHighCandidates.slice(0, 3).map(executiveOfficeBullet)
+        : ["表示中には高工賃・高利用率候補が少ない。"],
     },
   ];
 
@@ -2664,8 +2530,13 @@ function renderInsights(records) {
     .map(
       (insight) => `
         <article class="insight-card">
+          <p class="insight-kicker">${escapeHtml(insight.kicker)}</p>
           <h3>${escapeHtml(insight.title)}</h3>
+          <strong class="insight-value">${escapeHtml(insight.value)}</strong>
           <p>${escapeHtml(insight.body)}</p>
+          <ul class="insight-list">
+            ${insight.bullets.map((bullet) => `<li>${escapeHtml(bullet)}</li>`).join("")}
+          </ul>
         </article>
       `
     )
@@ -2697,36 +2568,9 @@ function renderMarket(records) {
 }
 
 function buildStrategyBuckets(records) {
-  const growthCandidates = records
-    .filter(
-      (record) =>
-        isNumber(record.average_wage_yen) &&
-        isNumber(record.daily_user_capacity_ratio) &&
-        (record.wage_ratio_to_municipality_mean ?? record.wage_ratio_to_overall_mean ?? 0) >= 1.1 &&
-        record.daily_user_capacity_ratio < 0.8
-    )
-    .sort((left, right) => growthScore(right) - growthScore(left));
-
-  const fixCandidates = records
-    .filter(
-      (record) =>
-        isNumber(record.average_wage_yen) &&
-        isNumber(record.daily_user_capacity_ratio) &&
-        (record.wage_ratio_to_municipality_mean ?? record.wage_ratio_to_overall_mean ?? 1) < 0.9 &&
-        record.daily_user_capacity_ratio < 0.75 &&
-        hasWorkShortageRisk(record)
-    )
-    .sort((left, right) => fixScore(right) - fixScore(left));
-
-  const highHighCandidates = records
-    .filter(
-      (record) =>
-        isNumber(record.average_wage_yen) &&
-        isNumber(record.daily_user_capacity_ratio) &&
-        (record.wage_ratio_to_municipality_mean ?? record.wage_ratio_to_overall_mean ?? 0) >= 1.1 &&
-        record.daily_user_capacity_ratio >= 0.85
-    )
-    .sort((left, right) => highHighScore(right) - highHighScore(left));
+  const growthCandidates = getGrowthCandidates(records);
+  const fixCandidates = getFixCandidates(records);
+  const highHighCandidates = getHighHighCandidates(records);
 
   return { growthCandidates, fixCandidates, highHighCandidates };
 }
@@ -2740,21 +2584,29 @@ function renderExecutive(records) {
   }
 
   const { growthCandidates, fixCandidates, highHighCandidates } = buildStrategyBuckets(records);
+  const shortageRecords = records.filter((record) => hasWorkShortageRisk(record));
+  const lowUtilizationRecords = records.filter(
+    (record) => isNumber(record.daily_user_capacity_ratio) && record.daily_user_capacity_ratio < 0.7
+  );
   const areaGroups = [...groupRecords(records, (record) => getAreaLabel(record)).entries()]
     .map(([label, items]) => ({
       label,
       count: items.length,
       medianWage: computeLocalStats(numericValues(items, "average_wage_yen")).median,
       utilizationMean: meanFor(items, "daily_user_capacity_ratio"),
+      openSlots: sumComputed(items, (record) => availableCapacity(record)),
+      shortageCount: items.filter((record) => hasWorkShortageRisk(record)).length,
     }))
     .filter((item) => item.label)
     .sort((left, right) => right.count - left.count);
   const areaCountMedian = areaGroups.length ? median(areaGroups.map((item) => item.count).sort((a, b) => a - b)) : null;
-  const overallWageMedian = computeLocalStats(numericValues(records, "average_wage_yen")).median;
+  const wageValues = numericValues(records, "average_wage_yen").sort((left, right) => left - right);
+  const overallWageMean = meanFor(records, "average_wage_yen");
+  const overallWageMedian = computeLocalStats(wageValues).median;
   const overallUtilizationMean = meanFor(records, "daily_user_capacity_ratio");
   const leadingWorkModels = buildGroupStats(records, (record) => deriveWorkModelLabel(record), "average_wage_yen", 5)
     .sort((left, right) => (right.median ?? 0) - (left.median ?? 0))
-    .slice(0, 2);
+    .slice(0, 3);
   const opportunityArea = areaGroups
     .filter(
       (item) =>
@@ -2767,26 +2619,42 @@ function renderExecutive(records) {
         item.utilizationMean >= overallUtilizationMean
     )
     .sort((left, right) => (right.medianWage ?? 0) + (right.utilizationMean ?? 0) * 10000 - ((left.medianWage ?? 0) + (left.utilizationMean ?? 0) * 10000))[0];
+  const reviewArea = [...areaGroups]
+    .filter((item) => item.shortageCount > 0)
+    .sort((left, right) => (right.shortageCount ?? 0) - (left.shortageCount ?? 0) || (right.openSlots ?? 0) - (left.openSlots ?? 0))[0];
+  const topQuartileThreshold = percentile(wageValues, 0.75);
+  const topQuartileMedian = isNumber(topQuartileThreshold)
+    ? median(wageValues.filter((value) => value >= topQuartileThreshold))
+    : null;
+  const topQuartileGap = isNumber(topQuartileMedian) && isNumber(overallWageMean) ? topQuartileMedian - overallWageMean : null;
+  const lowUtilOpenSlots = sumComputed(lowUtilizationRecords, (record) => availableCapacity(record));
+  const lowUtilOpenSlotsMean = computeLocalStats(
+    lowUtilizationRecords.map((record) => availableCapacity(record)).filter(isNumber)
+  ).mean;
+  const monthlyUpside10 = sumComputed(lowUtilizationRecords, (record) => {
+    const perPoint = revenuePerUtilizationPoint(record);
+    return isNumber(perPoint) ? perPoint * 10 : null;
+  });
   const fixOpenSlots = sumComputed(fixCandidates, (record) => availableCapacity(record));
   const denseAreas = areaGroups.slice(0, 3).map((item) => `${item.label} ${formatCount(item.count)}件`);
 
   const cards = [
     {
-      kicker: "攻める余地",
-      title: "高工賃・低利用率",
-      metric: formatCount(growthCandidates.length),
-      metricHint: "候補件数",
+      kicker: "稼働改善余地",
+      title: "利用率が戻るとどこまで伸びるか",
+      metric: isNumber(monthlyUpside10) ? formatMaybeYen(monthlyUpside10) : "-",
+      metricHint: "利用率10%改善時の月次目安",
       summary:
-        growthCandidates.length > 0
-          ? "工賃水準は強いのに、まだ利用者を伸ばせる候補がある。営業と見学導線を先に当てたい。"
-          : "今の条件では、明確に攻め筋と言える候補は多くない。",
+        lowUtilizationRecords.length > 0
+          ? `利用率70%未満の ${formatCount(lowUtilizationRecords.length)} 件で、利用率を10%戻すと月 ${formatMaybeYen(monthlyUpside10)} の改善余地がある。`
+          : "今の条件では、利用率改善余地が大きい事業所は多くない。",
       bullets: [
+        isNumber(lowUtilOpenSlots)
+          ? `対象事業所の空きは合計 ${formatDecimalUnit(lowUtilOpenSlots, "人")}。${isNumber(lowUtilOpenSlotsMean) ? `1事業所あたり平均 ${formatDecimalUnit(lowUtilOpenSlotsMean, "人")} の余地がある。` : ""}`
+          : "空き人数の比較に必要な値が不足している。",
         growthCandidates[0]
-          ? `先頭候補は ${growthCandidates[0].office_name}。工賃 ${formatWageText(growthCandidates[0].average_wage_yen)} / 利用率 ${formatPercent(growthCandidates[0].daily_user_capacity_ratio)}。`
-          : "候補が少ないときは、区や主活動を絞って見直すと差が見えやすい。",
-        leadingWorkModels[0]
-          ? `高工賃側の作業モデルは ${leadingWorkModels[0].label}（中央値 ${formatMaybeYen(leadingWorkModels[0].median)}）。`
-          : "作業モデル別の優位差はまだ読みにくい。",
+          ? `高工賃・低利用率の先頭候補は ${growthCandidates[0].office_name}。工賃 ${formatWageText(growthCandidates[0].average_wage_yen)} / 利用率 ${formatPercent(growthCandidates[0].daily_user_capacity_ratio)}。`
+          : "高工賃・低利用率の候補は今の条件では限定的。",
       ],
       buttonLabel: "候補を一覧で見る",
       preset: "high-wage-low-util",
@@ -2794,41 +2662,21 @@ function renderExecutive(records) {
       targetId: "tableHeading",
     },
     {
-      kicker: "立て直し優先",
-      title: "低工賃・低利用率・人員過剰",
-      metric: formatCount(fixCandidates.length),
-      metricHint: "候補件数",
+      kicker: "上位群との差",
+      title: "工賃のベンチマーク差を把握する",
+      metric: formatSignedYen(topQuartileGap),
+      metricHint: "上位25%中央値との差",
       summary:
-        fixCandidates.length > 0
-          ? "仕事量、営業、配置の見直しを先に当てたい候補が見えている。"
-          : "今の条件では、強い立て直しシグナルは限定的。",
+        isNumber(topQuartileMedian)
+          ? `上位25%の中央値は ${formatMaybeYen(topQuartileMedian)}。表示中平均との差が、次に目指す工賃水準の目安になる。`
+          : "工賃の上位群を比較するだけの件数がまだ足りない。",
       bullets: [
-        isNumber(fixOpenSlots)
-          ? `候補全体で定員まで平均あと人数は合計 ${formatCount(Math.round(fixOpenSlots))}人分。`
-          : "空き人数の合計は比較できない。",
-        `仕事不足の可能性は ${formatCount(records.filter((record) => hasWorkShortageRisk(record)).length)}件。まずは候補一覧で原因の共通点を確認する。`,
-      ],
-      buttonLabel: "立て直し候補を見る",
-      preset: "fix-priority",
-      compareView: "priority",
-      targetId: "tableHeading",
-    },
-    {
-      kicker: "好事例",
-      title: "高工賃・高利用率",
-      metric: formatCount(highHighCandidates.length),
-      metricHint: "候補件数",
-      summary:
-        highHighCandidates.length > 0
-          ? "工賃も利用率も強い事業所を、そのままベンチマーク先として追える。"
-          : "今の条件では、明確な好事例は少ない。",
-      bullets: [
-        highHighCandidates[0]
-          ? `先頭候補は ${highHighCandidates[0].office_name}。工賃 ${formatWageText(highHighCandidates[0].average_wage_yen)} / 利用率 ${formatPercent(highHighCandidates[0].daily_user_capacity_ratio)}。`
-          : "候補が少ないときは、主活動や区ごとに好事例を見直す。",
-        leadingWorkModels[1]
-          ? `次点の高工賃作業モデルは ${leadingWorkModels[1].label}（中央値 ${formatMaybeYen(leadingWorkModels[1].median)}）。`
-          : "主活動の公開情報が少ない事業所も多い。",
+        highHighCandidates.length
+          ? `高工賃・高利用率の好事例は ${formatCount(highHighCandidates.length)} 件。先頭候補は ${highHighCandidates[0].office_name}。`
+          : "今の条件では、明確な好事例はまだ少ない。",
+        growthCandidates.length
+          ? `高工賃・低利用率は ${formatCount(growthCandidates.length)} 件。単価を保ったまま稼働を伸ばせる候補として分けて追える。`
+          : "高工賃・低利用率の候補は限定的。",
       ],
       buttonLabel: "好事例を見る",
       preset: "high-wage-high-util",
@@ -2836,22 +2684,48 @@ function renderExecutive(records) {
       targetId: "tableHeading",
     },
     {
-      kicker: "競争地図",
-      title: "密集区と狙い目の区",
-      metric: denseAreas[0] ? denseAreas[0].replace(/ .+$/, "") : "-",
-      metricHint: denseAreas[0] ? denseAreas[0].replace(/^[^ ]+ /, "") : "密集区なし",
+      kicker: "勝ち筋",
+      title: "強い作業モデルを先に押さえる",
+      metric: leadingWorkModels[0] ? formatMaybeYen(leadingWorkModels[0].median) : "-",
+      metricHint: leadingWorkModels[0]?.label ?? "作業モデル未取得",
       summary:
-        denseAreas.length > 0
-          ? `密集区は ${denseAreas.join(" / ")}。競争環境を先に把握すると、同じ工賃でも打ち手が変わる。`
-          : "エリアの比較に必要な住所情報が不足している。",
+        leadingWorkModels[0]
+          ? `${leadingWorkModels[0].label} が中央値ベースで最も強い。高工賃の理由を作業モデル単位で見にいける。`
+          : "主活動の公開情報が少なく、強い作業モデルをまだ読み切れない。",
       bullets: [
+        leadingWorkModels[1]
+          ? `次点は ${leadingWorkModels[1].label}（中央値 ${formatMaybeYen(leadingWorkModels[1].median)}）。`
+          : "次点の作業モデルを比べるだけの件数はまだ少ない。",
         opportunityArea
-          ? `${opportunityArea.label} は ${formatCount(opportunityArea.count)}件と競合が薄めでも、中央値工賃 ${formatMaybeYen(opportunityArea.medianWage)} / 平均利用率 ${formatPercent(opportunityArea.utilizationMean)}。`
-          : "今の条件では、競合が薄くて強い区はまだはっきり出ていない。",
-        "区別の平均工賃と件数は、比較グラフでそのまま確認できる。",
+          ? `${opportunityArea.label} は ${formatCount(opportunityArea.count)}件でも中央値工賃 ${formatMaybeYen(opportunityArea.medianWage)} / 平均利用率 ${formatPercent(opportunityArea.utilizationMean)}。`
+          : "区別の強弱は比較グラフとベンチマーク欄で追える。",
       ],
-      buttonLabel: "区別の比較を見る",
-      targetId: "chartsHeading",
+      buttonLabel: "作業モデルを見る",
+      targetId: "marketHeading",
+    },
+    {
+      kicker: "要見直し候補",
+      title: "仕事不足寄りの事業所を先に切る",
+      metric: formatCount(fixCandidates.length),
+      metricHint: "候補件数",
+      summary:
+        fixCandidates.length > 0
+          ? `低工賃・低利用率・仕事不足寄りは ${formatCount(fixCandidates.length)} 件。営業、作業開拓、体験導線の立て直しを先に当てたい。`
+          : "今の条件では、強い見直しシグナルは限定的。",
+      bullets: [
+        isNumber(fixOpenSlots)
+          ? `候補全体の空きは合計 ${formatDecimalUnit(fixOpenSlots, "人")}。仕事不足の可能性は ${formatCount(shortageRecords.length)} 件。`
+          : `仕事不足の可能性は ${formatCount(shortageRecords.length)} 件。まずは候補一覧で共通点を確認したい。`,
+        reviewArea
+          ? `${reviewArea.label} は仕事不足寄りが ${formatCount(reviewArea.shortageCount)} 件。密集区は ${denseAreas.join(" / ")}。`
+          : denseAreas.length
+            ? `密集区は ${denseAreas.join(" / ")}。区別の平均工賃と件数は比較グラフで確認できる。`
+            : "区別の比較に必要な住所情報が不足している。",
+      ],
+      buttonLabel: "見直し候補を見る",
+      preset: "fix-priority",
+      compareView: "priority",
+      targetId: "tableHeading",
     },
   ];
 
@@ -2900,12 +2774,12 @@ function renderStrategy(records) {
 
   const { growthCandidates, fixCandidates, highHighCandidates } = buildStrategyBuckets(records);
 
-  rootSummary.textContent = `高工賃・低利用率 ${formatCount(growthCandidates.length)} 件 / 低工賃・低利用率・人員過剰 ${formatCount(
+  rootSummary.textContent = `高工賃・低利用率 ${formatCount(growthCandidates.length)} 件 / 低工賃・低利用率・仕事不足寄り ${formatCount(
     fixCandidates.length
   )} 件 / 高工賃・高利用率 ${formatCount(highHighCandidates.length)} 件`;
 
   renderStrategyList("growthList", growthCandidates.slice(0, 6), "高工賃・低利用率の事業所はまだない", buildGrowthReason);
-  renderStrategyList("fixList", fixCandidates.slice(0, 6), "低工賃・低利用率・人員過剰の事業所はまだない", buildFixReason);
+  renderStrategyList("fixList", fixCandidates.slice(0, 6), "低工賃・低利用率・仕事不足寄りの事業所はまだない", buildFixReason);
   renderStrategyList("highHighList", highHighCandidates.slice(0, 6), "高工賃・高利用率の事業所はまだない", buildHighHighReason);
 }
 
@@ -2937,7 +2811,7 @@ function renderStats(records) {
   const overallWageMean = meanFor(state.records, "average_wage_yen");
   const overallUtilizationStats = computeLocalStats(numericValues(state.records, "daily_user_capacity_ratio"));
   const utilizationMedian = overallUtilizationStats.median;
-  const homeUseActiveCount = records.filter((record) => record.home_use_active === true).length;
+  const { growthCandidates, fixCandidates } = buildStrategyBuckets(records);
   const homeUseActiveRate = ratioOf(records, (record) => record.home_use_active === true);
   const workShortageCount = records.filter((record) => hasWorkShortageRisk(record)).length;
   const recordShare = state.records.length ? records.length / state.records.length : null;
@@ -2949,6 +2823,7 @@ function renderStats(records) {
     isNumber(homeUseActiveRate) && state.records.length
       ? homeUseActiveRate - ratioOf(state.records, (record) => record.home_use_active === true)
       : null;
+  const utilizationOpportunity = computeUtilizationOpportunity(records, 0.85);
 
   const cards = [
     {
@@ -2967,9 +2842,9 @@ function renderStats(records) {
       hint: `単位: 定員比 / ${KPI_BASELINE_LABEL}中央値差 ${formatSignedPercentPoint(utilizationDiffFromMedian)}`,
     },
     {
-      label: "重点確認件数",
-      value: formatCount(workShortageCount),
-      hint: `低工賃・低利用率など / 表示中の ${formatPercent(workShortageRatio)} / 在宅あり率 ${formatPercent(homeUseActiveRate)} (${formatSignedPercentPoint(homeUseRateDiffFromOverall)})`,
+      label: "利用率改善余地",
+      value: formatMaybeYen(utilizationOpportunity.monthlyUpside),
+      hint: `利用率85%までの月額試算 / 高工賃・低利用率 ${formatCount(growthCandidates.length)}件 / 仕事不足寄り ${formatCount(fixCandidates.length)}件 / 在宅あり率 ${formatPercent(homeUseActiveRate)} (${formatSignedPercentPoint(homeUseRateDiffFromOverall)})`,
     },
   ];
 
@@ -3121,6 +2996,44 @@ function renderScatterChart(id, records, config) {
   `;
 }
 
+function buildManagerActionItems(record, capacityProfile, activityProfile, competitionProfile) {
+  const items = [];
+  const targetUtilization = 0.85;
+  const currentUtilization = record.daily_user_capacity_ratio;
+  const perPoint = revenuePerUtilizationPoint(record);
+
+  if (isNumber(currentUtilization) && isNumber(perPoint) && currentUtilization < targetUtilization) {
+    const gapPoints = Math.round((targetUtilization - currentUtilization) * 100);
+    items.push(`利用率を ${formatPercent(targetUtilization)} まで上げると、現工賃水準なら月 ${formatMaybeYen(perPoint * gapPoints)} の上振れ余地。`);
+  }
+
+  if (isNumber(record.average_wage_yen) && isNumber(activityProfile.wageMedian)) {
+    const diff = record.average_wage_yen - activityProfile.wageMedian;
+    items.push(
+      diff >= 0
+        ? `同じ主活動の中央値を ${formatMaybeYen(diff)} 上回る。工賃面では強みがある。`
+        : `同じ主活動の中央値まであと ${formatMaybeYen(Math.abs(diff))}。作業単価か案件構成の見直し余地がある。`
+    );
+  }
+
+  if (isNumber(record.daily_user_capacity_ratio) && isNumber(capacityProfile.peerUtilizationMedian)) {
+    const diff = record.daily_user_capacity_ratio - capacityProfile.peerUtilizationMedian;
+    items.push(
+      diff >= 0
+        ? `同じ定員帯の利用率中央値を ${formatSignedPercentPoint(diff)} 上回る。稼働は比較的安定している。`
+        : `同じ定員帯の利用率中央値まで ${formatSignedPercentPoint(diff)}。送客導線か既存利用者の定着確認を優先したい。`
+    );
+  }
+
+  if (competitionProfile.areaCount) {
+    items.push(
+      `${competitionProfile.areaLabel ?? "同エリア"} に ${formatCount(competitionProfile.areaCount)}件、同じ主活動は ${formatCount(competitionProfile.sameActivityAreaCount)}件。競合密度を見ながら差別化を確認したい。`
+    );
+  }
+
+  return items.slice(0, 4);
+}
+
 function renderAnomalies(records) {
   const root = document.getElementById("anomalyList");
   const summaryRoot = document.getElementById("anomalySummary");
@@ -3262,6 +3175,7 @@ function renderDetail(record) {
   const workShortageSignals = buildWorkShortageSignals(record);
   const kasanSim = computeKasanSimulation(record);
   const userFlow = computeUserFlowAnalysis(record, state.records);
+  const managerActionItems = buildManagerActionItems(record, capacityProfile, activityProfile, competitionProfile);
 
   dialogRoot.innerHTML = `
     <div class="detail-hero">
@@ -3308,10 +3222,13 @@ function renderDetail(record) {
         </ul>
       </article>
       <article class="detail-card">
-        <h3>経営者向けシミュレーション</h3>
+        <h3>経営アクション要約</h3>
         <ul class="detail-list">
-          ${revPerPoint ? `<li>利用率1%改善: 月 ${formatMaybeYen(revPerPoint)} の増収</li>` : "<li>利用率改善の試算に必要な値が不足している</li>"}
-          <li>主活動: ${escapeHtml(record.wam_primary_activity_type ?? "-")} ${record.wam_primary_activity_detail ? `（${escapeHtml(record.wam_primary_activity_detail)}）` : ""}</li>
+          ${managerActionItems.length
+            ? managerActionItems.map((item) => `<li>${escapeHtml(item)}</li>`).join("")
+            : revPerPoint
+              ? `<li>利用率1%改善あたり月 ${formatMaybeYen(revPerPoint)} の増収試算。</li>`
+              : "<li>公開データだけでは、優先アクションを強く断定できる値が不足している。</li>"}
         </ul>
       </article>
       <article class="detail-card detail-card-highlight">
