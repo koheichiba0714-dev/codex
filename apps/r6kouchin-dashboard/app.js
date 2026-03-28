@@ -2812,24 +2812,18 @@ function renderStats(records) {
   const overallUtilizationStats = computeLocalStats(numericValues(state.records, "daily_user_capacity_ratio"));
   const utilizationMedian = overallUtilizationStats.median;
   const { growthCandidates, fixCandidates } = buildStrategyBuckets(records);
-  const homeUseActiveRate = ratioOf(records, (record) => record.home_use_active === true);
-  const workShortageCount = records.filter((record) => hasWorkShortageRisk(record)).length;
+  const answeredCount = records.filter((record) => record.response_status !== "unanswered").length;
   const recordShare = state.records.length ? records.length / state.records.length : null;
   const wageDiffFromOverall = isNumber(wageStats.mean) && isNumber(overallWageMean) ? wageStats.mean - overallWageMean : null;
   const utilizationDiffFromMedian =
     isNumber(utilizationMean) && isNumber(utilizationMedian) ? utilizationMean - utilizationMedian : null;
-  const workShortageRatio = records.length ? workShortageCount / records.length : null;
-  const homeUseRateDiffFromOverall =
-    isNumber(homeUseActiveRate) && state.records.length
-      ? homeUseActiveRate - ratioOf(state.records, (record) => record.home_use_active === true)
-      : null;
   const utilizationOpportunity = computeUtilizationOpportunity(records, 0.85);
 
   const cards = [
     {
       label: "対象事業所数",
       value: formatCount(records.length),
-      hint: `${KPI_PERIOD_LABEL} / ${KPI_BASELINE_LABEL} ${formatCount(state.records.length)}件中 ${formatPercent(recordShare)}`,
+      hint: `${KPI_PERIOD_LABEL} / ${KPI_BASELINE_LABEL} ${formatCount(state.records.length)}件中 ${formatPercent(recordShare)} / 回答済み ${formatCount(answeredCount)}件`,
     },
     {
       label: "平均工賃",
@@ -2844,7 +2838,7 @@ function renderStats(records) {
     {
       label: "利用率改善余地",
       value: formatMaybeYen(utilizationOpportunity.monthlyUpside),
-      hint: `利用率85%までの月額試算 / 高工賃・低利用率 ${formatCount(growthCandidates.length)}件 / 仕事不足寄り ${formatCount(fixCandidates.length)}件 / 在宅あり率 ${formatPercent(homeUseActiveRate)} (${formatSignedPercentPoint(homeUseRateDiffFromOverall)})`,
+      hint: `利用率85%までの月額試算 / 高工賃・低利用率 ${formatCount(growthCandidates.length)}件 / 仕事不足寄り ${formatCount(fixCandidates.length)}件`,
     },
   ];
 
@@ -3980,8 +3974,7 @@ function anomalyScore(record) {
 function growthScore(record) {
   return (
     (record.wage_ratio_to_municipality_mean ?? record.wage_ratio_to_overall_mean ?? 0) * 70 +
-    (1 - (record.daily_user_capacity_ratio ?? 1)) * 25 +
-    (record.wam_staffing_efficiency_quadrant === "高工賃 × 少ない人員" ? 12 : 0)
+    (1 - (record.daily_user_capacity_ratio ?? 1)) * 25
   );
 }
 

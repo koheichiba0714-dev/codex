@@ -970,13 +970,50 @@ h1[id], h2[id] { scroll-margin-top: 24px; }
 .insight-card {
   padding: 12px 14px;
   border-radius: var(--radius-sm);
-  background: var(--bg-card);
+  background:
+    linear-gradient(180deg, rgba(34,197,94,0.06) 0%, rgba(34,197,94,0) 52%),
+    var(--bg-card);
   border: 1px solid var(--border);
   transition: all var(--duration) var(--ease);
 }
-.insight-card:hover { background: var(--bg-card-hover); transform: translateY(-1px); }
+.insight-card:hover {
+  background:
+    linear-gradient(180deg, rgba(34,197,94,0.09) 0%, rgba(34,197,94,0.02) 52%),
+    var(--bg-card-hover);
+  transform: translateY(-1px);
+}
 .insight-card h3 { font-size: 12px; font-weight: 600; margin-bottom: 4px; color: var(--accent-hover); }
+.insight-kicker {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.insight-value {
+  display: block;
+  font-size: 18px;
+  line-height: 1.2;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
 .insight-card p { font-size: 13px; color: var(--text-secondary); line-height: 1.6; }
+.insight-list {
+  display: grid;
+  gap: 6px;
+  margin-top: 4px;
+  list-style: none;
+}
+.insight-list li {
+  position: relative;
+  padding-left: 12px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+.insight-list li::before {
+  content: '・';
+  position: absolute;
+  left: 0;
+  color: var(--success);
+}
 
 .market-grid {
   display: grid;
