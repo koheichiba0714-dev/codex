@@ -156,6 +156,66 @@ def main() -> None:
         )
     )
 
+    app_summary = manifest.get("summary", {})
+    app_analytics = manifest.get("analytics", {})
+    app_response = response_breakdown(app_records)
+    app_summary_count_ok = (
+        app_summary.get("record_count") == len(app_records)
+        and app_summary.get("municipality_count") == len({record.get("municipality") for record in app_records if record.get("municipality")})
+    )
+    checks.append(
+        summarize_check(
+            "app_summary_counts",
+            app_summary_count_ok,
+            f"summary_record_count={app_summary.get('record_count')}, app_records={len(app_records)}, summary_municipality_count={app_summary.get('municipality_count')}",
+        )
+    )
+    checks.append(
+        summarize_check(
+            "app_summary_response_breakdown",
+            app_summary.get("response_breakdown", {}) == app_response,
+            f"summary={app_summary.get('response_breakdown', {})}, actual={app_response}",
+        )
+    )
+
+    app_wage_stats = compute_wage_stats(numeric_records(app_records, "average_wage_yen"))
+    app_summary_wage_stats = app_summary.get("overall_wage_stats", {})
+    app_analytics_wage_stats = app_analytics.get("overall_wage_stats", {})
+    app_wage_stats_ok = all(
+        is_close(app_wage_stats.get(key), app_summary_wage_stats.get(key))
+        and is_close(app_wage_stats.get(key), app_analytics_wage_stats.get(key))
+        for key in ["mean", "median", "q1", "q3", "p90", "lower_fence", "upper_fence", "extreme_upper_fence"]
+    ) and (
+        app_wage_stats.get("count") == app_summary_wage_stats.get("count") == app_analytics_wage_stats.get("count")
+    )
+    checks.append(
+        summarize_check(
+            "app_overall_wage_stats",
+            app_wage_stats_ok,
+            f"computed_mean={app_wage_stats.get('mean')}, summary_mean={app_summary_wage_stats.get('mean')}, analytics_mean={app_analytics_wage_stats.get('mean')}",
+        )
+    )
+
+    app_utilization_stats = compute_wage_stats(numeric_records(app_records, "daily_user_capacity_ratio"))
+    app_summary_utilization = app_summary.get("overall_utilization_stats", {})
+    app_analytics_utilization = app_analytics.get("overall_utilization_stats", {})
+    app_utilization_ok = all(
+        is_close(app_utilization_stats.get(key), app_summary_utilization.get(key))
+        and is_close(app_utilization_stats.get(key), app_analytics_utilization.get(key))
+        for key in ["mean", "median", "q1", "q3", "p90"]
+    ) and (
+        app_utilization_stats.get("count")
+        == app_summary_utilization.get("count")
+        == app_analytics_utilization.get("count")
+    )
+    checks.append(
+        summarize_check(
+            "app_overall_utilization_stats",
+            app_utilization_ok,
+            f"computed_mean={app_utilization_stats.get('mean')}, summary_mean={app_summary_utilization.get('mean')}, analytics_mean={app_analytics_utilization.get('mean')}",
+        )
+    )
+
     expected_duplicates = int(integrated["summary"].get("duplicate_office_no_count", 0))
     actual_duplicates = duplicate_count(integrated_records)
     checks.append(

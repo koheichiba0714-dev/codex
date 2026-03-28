@@ -192,6 +192,9 @@ APP_RECORD_FIELD_ORDER = [
     "wam_average_wage_monthly_yen",
     "wam_average_wage_gap_yen",
     "wam_service_manager_fte",
+    "osaka_city_ward",
+    "osaka_city_ward_source",
+    "osaka_city_ward_note",
 ]
 
 APP_RECORD_CHUNK_SIZE = 250
@@ -322,6 +325,20 @@ def load_csv_rows(path: Path) -> list[dict[str, str]]:
         return []
     with path.open(newline="", encoding="utf-8") as file_obj:
         return list(csv.DictReader(file_obj))
+
+
+def load_records_from_manifest(manifest_path: Path, manifest: dict[str, Any] | None) -> list[dict[str, Any]]:
+    if not manifest:
+        return []
+    records: list[dict[str, Any]] = []
+    for relative_path in manifest.get("data_files", {}).get("record_chunks", []) or []:
+        chunk_path = (manifest_path.parent.parent / str(relative_path)).resolve()
+        if not chunk_path.exists():
+            continue
+        chunk_rows = load_json(chunk_path)
+        if isinstance(chunk_rows, list):
+            records.extend(chunk_rows)
+    return records
 
 
 def write_json(path: Path, payload: Any) -> None:
@@ -467,6 +484,129 @@ def chunked_rows(rows: list[dict[str, Any]], chunk_size: int) -> list[list[dict[
 
 def slim_records_for_app(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return [{field: record.get(field) for field in APP_RECORD_FIELD_ORDER} for record in records]
+
+
+def duplicate_office_no_count(records: list[dict[str, Any]]) -> int:
+    counts = Counter(
+        str(record.get("office_no") or "").strip()
+        for record in records
+        if str(record.get("office_no") or "").strip()
+    )
+    return sum(1 for count in counts.values() if count > 1)
+
+
+def derive_record_chunk_prefix(existing_manifest: dict[str, Any] | None, focus_label: str) -> str:
+    if existing_manifest:
+        chunk_paths = existing_manifest.get("data_files", {}).get("record_chunks", [])
+        if chunk_paths:
+            first_name = Path(str(chunk_paths[0])).name
+            matched = re.match(r"(.+)-\d{3}\.json$", first_name)
+            if matched:
+                return matched.group(1)
+    if focus_label == "大阪市":
+        return "osaka-city-records"
+    return "dashboard-records"
+
+
+def build_app_summary(
+    records: list[dict[str, Any]],
+    base_summary: dict[str, Any],
+    match_summary: dict[str, Any],
+    wam_staffing_summary: dict[str, Any],
+) -> dict[str, Any]:
+    answered_records = [record for record in records if record.get("response_status") != "unanswered"]
+    answered_wages = [
+        float(record["average_wage_yen"])
+        for record in answered_records
+        if is_numeric(record.get("average_wage_yen"))
+    ]
+    municipalities = sorted(
+        {
+            str(record.get("municipality") or "").strip()
+            for record in records
+            if str(record.get("municipality") or "").strip()
+        }
+    )
+    corporation_breakdown = Counter(
+        str(record.get("corporation_type_label") or "unknown") for record in records
+    )
+    response_breakdown = Counter(
+        str(record.get("response_status")) for record in records if record.get("response_status")
+    )
+    outlier_breakdown = Counter(record.get("wage_outlier_flag") or "none" for record in records)
+    missing_count_fields = list((base_summary.get("missing_counts") or {}).keys())
+    service_count_fields = list((base_summary.get("service_counts") or {}).keys())
+    if not service_count_fields:
+        service_count_fields = ["noufuku_active", "suifuku_active", "rinfuku_active", "home_use_active"]
+
+    wage_stats = compute_numeric_stats(
+        [float(record["average_wage_yen"]) for record in records if is_numeric(record.get("average_wage_yen"))]
+    )
+    utilization_stats = compute_numeric_stats(
+        [
+            float(record["daily_user_capacity_ratio"])
+            for record in records
+            if is_numeric(record.get("daily_user_capacity_ratio"))
+        ]
+    )
+
+    return {
+        "record_count": len(records),
+        "note_row_count": int(base_summary.get("note_row_count", 0) or 0),
+        "response_breakdown": dict(response_breakdown),
+        "answered_average_wage_yen_mean": round(sum(answered_wages) / len(answered_wages), 3)
+        if answered_wages
+        else None,
+        "answered_average_wage_yen_median": round(float(median(answered_wages)), 3)
+        if answered_wages
+        else None,
+        "municipality_count": len(municipalities),
+        "new_office_count": sum(1 for record in records if record.get("is_new_office")),
+        "formula_error_rows": sum(
+            1
+            for record in records
+            if record.get("average_daily_users_error") or record.get("average_wage_error")
+        ),
+        "high_outlier_count": outlier_breakdown.get("high", 0),
+        "low_outlier_count": outlier_breakdown.get("low", 0),
+        "duplicate_office_no_count": duplicate_office_no_count(records),
+        "service_counts": {
+            field_name: sum(1 for record in records if record.get(field_name))
+            for field_name in service_count_fields
+        },
+        "corporation_type_breakdown": dict(corporation_breakdown),
+        "missing_counts": {
+            field_name: sum(1 for record in records if record.get(field_name) is None)
+            for field_name in missing_count_fields
+        },
+        "overall_wage_stats": wage_stats,
+        "overall_utilization_stats": utilization_stats,
+        "wam_match_summary": match_summary,
+        "wam_staffing_summary": wam_staffing_summary,
+    }
+
+
+def preserve_existing_app_fields(
+    app_records: list[dict[str, Any]],
+    existing_records: list[dict[str, Any]],
+    field_names: list[str],
+) -> list[dict[str, Any]]:
+    existing_by_office = {
+        str(record.get("office_no") or "").strip(): record
+        for record in existing_records
+        if str(record.get("office_no") or "").strip()
+    }
+    preserved: list[dict[str, Any]] = []
+    for record in app_records:
+        office_no = str(record.get("office_no") or "").strip()
+        existing_record = existing_by_office.get(office_no)
+        merged = dict(record)
+        if existing_record:
+            for field_name in field_names:
+                if merged.get(field_name) in (None, "") and existing_record.get(field_name) not in (None, ""):
+                    merged[field_name] = existing_record.get(field_name)
+        preserved.append(merged)
+    return preserved
 
 
 def normalize_name(value: str | None, relaxed: bool = False) -> str:
@@ -1232,6 +1372,8 @@ def main() -> None:
     app_output = resolve_path(args.app_output)
     app_records_dir = app_output.parent / "records"
     app_root_dir = app_output.parent.parent
+    existing_app_manifest = load_json(app_output) if app_output.exists() else None
+    existing_app_records = load_records_from_manifest(app_output, existing_app_manifest)
 
     dashboard_payload = load_json(dashboard_input)
     wam_rows = dedupe_wam_rows(load_json(wam_input))
@@ -1361,26 +1503,48 @@ def main() -> None:
     app_payload = deepcopy(integrated_payload)
     app_payload.pop("wam_directory", None)
     app_payload.pop("lookups", None)
-    app_payload["analytics"] = {
-        "overall_wage_stats": integrated_payload["analytics"].get("overall_wage_stats"),
-        "overall_utilization_stats": integrated_payload["analytics"].get("overall_utilization_stats"),
-        "wam_match_summary": integrated_payload["analytics"].get("wam_match_summary"),
+    app_wam_staffing_summary = {
+        "matched_record_count": wam_analytics["matched_record_count"],
+        "staffing_stats": wam_analytics["staffing_stats"],
+        "feature_summary": wam_analytics["feature_summary"],
     }
-    app_records = slim_records_for_app(merged_records)
+    app_payload["summary"] = build_app_summary(
+        focus_records,
+        dashboard_payload.get("summary", {}),
+        match_summary,
+        app_wam_staffing_summary,
+    )
+    app_payload["analytics"] = {
+        "overall_wage_stats": app_payload["summary"].get("overall_wage_stats"),
+        "overall_utilization_stats": app_payload["summary"].get("overall_utilization_stats"),
+        "wam_match_summary": match_summary,
+    }
+    app_records = slim_records_for_app(focus_records)
+    app_records = preserve_existing_app_fields(
+        app_records,
+        existing_app_records,
+        ["osaka_city_ward", "osaka_city_ward_source", "osaka_city_ward_note"],
+    )
     app_payload["records"] = []
     app_payload["meta"].pop("source_workbook", None)
     app_payload["meta"]["record_count"] = len(app_records)
     app_payload["meta"]["total_records"] = len(app_records)
     app_payload["meta"]["app_record_field_count"] = len(APP_RECORD_FIELD_ORDER)
     app_payload["meta"]["app_record_chunk_size"] = APP_RECORD_CHUNK_SIZE
+    if len(focus_municipalities) == 1:
+        app_payload["meta"]["scope"] = next(iter(sorted(focus_municipalities)))
+    if existing_app_manifest:
+        for key, value in (existing_app_manifest.get("meta", {}) or {}).items():
+            app_payload["meta"].setdefault(key, value)
 
+    chunk_prefix = derive_record_chunk_prefix(existing_app_manifest, args.wam_focus_label)
     app_records_dir.mkdir(parents=True, exist_ok=True)
-    for stale_file in app_records_dir.glob("dashboard-records-*.json"):
+    for stale_file in app_records_dir.glob(f"{chunk_prefix}-*.json"):
         stale_file.unlink()
 
     record_chunk_files: list[str] = []
     for chunk_index, chunk_rows in enumerate(chunked_rows(app_records, APP_RECORD_CHUNK_SIZE), start=1):
-        chunk_path = app_records_dir / f"dashboard-records-{chunk_index:03d}.json"
+        chunk_path = app_records_dir / f"{chunk_prefix}-{chunk_index:03d}.json"
         write_json(chunk_path, chunk_rows)
         record_chunk_files.append(str(chunk_path.relative_to(app_root_dir)))
 
