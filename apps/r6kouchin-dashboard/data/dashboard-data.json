@@ -1,7 +1,7 @@
 {
   "meta": {
     "generated_at": "2026-03-17T08:39:14+09:00",
-    "record_count": 1976,
+    "record_count": 885,
     "wam_generated_at": "2026-03-17T08:39:14+09:00",
     "wam_directory_count": 783,
     "wam_matched_record_count": 763,
@@ -303,6 +303,6 @@
       "data/records/osaka-city-records-001.json",
       "data/records/osaka-city-records-002.json"
     ],
-    "record_count": 1976
+    "record_count": 885
   }
 }
