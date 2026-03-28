@@ -24,10 +24,10 @@
         <nav class="sidebar-nav">
           <a href="#overviewHeading" class="nav-link is-active">ダッシュボード</a>
           <a href="#filtersHeading" class="nav-link">絞り込み</a>
+          <a href="#summaryHeading" class="nav-link">主要指標</a>
+          <a href="#executiveHeading" class="nav-link">経営判断</a>
           <a href="#tableHeading" class="nav-link">一覧比較</a>
           <a href="#detailHeading" class="nav-link">事業所詳細</a>
-          <a href="#summaryHeading" class="nav-link">主要指標</a>
-          <a href="#marketHeading" class="nav-link">勝ち筋分析</a>
           <a href="#chartsHeading" class="nav-link">比較グラフ</a>
           <a href="#notesHeading" class="nav-link">注記と品質</a>
         </nav>
@@ -52,9 +52,9 @@
           </div>
           <div class="topbar-copy topbar-copy-hidden" id="topbarCopyOperator">
             <p class="section-kicker">大阪市 就労継続支援B型</p>
-            <h1>運営ダッシュボード</h1>
+            <h1>経営判断ダッシュボード</h1>
             <p class="hero-lead">
-              まず条件を絞り、次に一覧で比べ、最後に気になる事業所だけ深掘りする。大阪市全体を比較しながら、ホームページやInstagramもあわせて確認できる。
+              大阪市全体との比較から、攻める候補、立て直し候補、好事例を先に見つける。必要なときだけ一覧比較と詳細に降りて、根拠まで追える。
             </p>
           </div>
           <div class="topbar-actions topbar-copy-hidden" id="topbarActionsOperator">
@@ -99,7 +99,7 @@
               <div>
                 <p class="section-kicker">条件を絞る</p>
                 <h2 id="filtersHeading">対象を絞り込む</h2>
-                <p class="panel-note">初期表示は全体。詳細条件はポップアップで開き、ここでは今の条件とよく使う切り替えだけを見る。</p>
+                <p class="panel-note">初期表示は大阪市全体。詳細条件はポップアップで開き、ここでは今の条件と判断の起点だけを見る。</p>
               </div>
               <div class="panel-head-actions">
                 <button id="openFiltersPanelButton" class="solid-button filter-search-button" type="button">絞り込み検索</button>
@@ -111,7 +111,7 @@
                 <button class="preset-chip is-active" data-preset="all" type="button">全体</button>
                 <button class="preset-chip" data-preset="high-wage" type="button">工賃高め</button>
                 <button class="preset-chip" data-preset="high-wage-low-util" type="button">高工賃・低利用率</button>
-                <button class="preset-chip" data-preset="fix-priority" type="button">低工賃・低利用率・人員過剰</button>
+                <button class="preset-chip" data-preset="fix-priority" type="button">低工賃・低利用率・仕事不足寄り</button>
                 <button class="preset-chip" data-preset="high-wage-high-util" type="button">高工賃・高利用率</button>
                 <button class="preset-chip" data-preset="work-shortage" type="button">仕事不足の可能性</button>
                 <button class="preset-chip" data-preset="unanswered" type="button">未回答</button>
@@ -119,20 +119,6 @@
               <div class="filter-summary-stack">
                 <p id="activeFilterSummary" class="filter-summary"></p>
                 <div id="activeFilterTags" class="active-filter-tags" aria-live="polite"></div>
-              </div>
-              <div class="quickstart-row" aria-label="使い方">
-                <article class="quickstart-card">
-                  <strong>1. 条件を絞る</strong>
-                  <p>市町村、エリア、工賃水準、主活動で絞る。</p>
-                </article>
-                <article class="quickstart-card">
-                  <strong>2. 重点候補を見る</strong>
-                  <p>高工賃・低利用率など、先に見る候補を絞る。</p>
-                </article>
-                <article class="quickstart-card">
-                  <strong>3. 一覧で比べる</strong>
-                  <p>候補を一覧で横比較し、詳細だけモーダルで開く。</p>
-                </article>
               </div>
             </div>
           </section>
@@ -147,6 +133,17 @@
             </div>
             <p id="statsContextNote" class="context-note"></p>
             <section class="stats-grid" id="statsGrid" aria-label="集計カード"></section>
+          </section>
+
+          <section class="panel executive-panel" aria-labelledby="executiveHeading">
+            <div class="panel-head">
+              <div>
+                <p class="section-kicker">経営判断</p>
+                <h2 id="executiveHeading">今の条件で先に見る4つ</h2>
+                <p class="panel-note">稼働改善余地、上位群との差、勝ち筋、要見直し候補を4枚で整理して、次に見る一覧へ直接つなぐ。</p>
+              </div>
+            </div>
+            <div id="executiveList" class="executive-grid"></div>
           </section>
 
           <section class="panel explain-panel is-collapsed" data-collapsible aria-labelledby="termsHeading">
@@ -174,8 +171,9 @@
           <section class="panel insight-panel is-collapsed" data-collapsible aria-labelledby="insightHeading">
             <div class="panel-head">
               <div>
-                <p class="section-kicker">要点</p>
-                <h2 id="insightHeading">最初に押さえる状況</h2>
+                <p class="section-kicker">読み解きメモ</p>
+                <h2 id="insightHeading">全体傾向を短く押さえる</h2>
+                <p class="panel-note">細かな比較に入る前に、工賃、利用率、在宅、主活動の傾向だけを短く確認する。</p>
               </div>
               <div class="panel-head-actions">
                 <button class="ghost-button panel-collapse-button" type="button" aria-expanded="false">開く</button>
@@ -187,9 +185,9 @@
           <section class="panel market-panel is-collapsed" data-collapsible aria-labelledby="marketHeading">
             <div class="panel-head">
               <div>
-                <p class="section-kicker">勝ち筋分析</p>
-                <h2 id="marketHeading">公開データから読める伸ばし方</h2>
-                <p class="panel-note">競合密度、定員充足、主活動、在宅、法人展開をまとめて見て、次の打ち手を探す。</p>
+                <p class="section-kicker">ベンチマーク</p>
+                <h2 id="marketHeading">エリアと作業モデルの見方を押さえる</h2>
+                <p class="panel-note">強いエリア、勝ち筋の作業モデル、在宅の使い方、法人展開の傾向を補助情報として確認する。</p>
               </div>
               <div class="panel-head-actions">
                 <button class="ghost-button panel-collapse-button" type="button" aria-expanded="false">開く</button>
@@ -356,7 +354,7 @@
             <div id="comparePriorityView" class="compare-view-panel" data-compare-panel="priority" hidden>
               <div class="compare-subhead">
                 <p id="strategySummary" class="table-summary"></p>
-                <p class="panel-note">高工賃でまだ伸ばせる候補、低工賃で利用も弱く人員が重い候補、すでに高工賃かつ高利用率の候補を先に確認する。</p>
+                <p class="panel-note">高工賃でまだ伸ばせる候補、低工賃で利用も弱く仕事不足寄りの候補、すでに高工賃かつ高利用率の候補を先に確認する。</p>
               </div>
               <div class="strategy-grid">
                 <article class="strategy-column">
@@ -364,7 +362,7 @@
                   <div id="growthList" class="strategy-list"></div>
                 </article>
                 <article class="strategy-column">
-                  <h3>低工賃・低利用率・人員過剰</h3>
+                  <h3>低工賃・低利用率・仕事不足寄り</h3>
                   <div id="fixList" class="strategy-list"></div>
                 </article>
                 <article class="strategy-column">
@@ -535,8 +533,8 @@
               <p>工賃が低めで、利用率も弱い状態。仕事量が足りていない可能性を先に見るための目印である。</p>
             </article>
             <article class="term-card">
-              <h3>低工賃・低利用率・人員過剰</h3>
-              <p>工賃が低めで、利用率も低く、人員が先に膨らんでいる状態。仕事量、営業導線、配置の見直しを早めにかけたい事業所である。</p>
+              <h3>低工賃・低利用率・仕事不足寄り</h3>
+              <p>工賃が低めで、利用率も低く、仕事量や案件導線に課題がありそうな状態。営業、作業開拓、体験利用の導線を早めに見直したい事業所である。</p>
             </article>
           </div>
         </div>

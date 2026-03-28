@@ -142,6 +142,31 @@ function revenuePerUtilizationPoint(record) {
   return Math.round(capacity * 0.01 * tier.unitYen * 22);
 }
 
+function computeUtilizationOpportunity(records, targetRatio = 0.85) {
+  const candidates = records
+    .map((record) => {
+      const utilization = record.daily_user_capacity_ratio;
+      const perPoint = revenuePerUtilizationPoint(record);
+      if (!isNumber(utilization) || !isNumber(perPoint) || utilization >= targetRatio) return null;
+      const gapPoints = Math.round((targetRatio - utilization) * 100);
+      if (gapPoints <= 0) return null;
+      return {
+        record,
+        gapPoints,
+        monthlyUpside: perPoint * gapPoints,
+      };
+    })
+    .filter(Boolean)
+    .sort((left, right) => (right.monthlyUpside ?? 0) - (left.monthlyUpside ?? 0));
+
+  return {
+    candidates,
+    count: candidates.length,
+    monthlyUpside: candidates.reduce((sum, item) => sum + (item.monthlyUpside ?? 0), 0),
+    annualUpside: candidates.reduce((sum, item) => sum + (item.monthlyUpside ?? 0) * 12, 0),
+  };
+}
+
 /** 好事例の主活動詳細を抽出（スタッフ向け） */
 function topPerformerActivities(records, limit = 5) {
   return records
@@ -762,6 +787,150 @@ function buildMarketCards(records) {
       ],
     },
   ];
+}
+
+function buildManagementBoardCards(records) {
+  const growthCandidates = records
+    .filter(
+      (record) =>
+        isNumber(record.average_wage_yen) &&
+        isNumber(record.daily_user_capacity_ratio) &&
+        (record.wage_ratio_to_municipality_mean ?? record.wage_ratio_to_overall_mean ?? 0) >= 1.1 &&
+        record.daily_user_capacity_ratio < 0.8
+    )
+    .sort((left, right) => growthScore(right) - growthScore(left))
+    .slice(0, 12);
+  const growthOpportunity = computeUtilizationOpportunity(growthCandidates, 0.85);
+
+  const fixCandidates = records
+    .filter(
+      (record) =>
+        isNumber(record.average_wage_yen) &&
+        isNumber(record.daily_user_capacity_ratio) &&
+        (record.wage_ratio_to_municipality_mean ?? record.wage_ratio_to_overall_mean ?? 1) < 0.9 &&
+        record.daily_user_capacity_ratio < 0.75 &&
+        hasWorkShortageRisk(record)
+    )
+    .sort((left, right) => fixScore(right) - fixScore(left))
+    .slice(0, 12);
+  const fixOpenSlots = sumComputed(fixCandidates, (record) => availableCapacity(record));
+  const fixMedianGap = computeLocalStats(
+    fixCandidates
+      .map((record) =>
+        isNumber(record.average_wage_yen) && isNumber(record.wage_ratio_to_overall_mean)
+          ? record.average_wage_yen - record.average_wage_yen / record.wage_ratio_to_overall_mean
+          : null
+      )
+      .filter(isNumber)
+  ).mean;
+
+  const activityStats = buildGroupStats(records, (record) => deriveWorkModelLabel(record), "average_wage_yen", 5)
+    .sort((left, right) => (right.median ?? 0) - (left.median ?? 0));
+  const topActivity = activityStats[0];
+  const secondActivity = activityStats[1];
+
+  const areaGroups = [...groupRecords(records, (record) => getAreaLabel(record)).entries()]
+    .map(([label, items]) => ({
+      label,
+      count: items.length,
+      medianWage: computeLocalStats(numericValues(items, "average_wage_yen")).median,
+      utilizationMean: meanFor(items, "daily_user_capacity_ratio"),
+    }))
+    .filter((item) => item.label)
+    .sort((left, right) => right.count - left.count);
+  const areaCountMedian = areaGroups.length ? median(areaGroups.map((item) => item.count).sort((a, b) => a - b)) : null;
+  const overallWageMedian = computeLocalStats(numericValues(records, "average_wage_yen")).median;
+  const overallUtilizationMean = meanFor(records, "daily_user_capacity_ratio");
+  const opportunityArea = areaGroups
+    .filter(
+      (item) =>
+        item.count >= 3 &&
+        isNumber(item.medianWage) &&
+        isNumber(item.utilizationMean) &&
+        isNumber(areaCountMedian) &&
+        item.count <= areaCountMedian &&
+        item.medianWage >= overallWageMedian &&
+        item.utilizationMean >= overallUtilizationMean
+    )
+    .sort(
+      (left, right) =>
+        (right.medianWage ?? 0) + (right.utilizationMean ?? 0) * 10000 - ((left.medianWage ?? 0) + (left.utilizationMean ?? 0) * 10000)
+    )[0];
+  const denseArea = areaGroups[0];
+
+  return [
+    {
+      title: "稼働改善余地",
+      kicker: "高工賃・低利用率の候補",
+      metricValue: formatMaybeYen(growthOpportunity.monthlyUpside),
+      metricLabel: "利用率85%までの月額試算",
+      summary: growthOpportunity.count
+        ? `${formatCount(growthOpportunity.count)}件で、今の工賃水準を保ったまま利用率を85%まで伸ばすと月 ${formatMaybeYen(growthOpportunity.monthlyUpside)} の上振れ余地がある。`
+        : "高工賃だが利用率に伸びしろがある事業所は、今の条件では目立っていない。",
+      bullets: growthOpportunity.count
+        ? [
+            `${escapeInlineOfficeSummary(growthOpportunity.candidates[0]?.record)} が最大候補で、単独でも月 ${formatMaybeYen(growthOpportunity.candidates[0]?.monthlyUpside)} の試算。`,
+            growthOpportunity.candidates[1]
+              ? `${escapeInlineOfficeSummary(growthOpportunity.candidates[1]?.record)} も候補。上位2件で月 ${formatMaybeYen((growthOpportunity.candidates[0]?.monthlyUpside ?? 0) + (growthOpportunity.candidates[1]?.monthlyUpside ?? 0))}。`
+              : "一覧比較の重点候補タブから、対象事業所をそのまま確認できる。",
+          ]
+        : ["一覧比較で利用率順に並べると、次に深掘りする先を確認しやすい。"],
+    },
+    {
+      title: "立て直し優先",
+      kicker: "低工賃・低利用率・仕事不足",
+      metricValue: formatCount(fixCandidates.length),
+      metricLabel: "確認候補",
+      summary: fixCandidates.length
+        ? `${formatCount(fixCandidates.length)}件が、工賃・利用率とも弱く、仕事不足の可能性も重なっている。`
+        : "今の条件では、立て直し優先の候補は強く出ていない。",
+      bullets: [
+        isNumber(fixOpenSlots)
+          ? `候補全体で定員まで合計 ${formatCount(Math.round(fixOpenSlots))}人分の空きがある。`
+          : "定員差の公開情報は一部不足している。",
+        isNumber(fixMedianGap)
+          ? `平均との差は平均で ${formatSignedYen(fixMedianGap)}。同業比較での見直し余地が大きい。`
+          : "平均との差の集計は十分な件数で取れなかった。",
+      ],
+    },
+    {
+      title: "勝ち筋モデル",
+      kicker: "主活動・作業モデルの比較",
+      metricValue: topActivity ? formatMaybeYen(topActivity.median) : "-",
+      metricLabel: topActivity ? `${topActivity.label} の中央値` : "件数不足",
+      summary: topActivity
+        ? `${topActivity.label} が最も高工賃で、中央値 ${formatMaybeYen(topActivity.median)}。件数は ${formatCount(topActivity.count)}件。`
+        : "主活動の公開情報が少なく、勝ち筋モデルはまだ読み切れない。",
+      bullets: [
+        secondActivity
+          ? `次点は ${secondActivity.label} で中央値 ${formatMaybeYen(secondActivity.median)}。`
+          : "比較できる作業モデルがまだ少ない。",
+        "重点候補とあわせて見ると、『高工賃なのに埋まり切っていないモデル』を探しやすい。",
+      ],
+    },
+    {
+      title: "狙い目エリア",
+      kicker: "競合密度 × 工賃 × 利用率",
+      metricValue: opportunityArea ? formatCount(opportunityArea.count) : (denseArea ? formatCount(denseArea.count) : "-"),
+      metricLabel: opportunityArea ? `${opportunityArea.label} の競合件数` : "比較エリア件数",
+      summary: opportunityArea
+        ? `${opportunityArea.label} は競合 ${formatCount(opportunityArea.count)}件と密集しすぎず、中央値工賃 ${formatMaybeYen(opportunityArea.medianWage)}、平均利用率 ${formatPercent(opportunityArea.utilizationMean)}。`
+        : denseArea
+          ? `${denseArea.label} が最も件数の多いエリアで、競争の基準点として見やすい。`
+          : "エリア比較に必要な区情報が足りない。",
+      bullets: [
+        denseArea ? `${denseArea.label} は ${formatCount(denseArea.count)}件で最密集。勝ち筋の比較軸として使いやすい。` : "密集エリアの比較はまだ難しい。",
+        "詳細を開くと、各事業所ごとに同じ区・同じ主活動の件数を確認できる。",
+      ],
+    },
+  ];
+}
+
+function escapeInlineOfficeSummary(record) {
+  if (!record) return "対象事業所";
+  const officeName = compactInlineText(record.office_name) || "事業所名不明";
+  const areaLabel = getAreaLabel(record) || record.municipality || "-";
+  return `${officeName}（${areaLabel}）`;
 }
 
 /** 工賃の標準偏差を計算 */
@@ -1474,6 +1643,14 @@ function openDetailDialog() {
   openDialogElement(document.getElementById("detailDialog"));
 }
 
+function revealSection(targetId) {
+  const target = document.getElementById(targetId);
+  if (!target) return;
+  target.closest(".panel.is-collapsed")?.classList.remove("is-collapsed");
+  syncPanelToggleButtons();
+  target.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
 function openCorporationDialog(officeNo) {
   const record = findRecordByOffice(officeNo);
   if (!record) return;
@@ -1564,7 +1741,7 @@ function bindEvents() {
     const selectedRecord = getSelectedRecord();
     if (!selectedRecord) return;
     selectRecord(selectedRecord.office_no, { openDetail: false });
-    document.getElementById("tableHeading")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    revealSection("tableHeading");
   });
 
   document.querySelectorAll(".preset-chip[data-preset]").forEach((button) => {
@@ -1601,6 +1778,23 @@ function bindEvents() {
 
 function bindSharedRecordActions() {
   document.body.addEventListener("click", (event) => {
+    const executiveTrigger = event.target.closest("[data-executive-target]");
+    if (executiveTrigger) {
+      const preset = executiveTrigger.getAttribute("data-executive-preset");
+      const compareView = executiveTrigger.getAttribute("data-executive-view");
+      const targetId = executiveTrigger.getAttribute("data-executive-target");
+      if (preset) {
+        applyPreset(preset);
+      }
+      if (compareView) {
+        switchCompareView(compareView);
+      }
+      if (targetId) {
+        revealSection(targetId);
+      }
+      return;
+    }
+
     const corporationSortTrigger = event.target.closest("[data-corporation-sort]");
     if (corporationSortTrigger) {
       const sortKey = corporationSortTrigger.getAttribute("data-corporation-sort");
@@ -2088,10 +2282,11 @@ function applyFilters() {
   syncSelectedRecord(filtered);
 
   renderActiveFilterSummary(filtered);
+  renderStats(filtered);
+  renderExecutive(filtered);
   renderInsights(filtered);
   renderMarket(filtered);
   renderStrategy(filtered);
-  renderStats(filtered);
   renderCharts(filtered);
   renderAnomalies(filtered);
   renderDetail(getSelectedRecord());
@@ -2286,6 +2481,10 @@ function renderLoadingState() {
   const filterTags = document.getElementById("activeFilterTags");
   if (filterTags) {
     filterTags.innerHTML = "";
+  }
+  const executiveList = document.getElementById("executiveList");
+  if (executiveList) {
+    executiveList.innerHTML = loadingCard;
   }
   document.getElementById("insightList").innerHTML = loadingCard;
   const marketList = document.getElementById("marketList");
@@ -2497,16 +2696,7 @@ function renderMarket(records) {
     .join("");
 }
 
-function renderStrategy(records) {
-  const rootSummary = document.getElementById("strategySummary");
-  if (!records.length) {
-    rootSummary.textContent = "条件に合うレコードがない";
-    ["growthList", "fixList", "highHighList"].forEach((id) => {
-      document.getElementById(id).innerHTML = document.getElementById("emptyStateTemplate").innerHTML;
-    });
-    return;
-  }
-
+function buildStrategyBuckets(records) {
   const growthCandidates = records
     .filter(
       (record) =>
@@ -2515,8 +2705,7 @@ function renderStrategy(records) {
         (record.wage_ratio_to_municipality_mean ?? record.wage_ratio_to_overall_mean ?? 0) >= 1.1 &&
         record.daily_user_capacity_ratio < 0.8
     )
-    .sort((left, right) => growthScore(right) - growthScore(left))
-    .slice(0, 6);
+    .sort((left, right) => growthScore(right) - growthScore(left));
 
   const fixCandidates = records
     .filter(
@@ -2527,8 +2716,7 @@ function renderStrategy(records) {
         record.daily_user_capacity_ratio < 0.75 &&
         hasWorkShortageRisk(record)
     )
-    .sort((left, right) => fixScore(right) - fixScore(left))
-    .slice(0, 6);
+    .sort((left, right) => fixScore(right) - fixScore(left));
 
   const highHighCandidates = records
     .filter(
@@ -2538,16 +2726,187 @@ function renderStrategy(records) {
         (record.wage_ratio_to_municipality_mean ?? record.wage_ratio_to_overall_mean ?? 0) >= 1.1 &&
         record.daily_user_capacity_ratio >= 0.85
     )
-    .sort((left, right) => highHighScore(right) - highHighScore(left))
-    .slice(0, 6);
+    .sort((left, right) => highHighScore(right) - highHighScore(left));
+
+  return { growthCandidates, fixCandidates, highHighCandidates };
+}
+
+function renderExecutive(records) {
+  const root = document.getElementById("executiveList");
+  if (!root) return;
+  if (!records.length) {
+    root.innerHTML = document.getElementById("emptyStateTemplate").innerHTML;
+    return;
+  }
+
+  const { growthCandidates, fixCandidates, highHighCandidates } = buildStrategyBuckets(records);
+  const areaGroups = [...groupRecords(records, (record) => getAreaLabel(record)).entries()]
+    .map(([label, items]) => ({
+      label,
+      count: items.length,
+      medianWage: computeLocalStats(numericValues(items, "average_wage_yen")).median,
+      utilizationMean: meanFor(items, "daily_user_capacity_ratio"),
+    }))
+    .filter((item) => item.label)
+    .sort((left, right) => right.count - left.count);
+  const areaCountMedian = areaGroups.length ? median(areaGroups.map((item) => item.count).sort((a, b) => a - b)) : null;
+  const overallWageMedian = computeLocalStats(numericValues(records, "average_wage_yen")).median;
+  const overallUtilizationMean = meanFor(records, "daily_user_capacity_ratio");
+  const leadingWorkModels = buildGroupStats(records, (record) => deriveWorkModelLabel(record), "average_wage_yen", 5)
+    .sort((left, right) => (right.median ?? 0) - (left.median ?? 0))
+    .slice(0, 2);
+  const opportunityArea = areaGroups
+    .filter(
+      (item) =>
+        item.count >= 3 &&
+        isNumber(item.medianWage) &&
+        isNumber(item.utilizationMean) &&
+        isNumber(areaCountMedian) &&
+        item.count <= areaCountMedian &&
+        item.medianWage >= overallWageMedian &&
+        item.utilizationMean >= overallUtilizationMean
+    )
+    .sort((left, right) => (right.medianWage ?? 0) + (right.utilizationMean ?? 0) * 10000 - ((left.medianWage ?? 0) + (left.utilizationMean ?? 0) * 10000))[0];
+  const fixOpenSlots = sumComputed(fixCandidates, (record) => availableCapacity(record));
+  const denseAreas = areaGroups.slice(0, 3).map((item) => `${item.label} ${formatCount(item.count)}件`);
+
+  const cards = [
+    {
+      kicker: "攻める余地",
+      title: "高工賃・低利用率",
+      metric: formatCount(growthCandidates.length),
+      metricHint: "候補件数",
+      summary:
+        growthCandidates.length > 0
+          ? "工賃水準は強いのに、まだ利用者を伸ばせる候補がある。営業と見学導線を先に当てたい。"
+          : "今の条件では、明確に攻め筋と言える候補は多くない。",
+      bullets: [
+        growthCandidates[0]
+          ? `先頭候補は ${growthCandidates[0].office_name}。工賃 ${formatWageText(growthCandidates[0].average_wage_yen)} / 利用率 ${formatPercent(growthCandidates[0].daily_user_capacity_ratio)}。`
+          : "候補が少ないときは、区や主活動を絞って見直すと差が見えやすい。",
+        leadingWorkModels[0]
+          ? `高工賃側の作業モデルは ${leadingWorkModels[0].label}（中央値 ${formatMaybeYen(leadingWorkModels[0].median)}）。`
+          : "作業モデル別の優位差はまだ読みにくい。",
+      ],
+      buttonLabel: "候補を一覧で見る",
+      preset: "high-wage-low-util",
+      compareView: "priority",
+      targetId: "tableHeading",
+    },
+    {
+      kicker: "立て直し優先",
+      title: "低工賃・低利用率・人員過剰",
+      metric: formatCount(fixCandidates.length),
+      metricHint: "候補件数",
+      summary:
+        fixCandidates.length > 0
+          ? "仕事量、営業、配置の見直しを先に当てたい候補が見えている。"
+          : "今の条件では、強い立て直しシグナルは限定的。",
+      bullets: [
+        isNumber(fixOpenSlots)
+          ? `候補全体で定員まで平均あと人数は合計 ${formatCount(Math.round(fixOpenSlots))}人分。`
+          : "空き人数の合計は比較できない。",
+        `仕事不足の可能性は ${formatCount(records.filter((record) => hasWorkShortageRisk(record)).length)}件。まずは候補一覧で原因の共通点を確認する。`,
+      ],
+      buttonLabel: "立て直し候補を見る",
+      preset: "fix-priority",
+      compareView: "priority",
+      targetId: "tableHeading",
+    },
+    {
+      kicker: "好事例",
+      title: "高工賃・高利用率",
+      metric: formatCount(highHighCandidates.length),
+      metricHint: "候補件数",
+      summary:
+        highHighCandidates.length > 0
+          ? "工賃も利用率も強い事業所を、そのままベンチマーク先として追える。"
+          : "今の条件では、明確な好事例は少ない。",
+      bullets: [
+        highHighCandidates[0]
+          ? `先頭候補は ${highHighCandidates[0].office_name}。工賃 ${formatWageText(highHighCandidates[0].average_wage_yen)} / 利用率 ${formatPercent(highHighCandidates[0].daily_user_capacity_ratio)}。`
+          : "候補が少ないときは、主活動や区ごとに好事例を見直す。",
+        leadingWorkModels[1]
+          ? `次点の高工賃作業モデルは ${leadingWorkModels[1].label}（中央値 ${formatMaybeYen(leadingWorkModels[1].median)}）。`
+          : "主活動の公開情報が少ない事業所も多い。",
+      ],
+      buttonLabel: "好事例を見る",
+      preset: "high-wage-high-util",
+      compareView: "priority",
+      targetId: "tableHeading",
+    },
+    {
+      kicker: "競争地図",
+      title: "密集区と狙い目の区",
+      metric: denseAreas[0] ? denseAreas[0].replace(/ .+$/, "") : "-",
+      metricHint: denseAreas[0] ? denseAreas[0].replace(/^[^ ]+ /, "") : "密集区なし",
+      summary:
+        denseAreas.length > 0
+          ? `密集区は ${denseAreas.join(" / ")}。競争環境を先に把握すると、同じ工賃でも打ち手が変わる。`
+          : "エリアの比較に必要な住所情報が不足している。",
+      bullets: [
+        opportunityArea
+          ? `${opportunityArea.label} は ${formatCount(opportunityArea.count)}件と競合が薄めでも、中央値工賃 ${formatMaybeYen(opportunityArea.medianWage)} / 平均利用率 ${formatPercent(opportunityArea.utilizationMean)}。`
+          : "今の条件では、競合が薄くて強い区はまだはっきり出ていない。",
+        "区別の平均工賃と件数は、比較グラフでそのまま確認できる。",
+      ],
+      buttonLabel: "区別の比較を見る",
+      targetId: "chartsHeading",
+    },
+  ];
+
+  root.innerHTML = cards
+    .map(
+      (card) => `
+        <article class="executive-card">
+          <div class="executive-card-head">
+            <div>
+              <p class="executive-card-kicker">${escapeHtml(card.kicker)}</p>
+              <h3>${escapeHtml(card.title)}</h3>
+            </div>
+            <div class="executive-card-metric">
+              <strong>${escapeHtml(card.metric)}</strong>
+              <span>${escapeHtml(card.metricHint)}</span>
+            </div>
+          </div>
+          <p class="executive-card-summary">${escapeHtml(card.summary)}</p>
+          <ul class="executive-card-list">
+            ${card.bullets.map((bullet) => `<li>${escapeHtml(bullet)}</li>`).join("")}
+          </ul>
+          <div class="executive-card-actions">
+            <button
+              class="ghost-button executive-action-button"
+              type="button"
+              data-executive-target="${escapeAttribute(card.targetId)}"
+              ${card.preset ? `data-executive-preset="${escapeAttribute(card.preset)}"` : ""}
+              ${card.compareView ? `data-executive-view="${escapeAttribute(card.compareView)}"` : ""}
+            >${escapeHtml(card.buttonLabel)}</button>
+          </div>
+        </article>
+      `
+    )
+    .join("");
+}
+
+function renderStrategy(records) {
+  const rootSummary = document.getElementById("strategySummary");
+  if (!records.length) {
+    rootSummary.textContent = "条件に合うレコードがない";
+    ["growthList", "fixList", "highHighList"].forEach((id) => {
+      document.getElementById(id).innerHTML = document.getElementById("emptyStateTemplate").innerHTML;
+    });
+    return;
+  }
+
+  const { growthCandidates, fixCandidates, highHighCandidates } = buildStrategyBuckets(records);
 
   rootSummary.textContent = `高工賃・低利用率 ${formatCount(growthCandidates.length)} 件 / 低工賃・低利用率・人員過剰 ${formatCount(
     fixCandidates.length
   )} 件 / 高工賃・高利用率 ${formatCount(highHighCandidates.length)} 件`;
 
-  renderStrategyList("growthList", growthCandidates, "高工賃・低利用率の事業所はまだない", buildGrowthReason);
-  renderStrategyList("fixList", fixCandidates, "低工賃・低利用率・人員過剰の事業所はまだない", buildFixReason);
-  renderStrategyList("highHighList", highHighCandidates, "高工賃・高利用率の事業所はまだない", buildHighHighReason);
+  renderStrategyList("growthList", growthCandidates.slice(0, 6), "高工賃・低利用率の事業所はまだない", buildGrowthReason);
+  renderStrategyList("fixList", fixCandidates.slice(0, 6), "低工賃・低利用率・人員過剰の事業所はまだない", buildFixReason);
+  renderStrategyList("highHighList", highHighCandidates.slice(0, 6), "高工賃・高利用率の事業所はまだない", buildHighHighReason);
 }
 
 function renderStrategyList(id, records, emptyLabel, buildReason) {
@@ -3724,6 +4083,76 @@ function highHighScore(record) {
     (record.wage_ratio_to_municipality_mean ?? record.wage_ratio_to_overall_mean ?? 0) * 70 +
     (record.daily_user_capacity_ratio ?? 0) * 35
   );
+}
+
+function getGrowthCandidates(records, limit = null) {
+  const ranked = records
+    .filter(
+      (record) =>
+        isNumber(record.average_wage_yen) &&
+        isNumber(record.daily_user_capacity_ratio) &&
+        (record.wage_ratio_to_municipality_mean ?? record.wage_ratio_to_overall_mean ?? 0) >= 1.1 &&
+        record.daily_user_capacity_ratio < 0.8
+    )
+    .sort((left, right) => growthScore(right) - growthScore(left));
+  return Number.isFinite(limit) ? ranked.slice(0, limit) : ranked;
+}
+
+function getFixCandidates(records, limit = null) {
+  const ranked = records
+    .filter(
+      (record) =>
+        isNumber(record.average_wage_yen) &&
+        isNumber(record.daily_user_capacity_ratio) &&
+        (record.wage_ratio_to_municipality_mean ?? record.wage_ratio_to_overall_mean ?? 1) < 0.9 &&
+        record.daily_user_capacity_ratio < 0.75 &&
+        hasWorkShortageRisk(record)
+    )
+    .sort((left, right) => fixScore(right) - fixScore(left));
+  return Number.isFinite(limit) ? ranked.slice(0, limit) : ranked;
+}
+
+function getHighHighCandidates(records, limit = null) {
+  const ranked = records
+    .filter(
+      (record) =>
+        isNumber(record.average_wage_yen) &&
+        isNumber(record.daily_user_capacity_ratio) &&
+        (record.wage_ratio_to_municipality_mean ?? record.wage_ratio_to_overall_mean ?? 0) >= 1.1 &&
+        record.daily_user_capacity_ratio >= 0.85
+    )
+    .sort((left, right) => highHighScore(right) - highHighScore(left));
+  return Number.isFinite(limit) ? ranked.slice(0, limit) : ranked;
+}
+
+function buildAreaMarketStats(records, minCount = 5) {
+  return [...groupRecords(records, (record) => getAreaLabel(record)).entries()]
+    .map(([label, items]) => {
+      const wages = numericValues(items, "average_wage_yen");
+      const utilizationValues = numericValues(items, "daily_user_capacity_ratio");
+      if (!label || !wages.length) return null;
+      return {
+        label,
+        count: items.length,
+        wageMean: computeLocalStats(wages).mean,
+        wageMedian: computeLocalStats(wages).median,
+        utilizationMean: computeLocalStats(utilizationValues).mean,
+        lowUtilCount: items.filter((item) => isNumber(item.daily_user_capacity_ratio) && item.daily_user_capacity_ratio < 0.7).length,
+      };
+    })
+    .filter((item) => item && item.count >= minCount);
+}
+
+function executiveOfficeBullet(record) {
+  return `${record.office_name} / ${formatWageText(record.average_wage_yen)} / 利用率 ${formatPercent(
+    record.daily_user_capacity_ratio
+  )}`;
+}
+
+function executiveAreaBullet(item) {
+  return `${item.label} / 平均工賃 ${formatMaybeYen(item.wageMean)} / ${formatCount(item.count)}件 / 利用率 ${formatPercent(
+    item.utilizationMean
+  )}`;
 }
 
 function buildGrowthReason(record) {

@@ -549,18 +549,19 @@ h1[id], h2[id] { scroll-margin-top: 24px; }
 /* Panel ordering — single column, detail is modal-only on PC */
 .filter-launch-panel { grid-column: 1 / -1; order: 1; }
 .panel-main { grid-column: 1 / -1; order: 2; }
-.compare-panel { grid-column: 1 / -1; order: 3; }
+.executive-panel { grid-column: 1 / -1; order: 3; }
+.compare-panel { grid-column: 1 / -1; order: 4; }
 .detail-panel { display: none; }
-.insight-panel, .market-panel, .compare-panel, .anomaly-panel, .charts-panel, .explain-panel, .notes-panel {
+.insight-panel, .market-panel, .compare-panel, .anomaly-panel, .charts-panel, .explain-panel, .notes-panel, .executive-panel {
   grid-column: 1 / -1;
 }
-.meta-strip-secondary { order: 4; }
-.insight-panel { order: 5; }
-.market-panel { order: 6; }
-.anomaly-panel { order: 7; }
-.charts-panel { order: 8; }
-.explain-panel { order: 9; }
-.notes-panel { order: 10; }
+.meta-strip-secondary { order: 5; }
+.insight-panel { order: 6; }
+.market-panel { order: 7; }
+.anomaly-panel { order: 8; }
+.charts-panel { order: 9; }
+.explain-panel { order: 10; }
+.notes-panel { order: 11; }
 
 /* Panel head */
 .panel-head {
@@ -639,13 +640,14 @@ h1[id], h2[id] { scroll-margin-top: 24px; }
 .panel[data-collapsible].is-collapsed .panel-head { border-bottom: none; }
 
 /* Panel body */
- .filter-launch-panel, .panel-main, .explain-panel, .insight-panel, .market-panel,
+ .filter-launch-panel, .panel-main, .executive-panel, .explain-panel, .insight-panel, .market-panel,
 .compare-panel, .benchmark-panel, .anomaly-panel, .detail-panel,
 .charts-panel, .notes-panel {
   display: grid;
 }
 .filter-launch-panel > :not(.panel-head),
 .panel-main > :not(.panel-head),
+.executive-panel > :not(.panel-head),
 .explain-panel > :not(.panel-head),
 .insight-panel > :not(.panel-head),
 .market-panel > :not(.panel-head),
@@ -661,6 +663,7 @@ h1[id], h2[id] { scroll-margin-top: 24px; }
 /* --- Panel Accents --- */
 .filter-launch-panel { --panel-accent: var(--accent); }
 .panel-main { --panel-accent: #6b7f96; }
+.executive-panel { --panel-accent: #1d4ed8; }
 .explain-panel { --panel-accent: #f59e0b; }
 .insight-panel { --panel-accent: #22c55e; }
 .market-panel { --panel-accent: #0f766e; }
@@ -853,6 +856,109 @@ h1[id], h2[id] { scroll-margin-top: 24px; }
 .panel-main .stat-card strong { font-size: 18px; }
 
 .numeric { font-variant-numeric: tabular-nums; }
+
+/* --- Executive Summary --- */
+.executive-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 10px;
+}
+
+.executive-card {
+  display: grid;
+  gap: 10px;
+  padding: 16px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background:
+    linear-gradient(180deg, rgba(29,78,216,0.06) 0%, rgba(29,78,216,0) 48%),
+    var(--bg-card);
+  transition: all var(--duration) var(--ease);
+}
+
+.executive-card:hover {
+  border-color: var(--border-strong);
+  background:
+    linear-gradient(180deg, rgba(29,78,216,0.09) 0%, rgba(29,78,216,0.02) 48%),
+    var(--bg-card-hover);
+  transform: translateY(-1px);
+}
+
+.executive-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.executive-card-head h3 {
+  font-size: 14px;
+  font-weight: 700;
+  margin: 2px 0 0;
+}
+
+.executive-card-kicker {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.executive-card-metric {
+  min-width: 74px;
+  text-align: right;
+}
+
+.executive-card-metric strong {
+  display: block;
+  font-size: 24px;
+  line-height: 1;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.executive-card-metric span {
+  display: block;
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.executive-card-summary {
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--text-primary);
+}
+
+.executive-card-list {
+  display: grid;
+  gap: 6px;
+  list-style: none;
+}
+
+.executive-card-list li {
+  position: relative;
+  padding-left: 12px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+.executive-card-list li::before {
+  content: '・';
+  position: absolute;
+  left: 0;
+  color: var(--accent-hover);
+}
+
+.executive-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.executive-action-button {
+  padding-inline: 12px;
+  font-size: 12px;
+}
 
 /* --- Insight Grid --- */
 .insight-grid {
