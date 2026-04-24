@@ -1790,6 +1790,7 @@ function buildHosAttentionCandidates(hosRecords) {
 }
 
 function buildHosOfficialAuditRows(hosRecords) {
+  const officialListedCount = HOS_OFFICIAL_WORKPLACES.length;
   const officialTargets = getHosOfficialDashboardTargets();
   const officialNonTargets = getHosOfficialNonDashboardTargets();
   const recordedOfficeNames = new Set(hosRecords.map((record) => normalizeOfficeName(record.office_name)));
@@ -1799,11 +1800,11 @@ function buildHosOfficialAuditRows(hosRecords) {
   const rows = [
     {
       tone: missingTargets.length ? "alert" : "good",
-      title: `公式B型 ${formatCount(matchedTargetCount)} / ${formatCount(officialTargets.length)} 収録`,
+      title: `公式掲載 ${formatCount(officialListedCount)}拠点 / B型実績対象 ${formatCount(matchedTargetCount)} / ${formatCount(officialTargets.length)}`,
       body: missingTargets.length
         ? `未収録: ${missingTargets.map((office) => office.name).join("、")}`
-        : "公式会社概要に掲載されているB型10拠点をすべて収録。",
-      chips: ["公式照合", "B型"],
+        : "トップの作業所紹介は12件。工賃実績ダッシュボードではB型10拠点を対象としてすべて収録。",
+      chips: ["公式照合", `公式掲載${formatCount(officialListedCount)}件`, `B型${formatCount(officialTargets.length)}件`],
       sourceUrl: HOS_OFFICIAL_COMPANY_URL,
     },
   ];
@@ -2008,6 +2009,7 @@ function renderHosManagement() {
   ).length;
   const officialTargets = getHosOfficialDashboardTargets();
   const officialNonTargets = getHosOfficialNonDashboardTargets();
+  const officialListedCount = HOS_OFFICIAL_WORKPLACES.length;
   const recordedOfficeNames = new Set(hosRecords.map((record) => normalizeOfficeName(record.office_name)));
   const officialMatchedCount = officialTargets.filter((office) => recordedOfficeNames.has(normalizeOfficeName(office.name))).length;
   const auditRows = buildHosOfficialAuditRows(hosRecords);
@@ -2024,7 +2026,8 @@ function renderHosManagement() {
   const benchmarkCandidates = buildHosBenchmarkCandidates(state.records, hosOffice);
 
   summary.textContent = [
-    `公式B型 ${formatCount(officialMatchedCount)} / ${formatCount(officialTargets.length)}収録`,
+    `公式掲載 ${formatCount(officialListedCount)}拠点`,
+    `B型実績対象 ${formatCount(officialMatchedCount)} / ${formatCount(officialTargets.length)}収録`,
     municipalitySummary || null,
     `高工賃・高利用率 ${formatCount(hosHighHighCount)}件`,
     `仕事不足候補 ${formatCount(hosWorkShortageCount)}件`,
@@ -2035,12 +2038,12 @@ function renderHosManagement() {
 
   const cards = [
     {
-      label: "公式B型収録",
-      value: `${formatCount(officialMatchedCount)} / ${formatCount(officialTargets.length)}`,
-      hint: `公式掲載のうちB型外${formatCount(officialNonTargets.length)}件は別枠。HOS自社一覧はここから確認。`,
+      label: "公式掲載拠点",
+      value: `${formatCount(officialListedCount)}拠点`,
+      hint: `B型実績対象は${formatCount(officialTargets.length)}拠点で全収録。B型外${formatCount(officialNonTargets.length)}件は別枠。`,
       action: "hos-corporation",
       tone: "history",
-      cta: "一覧を見る",
+      cta: "B型一覧を見る",
     },
     {
       label: "HOS平均工賃",
