@@ -107,7 +107,107 @@ const HOKKAIDO_B_TYPE_HISTORY = {
 };
 
 const HOS_CORPORATION_NAME = "合同会社 HOS";
-const HOS_PRIMARY_OFFICE_NO = "799";
+const HOS_PRIMARY_OFFICE_NO = "518";
+const HOS_OFFICIAL_SITE_URL = "https://hos-hokkaido.com/";
+const HOS_OFFICIAL_COMPANY_URL = "https://hos-hokkaido.com/company.html";
+const HOS_OFFICIAL_WORKPLACES = [
+  {
+    name: "ラインズ麻生",
+    service: "就労継続支援B型",
+    isDashboardTarget: true,
+    officialCity: "札幌市",
+    sourceUrl: HOS_OFFICIAL_COMPANY_URL,
+    auditTone: "info",
+    auditNote: "軽作業と清掃で所在地が分かれる。WAM収録は新琴似側、公式会社概要では麻生側も併記。",
+  },
+  {
+    name: "ラインズ手稲",
+    service: "就労継続支援B型",
+    isDashboardTarget: true,
+    officialCity: "札幌市",
+    sourceUrl: HOS_OFFICIAL_COMPANY_URL,
+  },
+  {
+    name: "ラインズ白石",
+    service: "就労継続支援B型",
+    isDashboardTarget: true,
+    officialCity: "札幌市",
+    sourceUrl: HOS_OFFICIAL_COMPANY_URL,
+  },
+  {
+    name: "サニーズ東区役所前",
+    service: "就労継続支援B型",
+    isDashboardTarget: true,
+    officialCity: "札幌市",
+    sourceUrl: HOS_OFFICIAL_COMPANY_URL,
+  },
+  {
+    name: "レガリス大通",
+    service: "就労継続支援B型",
+    isDashboardTarget: true,
+    officialCity: "札幌市",
+    sourceUrl: HOS_OFFICIAL_COMPANY_URL,
+  },
+  {
+    name: "ローズ白石",
+    service: "就労継続支援B型",
+    isDashboardTarget: true,
+    officialCity: "札幌市",
+    sourceUrl: "https://hos-hokkaido.com/place/rose-shiroishi.html",
+    auditTone: "alert",
+    auditNote: "公式内で住所表記が揺れている。会社概要・WAMは本通4丁目北1-24、トップ/詳細は中央3条5丁目。",
+  },
+  {
+    name: "ボルト澄川",
+    service: "就労継続支援B型",
+    isDashboardTarget: true,
+    officialCity: "札幌市",
+    sourceUrl: HOS_OFFICIAL_COMPANY_URL,
+  },
+  {
+    name: "アルバ小樽",
+    service: "就労継続支援B型",
+    isDashboardTarget: true,
+    officialCity: "小樽市",
+    sourceUrl: "https://hos-hokkaido.com/place/otaru.html",
+    auditTone: "alert",
+    auditNote: "公式内で住所表記が揺れている。会社概要・WAMは稲穂4丁目5-16、トップ/詳細は入船2丁目5-1。",
+  },
+  {
+    name: "ファニー函館",
+    service: "就労継続支援B型",
+    isDashboardTarget: true,
+    officialCity: "函館市",
+    sourceUrl: HOS_OFFICIAL_COMPANY_URL,
+  },
+  {
+    name: "ファニー湯川",
+    service: "就労移行支援・就労継続支援B型",
+    isDashboardTarget: true,
+    officialCity: "函館市",
+    sourceUrl: "https://hos-hokkaido.com/place/yunokawa.html",
+    auditTone: "info",
+    auditNote: "就労移行支援との併設。ダッシュボードではB型実績として収録。",
+  },
+  {
+    name: "DEKIRU～できる～",
+    service: "就労選択支援",
+    isDashboardTarget: false,
+    officialCity: "函館市",
+    sourceUrl: "https://hos-hokkaido.com/place/dekiru.html",
+    auditTone: "neutral",
+    auditNote: "B型ではないため、工賃実績ダッシュボードの集計対象外。",
+  },
+  {
+    name: "だいじょうぶ",
+    service: "指定特定相談支援・指定障害児相談支援",
+    isDashboardTarget: false,
+    officialCity: "函館市",
+    sourceUrl: "https://hos-hokkaido.com/place/daijoubu.html",
+    auditTone: "neutral",
+    auditNote: "相談支援事業所のため、B型工賃実績ダッシュボードの集計対象外。",
+  },
+];
 
 /* 人口順ソート用。北海道は令和7年1月1日、札幌市の区は令和8年1月1日の住民基本台帳人口を使用。 */
 const MUNICIPALITY_POPULATION = {
@@ -586,7 +686,6 @@ function wageTierDistribution(records) {
 const FILTER_PRESETS = {
   all: {},
   "hos-office": {
-    municipality: "小樽市",
     search: "HOS",
   },
   "sapporo-city": {
@@ -925,12 +1024,30 @@ function normalizeSearchText(value) {
 }
 
 function normalizeCorporationName(value) {
-  return normalizeSearchText(value);
+  return normalizeSearchText(value).replace(/\s+/g, "");
+}
+
+function normalizeOfficeName(value) {
+  return normalizeSearchText(value).replace(/\s+/g, "");
 }
 
 function getHosRecords(records = state.records) {
   const targetName = normalizeCorporationName(HOS_CORPORATION_NAME);
   return records.filter((record) => normalizeCorporationName(record.corporation_name) === targetName);
+}
+
+function getHosOfficialDashboardTargets() {
+  return HOS_OFFICIAL_WORKPLACES.filter((office) => office.isDashboardTarget);
+}
+
+function getHosOfficialNonDashboardTargets() {
+  return HOS_OFFICIAL_WORKPLACES.filter((office) => !office.isDashboardTarget);
+}
+
+function getHosOfficialWorkplace(record) {
+  const normalizedOfficeName = normalizeOfficeName(record?.office_name);
+  if (!normalizedOfficeName) return null;
+  return HOS_OFFICIAL_WORKPLACES.find((office) => normalizeOfficeName(office.name) === normalizedOfficeName) ?? null;
 }
 
 function getHosPrimaryOffice(records = state.records) {
@@ -1322,6 +1439,10 @@ function applyStatsAction(action) {
     openRecordDetailByOfficeNo(HOS_PRIMARY_OFFICE_NO);
     return;
   }
+  if (action === "hos-audit") {
+    document.getElementById("hosAuditList")?.scrollIntoView({ behavior: "smooth", block: "center" });
+    return;
+  }
 
   const nextFilters = cloneFilters(state.filters);
   if (action === "work-shortage") {
@@ -1589,6 +1710,7 @@ function renderLoadingState() {
   document.getElementById("hosStatsGrid").innerHTML = loadingCard;
   document.getElementById("hosPeerList").innerHTML = loadingCard;
   document.getElementById("hosBenchmarkList").innerHTML = loadingCard;
+  document.getElementById("hosAuditList").innerHTML = loadingCard;
   document.getElementById("hosSummary").textContent = "HOS向け要点を読み込み中...";
   document.getElementById("historyTrendGrid").innerHTML = loadingCard;
   document.getElementById("historyTrendFoot").innerHTML = "";
@@ -1639,19 +1761,99 @@ function rankOfficeByWage(targetOfficeNo, records) {
   return { rank: rank + 1, total: sorted.length };
 }
 
+function hosAttentionScore(record, hosMean) {
+  const wageGapScore =
+    isNumber(record.average_wage_yen) && isNumber(hosMean) && hosMean > 0
+      ? Math.max((hosMean - record.average_wage_yen) / hosMean, 0) * 90
+      : 0;
+  const utilizationScore = isNumber(record.daily_user_capacity_ratio)
+    ? Math.max(0.75 - record.daily_user_capacity_ratio, 0) * 120
+    : 0;
+  const shortageScore = hasWorkShortageRisk(record) ? 80 : 0;
+  const lowQuadrantScore =
+    record.market_position_quadrant === "低工賃 × 低稼働"
+      ? 45
+      : record.market_position_quadrant === "低工賃 × 高稼働"
+        ? 25
+        : 0;
+  const staffingScore = record.wam_staffing_efficiency_quadrant === "高工賃 × 少ない人員" ? 16 : 0;
+  const auditScore = getHosOfficialWorkplace(record)?.auditTone === "alert" ? 12 : 0;
+  return shortageScore + wageGapScore + utilizationScore + lowQuadrantScore + staffingScore + auditScore;
+}
+
 function buildHosAttentionCandidates(hosRecords) {
+  const hosMean = meanFor(hosRecords, "average_wage_yen");
   return hosRecords
     .slice()
-    .sort((left, right) => fixScore(right) - fixScore(left))
+    .sort((left, right) => hosAttentionScore(right, hosMean) - hosAttentionScore(left, hosMean))
     .slice(0, 4);
 }
 
+function buildHosOfficialAuditRows(hosRecords) {
+  const officialTargets = getHosOfficialDashboardTargets();
+  const officialNonTargets = getHosOfficialNonDashboardTargets();
+  const recordedOfficeNames = new Set(hosRecords.map((record) => normalizeOfficeName(record.office_name)));
+  const missingTargets = officialTargets.filter((office) => !recordedOfficeNames.has(normalizeOfficeName(office.name)));
+  const matchedTargetCount = officialTargets.length - missingTargets.length;
+  const rawCorporationNames = [...new Set(hosRecords.map((record) => String(record.corporation_name ?? "").trim()).filter(Boolean))];
+  const rows = [
+    {
+      tone: missingTargets.length ? "alert" : "good",
+      title: `公式B型 ${formatCount(matchedTargetCount)} / ${formatCount(officialTargets.length)} 収録`,
+      body: missingTargets.length
+        ? `未収録: ${missingTargets.map((office) => office.name).join("、")}`
+        : "公式会社概要に掲載されているB型10拠点をすべて収録。",
+      chips: ["公式照合", "B型"],
+      sourceUrl: HOS_OFFICIAL_COMPANY_URL,
+    },
+  ];
+
+  if (rawCorporationNames.length > 1) {
+    rows.push({
+      tone: "info",
+      title: "法人名の表記ゆれ",
+      body: "合同会社HOSの法人名に全角/半角・空白ありの表記が混在。集計では同一法人として統合済み。",
+      chips: ["集計補正", `${formatCount(rawCorporationNames.length)}表記`],
+    });
+  }
+
+  if (officialNonTargets.length) {
+    rows.push({
+      tone: "neutral",
+      title: "B型外の公式掲載拠点",
+      body: `${officialNonTargets.map((office) => `${office.name}（${office.service}）`).join("、")} は工賃実績の集計対象外。`,
+      chips: ["対象外", `${formatCount(officialNonTargets.length)}件`],
+      sourceUrl: HOS_OFFICIAL_SITE_URL,
+    });
+  }
+
+  officialTargets
+    .filter((office) => office.auditNote)
+    .forEach((office) => {
+      rows.push({
+        tone: office.auditTone ?? "info",
+        title: office.name,
+        body: office.auditNote,
+        chips: [office.service, office.officialCity].filter(Boolean),
+        sourceUrl: office.sourceUrl,
+      });
+    });
+
+  return rows;
+}
+
 function buildHosBenchmarkCandidates(records, hosOffice) {
-  const focusMunicipalities = new Set(["札幌市", hosOffice.municipality].filter(Boolean));
+  const hosRecords = getHosRecords(records);
+  const focusMunicipalities = new Set(hosRecords.map((record) => record.municipality).filter(Boolean));
+  if (!focusMunicipalities.size) {
+    focusMunicipalities.add("札幌市");
+    if (hosOffice.municipality) focusMunicipalities.add(hosOffice.municipality);
+  }
+  const hosOfficeNos = new Set(hosRecords.map((record) => String(record.office_no)));
   return records
     .filter(
       (record) =>
-        String(record.office_no) !== String(hosOffice.office_no) &&
+        !hosOfficeNos.has(String(record.office_no)) &&
         focusMunicipalities.has(record.municipality) &&
         record.market_position_quadrant === "高工賃 × 高稼働" &&
         isNumber(record.average_wage_yen)
@@ -1672,18 +1874,33 @@ function buildHosBenchmarkCandidates(records, hosOffice) {
 
 function buildHosPeerReason(record) {
   const parts = [];
+  const hosMean = meanFor(getHosRecords(state.records), "average_wage_yen");
+  const wageGapToHos =
+    isNumber(record.average_wage_yen) && isNumber(hosMean)
+      ? record.average_wage_yen - hosMean
+      : null;
   const wageGapToOverall =
     isNumber(record.average_wage_yen) && isNumber(state.dashboard?.analytics?.overall_wage_stats?.mean)
       ? record.average_wage_yen - state.dashboard.analytics.overall_wage_stats.mean
       : null;
+  if (wageGapToHos != null) {
+    parts.push(`HOS平均との差 ${formatSignedYen(wageGapToHos)}`);
+  }
   if (wageGapToOverall != null) {
     parts.push(`全道平均との差 ${formatSignedYen(wageGapToOverall)}`);
+  }
+  if (hasWorkShortageRisk(record)) {
+    parts.push("仕事不足候補");
   }
   if (isNumber(record.daily_user_capacity_ratio) && record.daily_user_capacity_ratio < 0.7) {
     parts.push("利用率70%未満");
   }
   if (record.wam_match_status !== "matched") {
     parts.push("人員詳細未取得");
+  }
+  const officialWorkplace = getHosOfficialWorkplace(record);
+  if (officialWorkplace?.auditTone === "alert") {
+    parts.push("公式表記差分あり");
   }
   parts.push(`利用率 ${formatPercent(record.daily_user_capacity_ratio)}`);
   return parts.join(" / ");
@@ -1733,12 +1950,41 @@ function renderHosWatchList(rootId, records, emptyLabel, buildReason) {
     .join("");
 }
 
+function renderHosAuditList(rootId, rows) {
+  const root = document.getElementById(rootId);
+  if (!root) return;
+  if (!rows.length) {
+    root.innerHTML = `<div class="empty-state"><h3>公式照合メモなし</h3></div>`;
+    return;
+  }
+
+  root.innerHTML = rows
+    .map((row) => {
+      const sourceUrl = safeExternalUrl(row.sourceUrl);
+      return `
+        <article class="hos-audit-item hos-audit-${escapeAttribute(row.tone ?? "neutral")}">
+          <div>
+            <p class="strategy-kicker">${escapeHtml(row.tone === "alert" ? "要確認" : row.tone === "good" ? "確認済み" : "補足")}</p>
+            <strong>${escapeHtml(row.title)}</strong>
+          </div>
+          <p>${escapeHtml(row.body)}</p>
+          <div class="corporation-office-meta">
+            ${(row.chips ?? []).map((chip) => `<span class="metric-chip">${escapeHtml(chip)}</span>`).join("")}
+          </div>
+          ${sourceUrl ? `<a class="table-link" href="${escapeAttribute(sourceUrl)}" target="_blank" rel="noreferrer">公式確認</a>` : ""}
+        </article>
+      `;
+    })
+    .join("");
+}
+
 function renderHosManagement() {
   const summary = document.getElementById("hosSummary");
   const statsRoot = document.getElementById("hosStatsGrid");
   const peerRoot = document.getElementById("hosPeerList");
   const benchmarkRoot = document.getElementById("hosBenchmarkList");
-  if (!summary || !statsRoot || !peerRoot || !benchmarkRoot) return;
+  const auditRoot = document.getElementById("hosAuditList");
+  if (!summary || !statsRoot || !peerRoot || !benchmarkRoot || !auditRoot) return;
 
   const hosRecords = getHosRecords(state.records);
   const hosOffice = getHosPrimaryOffice(state.records);
@@ -1747,6 +1993,7 @@ function renderHosManagement() {
     statsRoot.innerHTML = document.getElementById("emptyStateTemplate").innerHTML;
     peerRoot.innerHTML = document.getElementById("emptyStateTemplate").innerHTML;
     benchmarkRoot.innerHTML = document.getElementById("emptyStateTemplate").innerHTML;
+    auditRoot.innerHTML = document.getElementById("emptyStateTemplate").innerHTML;
     return;
   }
 
@@ -1755,10 +2002,18 @@ function renderHosManagement() {
   const hosMean = meanFor(hosRecords, "average_wage_yen");
   const hosMatchedCount = hosRecords.filter((record) => record.wam_match_status === "matched").length;
   const hosHighHighCount = hosRecords.filter((record) => record.market_position_quadrant === "高工賃 × 高稼働").length;
+  const hosWorkShortageCount = hosRecords.filter((record) => hasWorkShortageRisk(record)).length;
   const hosLowUtilCount = hosRecords.filter(
     (record) => isNumber(record.daily_user_capacity_ratio) && record.daily_user_capacity_ratio < 0.7
   ).length;
+  const officialTargets = getHosOfficialDashboardTargets();
+  const officialNonTargets = getHosOfficialNonDashboardTargets();
+  const recordedOfficeNames = new Set(hosRecords.map((record) => normalizeOfficeName(record.office_name)));
+  const officialMatchedCount = officialTargets.filter((office) => recordedOfficeNames.has(normalizeOfficeName(office.name))).length;
+  const auditRows = buildHosOfficialAuditRows(hosRecords);
+  const auditIssueCount = auditRows.filter((row) => row.tone === "alert").length;
   const municipalitySummary = [...new Set(hosRecords.map((record) => record.municipality).filter(Boolean))]
+    .sort((left, right) => (MUNICIPALITY_POPULATION[right] ?? -1) - (MUNICIPALITY_POPULATION[left] ?? -1))
     .map((municipality) => {
       const count = hosRecords.filter((record) => record.municipality === municipality).length;
       return `${municipality}${formatCount(count)}件`;
@@ -1769,19 +2024,20 @@ function renderHosManagement() {
   const benchmarkCandidates = buildHosBenchmarkCandidates(state.records, hosOffice);
 
   summary.textContent = [
-    `B型 ${formatCount(hosRecords.length)}事業所`,
+    `公式B型 ${formatCount(officialMatchedCount)} / ${formatCount(officialTargets.length)}収録`,
     municipalitySummary || null,
     `高工賃・高利用率 ${formatCount(hosHighHighCount)}件`,
-    `人員詳細 ${formatCount(hosMatchedCount)}件`,
+    `仕事不足候補 ${formatCount(hosWorkShortageCount)}件`,
+    `B型外 ${formatCount(officialNonTargets.length)}件は対象外`,
   ]
     .filter(Boolean)
     .join(" / ");
 
   const cards = [
     {
-      label: "HOS全拠点一覧",
-      value: formatCount(hosRecords.length),
-      hint: "サイト掲載12拠点のうち、B型10拠点を収録。就労選択支援と相談支援は対象外。",
+      label: "公式B型収録",
+      value: `${formatCount(officialMatchedCount)} / ${formatCount(officialTargets.length)}`,
+      hint: `公式掲載のうちB型外${formatCount(officialNonTargets.length)}件は別枠。HOS自社一覧はここから確認。`,
       action: "hos-corporation",
       tone: "history",
       cta: "一覧を見る",
@@ -1795,24 +2051,38 @@ function renderHosManagement() {
           : "平均工賃を計算できない",
     },
     {
-      label: "高工賃・高利用率",
+      label: "横展開したい主力",
       value: formatCount(hosHighHighCount),
       hint: `${formatPercent(hosRecords.length ? hosHighHighCount / hosRecords.length : null)} / 横展開したい主力拠点`,
+      action: "benchmark",
+      tone: "good",
+      cta: "好事例一覧",
     },
     {
-      label: "利用の埋まり方",
-      value: formatCount(hosLowUtilCount),
+      label: "仕事が少ない候補",
+      value: formatCount(hosWorkShortageCount),
       hint:
-        hosLowUtilCount > 0
-          ? "利用率70%未満の拠点あり。先に確認したい。"
-          : "利用率70%未満の拠点なし",
+        hosWorkShortageCount > 0
+          ? `HOS内で仕事量・受注先を先に見る候補。利用率70%未満は${formatCount(hosLowUtilCount)}件。`
+          : `強い不足シグナルなし。利用率70%未満は${formatCount(hosLowUtilCount)}件。`,
+      action: "work-shortage",
+      tone: hosWorkShortageCount > 0 ? "alert" : "good",
+      cta: "一覧を見る",
+    },
+    {
+      label: "公式表記の要確認",
+      value: formatCount(auditIssueCount),
+      hint: auditIssueCount > 0 ? "住所表記など、役員会前に確認したい差分あり。" : "大きな表記差分なし",
+      action: "hos-audit",
+      tone: auditIssueCount > 0 ? "alert" : "good",
+      cta: "照合を見る",
     },
     {
       label: "人員詳細一致",
       value: `${formatCount(hosMatchedCount)} / ${formatCount(hosRecords.length)}`,
       hint:
         hosMatchedCount < hosRecords.length
-          ? "函館拠点は現在のWAM詳細取得範囲外"
+          ? "一部拠点でWAM人員詳細が未一致"
           : "HOS拠点はすべて人員詳細まで見える",
     },
     {
@@ -1842,6 +2112,7 @@ function renderHosManagement() {
 
   renderHosWatchList("hosPeerList", attentionCandidates, "先に確認したい HOS 拠点はまだ抽出できない", buildHosPeerReason);
   renderHosWatchList("hosBenchmarkList", benchmarkCandidates, "札幌・小樽の好事例はまだ抽出できない", buildHosBenchmarkReason);
+  renderHosAuditList("hosAuditList", auditRows);
 }
 
 function renderHistoricalTrend(dashboard) {

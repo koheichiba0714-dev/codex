@@ -745,7 +745,7 @@ h1[id], h2[id] { scroll-margin-top: 24px; }
 
 .hos-watch-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
   gap: 10px;
 }
 
@@ -799,6 +799,40 @@ h1[id], h2[id] { scroll-margin-top: 24px; }
 .hos-watch-actions {
   display: flex;
   justify-content: flex-end;
+}
+
+.hos-audit-item {
+  display: grid;
+  gap: 7px;
+  padding: 12px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+}
+
+.hos-audit-item strong {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.hos-audit-item p {
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.55;
+}
+
+.hos-audit-alert {
+  border-color: rgba(194, 65, 12, 0.3);
+  background: linear-gradient(180deg, rgba(255,247,237,0.94), rgba(255,255,255,0.98));
+}
+
+.hos-audit-good {
+  border-color: rgba(13, 148, 136, 0.26);
+  background: linear-gradient(180deg, rgba(240,253,250,0.94), rgba(255,255,255,0.98));
+}
+
+.hos-audit-info {
+  border-color: rgba(37, 99, 235, 0.22);
 }
 
 .stat-card-action {
