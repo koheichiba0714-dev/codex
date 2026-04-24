@@ -1761,13 +1761,14 @@ function rankOfficeByWage(targetOfficeNo, records) {
   return { rank: rank + 1, total: sorted.length };
 }
 
-function hosAttentionScore(record, hosMean) {
+function hosAttentionScore(record, overallWageMean, overallUtilizationMean) {
   const wageGapScore =
-    isNumber(record.average_wage_yen) && isNumber(hosMean) && hosMean > 0
-      ? Math.max((hosMean - record.average_wage_yen) / hosMean, 0) * 90
+    isNumber(record.average_wage_yen) && isNumber(overallWageMean) && overallWageMean > 0
+      ? Math.max((overallWageMean - record.average_wage_yen) / overallWageMean, 0) * 90
       : 0;
+  const utilizationBaseline = isNumber(overallUtilizationMean) ? overallUtilizationMean : 0.7;
   const utilizationScore = isNumber(record.daily_user_capacity_ratio)
-    ? Math.max(0.75 - record.daily_user_capacity_ratio, 0) * 120
+    ? Math.max(utilizationBaseline - record.daily_user_capacity_ratio, 0) * 120
     : 0;
   const shortageScore = hasWorkShortageRisk(record) ? 80 : 0;
   const lowQuadrantScore =
@@ -1781,11 +1782,16 @@ function hosAttentionScore(record, hosMean) {
   return shortageScore + wageGapScore + utilizationScore + lowQuadrantScore + staffingScore + auditScore;
 }
 
-function buildHosAttentionCandidates(hosRecords) {
-  const hosMean = meanFor(hosRecords, "average_wage_yen");
+function buildHosAttentionCandidates(hosRecords, allRecords = state.records) {
+  const overallWageMean = meanFor(allRecords, "average_wage_yen");
+  const overallUtilizationMean = meanFor(allRecords, "daily_user_capacity_ratio");
   return hosRecords
     .slice()
-    .sort((left, right) => hosAttentionScore(right, hosMean) - hosAttentionScore(left, hosMean))
+    .sort(
+      (left, right) =>
+        hosAttentionScore(right, overallWageMean, overallUtilizationMean) -
+        hosAttentionScore(left, overallWageMean, overallUtilizationMean)
+    )
     .slice(0, 4);
 }
 
@@ -1875,20 +1881,16 @@ function buildHosBenchmarkCandidates(records, hosOffice) {
 
 function buildHosPeerReason(record) {
   const parts = [];
-  const hosMean = meanFor(getHosRecords(state.records), "average_wage_yen");
-  const wageGapToHos =
-    isNumber(record.average_wage_yen) && isNumber(hosMean)
-      ? record.average_wage_yen - hosMean
-      : null;
+  const overallUtilizationMean = meanFor(state.records, "daily_user_capacity_ratio");
   const wageGapToOverall =
     isNumber(record.average_wage_yen) && isNumber(state.dashboard?.analytics?.overall_wage_stats?.mean)
       ? record.average_wage_yen - state.dashboard.analytics.overall_wage_stats.mean
       : null;
-  if (wageGapToHos != null) {
-    parts.push(`HOS平均との差 ${formatSignedYen(wageGapToHos)}`);
-  }
   if (wageGapToOverall != null) {
-    parts.push(`全道平均との差 ${formatSignedYen(wageGapToOverall)}`);
+    parts.push(`収録全体平均との差 ${formatSignedYen(wageGapToOverall)}`);
+  }
+  if (isNumber(record.daily_user_capacity_ratio) && isNumber(overallUtilizationMean)) {
+    parts.push(`全体平均利用率との差 ${formatSignedPercentPoint(record.daily_user_capacity_ratio - overallUtilizationMean)}`);
   }
   if (hasWorkShortageRisk(record)) {
     parts.push("仕事不足候補");
@@ -1909,10 +1911,18 @@ function buildHosPeerReason(record) {
 
 function buildHosBenchmarkReason(record) {
   const staffing = getStaffingComplianceLevel(record);
+  const overallWageMean = meanFor(state.records, "average_wage_yen");
+  const overallUtilizationMean = meanFor(state.records, "daily_user_capacity_ratio");
   const parts = [
     `平均工賃 ${formatMaybeYen(record.average_wage_yen)}`,
     `利用率 ${formatPercent(record.daily_user_capacity_ratio)}`,
   ];
+  if (isNumber(record.average_wage_yen) && isNumber(overallWageMean)) {
+    parts.push(`収録全体平均との差 ${formatSignedYen(record.average_wage_yen - overallWageMean)}`);
+  }
+  if (isNumber(record.daily_user_capacity_ratio) && isNumber(overallUtilizationMean)) {
+    parts.push(`全体平均利用率との差 ${formatSignedPercentPoint(record.daily_user_capacity_ratio - overallUtilizationMean)}`);
+  }
   if (staffing) {
     parts.push(staffing.label);
   }
@@ -2000,7 +2010,9 @@ function renderHosManagement() {
 
   const allRank = rankOfficeByWage(hosOffice.office_no, state.records);
   const overallMean = meanFor(state.records, "average_wage_yen");
+  const overallUtilizationMean = meanFor(state.records, "daily_user_capacity_ratio");
   const hosMean = meanFor(hosRecords, "average_wage_yen");
+  const hosUtilizationMean = meanFor(hosRecords, "daily_user_capacity_ratio");
   const hosMatchedCount = hosRecords.filter((record) => record.wam_match_status === "matched").length;
   const hosHighHighCount = hosRecords.filter((record) => record.market_position_quadrant === "高工賃 × 高稼働").length;
   const hosWorkShortageCount = hosRecords.filter((record) => hasWorkShortageRisk(record)).length;
@@ -2022,7 +2034,7 @@ function renderHosManagement() {
     })
     .join(" / ");
   const staffing = getStaffingComplianceLevel(hosOffice);
-  const attentionCandidates = buildHosAttentionCandidates(hosRecords);
+  const attentionCandidates = buildHosAttentionCandidates(hosRecords, state.records);
   const benchmarkCandidates = buildHosBenchmarkCandidates(state.records, hosOffice);
 
   summary.textContent = [
@@ -2050,8 +2062,16 @@ function renderHosManagement() {
       value: formatMaybeYen(hosMean),
       hint:
         overallMean != null && hosMean != null
-          ? `全道平均との差 ${formatSignedYen(hosMean - overallMean)}`
+          ? `収録全体平均との差 ${formatSignedYen(hosMean - overallMean)}`
           : "平均工賃を計算できない",
+    },
+    {
+      label: "HOS平均利用率",
+      value: formatPercent(hosUtilizationMean),
+      hint:
+        overallUtilizationMean != null && hosUtilizationMean != null
+          ? `全体平均利用率との差 ${formatSignedPercentPoint(hosUtilizationMean - overallUtilizationMean)}`
+          : "利用率を計算できない",
     },
     {
       label: "横展開したい主力",
@@ -2809,6 +2829,7 @@ function renderDetail(record) {
   const revPerPoint = revenuePerUtilizationPoint(record);
   const sortedWages = numericValues(comparisonContext.records, "average_wage_yen").sort((a, b) => a - b);
   const wagePercentile = computePercentileRank(record.average_wage_yen, sortedWages);
+  const comparisonUtilizationMean = meanFor(comparisonContext.records, "daily_user_capacity_ratio");
 
   dialogRoot.innerHTML = `
     <div class="detail-hero">
@@ -2828,7 +2849,15 @@ function renderDetail(record) {
         tierInfo?.current ? `${tierInfo.current.label}（${formatCount(tierInfo.current.unitYen)}円/日）` : "-",
         tierInfo?.next ? `次の${tierInfo.next.label}まで あと ${formatCount(tierInfo.gapYen)} 円 → 月 ${formatMaybeYen(tierInfo.revenueImpact)} 増収` : "最上位区分"
       )}
-      ${detailKpi("利用率", formatPercent(record.daily_user_capacity_ratio), `定員 ${formatNullable(record.capacity)} 名 / 平均利用 ${formatNumber(record.average_daily_users)} 名`)}
+      ${detailKpi(
+        "利用率",
+        formatPercent(record.daily_user_capacity_ratio),
+        isNumber(record.daily_user_capacity_ratio) && isNumber(comparisonUtilizationMean)
+          ? `平均との差 ${formatSignedPercentPoint(record.daily_user_capacity_ratio - comparisonUtilizationMean)} / 定員 ${formatNullable(
+              record.capacity
+            )} 名 / 平均利用 ${formatNumber(record.average_daily_users)} 名`
+          : `定員 ${formatNullable(record.capacity)} 名 / 平均利用 ${formatNumber(record.average_daily_users)} 名`
+      )}
       ${detailKpi(
         "職員配置の立ち位置",
         staffComp ? staffComp.label : record.wam_match_status === "matched" ? "-" : "詳細なし",
@@ -3329,6 +3358,15 @@ function getDetailComparisonContext(record) {
   const filteredCount = state.filteredRecords.length;
   const recordInFiltered = state.filteredRecords.some((item) => String(item.office_no) === String(record.office_no));
   const usesAllRecords = filteredCount === state.records.length;
+  const isHosRecord = normalizeCorporationName(record.corporation_name) === normalizeCorporationName(HOS_CORPORATION_NAME);
+
+  if (isHosRecord) {
+    return {
+      records: state.records,
+      label: `収録全体 ${formatCount(state.records.length)}件`,
+      note: "HOS拠点は、平均との差・中央値差を収録全体との比較に固定している。",
+    };
+  }
 
   if (filteredCount >= 5 && recordInFiltered && !usesAllRecords) {
     return {
