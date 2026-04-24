@@ -866,7 +866,7 @@ h1[id], h2[id] { scroll-margin-top: 24px; }
 /* --- Strategy --- */
 .strategy-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 10px;
 }
 
@@ -877,6 +877,10 @@ h1[id], h2[id] { scroll-margin-top: 24px; }
   padding-bottom: 6px;
   border-bottom: 1px solid var(--border);
   color: var(--text-secondary);
+}
+
+.strategy-column-alert h3 {
+  color: var(--warning);
 }
 
 .strategy-list { display: grid; gap: 4px; }

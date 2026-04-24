@@ -1582,6 +1582,7 @@ function renderLoadingState() {
   }
   document.getElementById("insightList").innerHTML = loadingCard;
   document.getElementById("growthList").innerHTML = loadingCard;
+  document.getElementById("workShortageList").innerHTML = loadingCard;
   document.getElementById("fixList").innerHTML = loadingCard;
   document.getElementById("highHighList").innerHTML = loadingCard;
   document.getElementById("statsGrid").innerHTML = loadingCard;
@@ -2106,7 +2107,7 @@ function renderStrategy(records) {
   const rootSummary = document.getElementById("strategySummary");
   if (!records.length) {
     rootSummary.textContent = "条件に合うレコードがない";
-    ["growthList", "fixList", "highHighList"].forEach((id) => {
+    ["growthList", "workShortageList", "fixList", "highHighList"].forEach((id) => {
       document.getElementById(id).innerHTML = document.getElementById("emptyStateTemplate").innerHTML;
     });
     return;
@@ -2121,6 +2122,11 @@ function renderStrategy(records) {
         record.daily_user_capacity_ratio < 0.8
     )
     .sort((left, right) => growthScore(right) - growthScore(left))
+    .slice(0, 6);
+
+  const workShortageCandidates = records
+    .filter((record) => hasWorkShortageRisk(record))
+    .sort((left, right) => workShortageScore(right) - workShortageScore(left))
     .slice(0, 6);
 
   const fixCandidates = records
@@ -2147,11 +2153,14 @@ function renderStrategy(records) {
     .sort((left, right) => highHighScore(right) - highHighScore(left))
     .slice(0, 6);
 
-  rootSummary.textContent = `高工賃・低利用率 ${formatCount(growthCandidates.length)} 件 / 低工賃・低利用率・人員過剰 ${formatCount(
+  rootSummary.textContent = `高工賃・低利用率 ${formatCount(growthCandidates.length)} 件 / 仕事不足 ${formatCount(
+    workShortageCandidates.length
+  )} 件 / 低工賃・低利用率・人員過剰 ${formatCount(
     fixCandidates.length
   )} 件 / 高工賃・高利用率 ${formatCount(highHighCandidates.length)} 件`;
 
   renderStrategyList("growthList", growthCandidates, "高工賃・低利用率の事業所はまだない", buildGrowthReason);
+  renderStrategyList("workShortageList", workShortageCandidates, "仕事が少なくて困っていそうな事業所はまだない", buildWorkShortageReason);
   renderStrategyList("fixList", fixCandidates, "低工賃・低利用率・人員過剰の事業所はまだない", buildFixReason);
   renderStrategyList("highHighList", highHighCandidates, "高工賃・高利用率の事業所はまだない", buildHighHighReason);
 }
@@ -2250,9 +2259,9 @@ function renderStats(records) {
     { label: "稼働改善で伸びる", value: formatCount(growthOpportunityCount), hint: "高工賃だが利用率が低い" },
     { label: "立て直し優先", value: formatCount(fixPriorityCount), hint: "低工賃・低利用率・人員厚め" },
     {
-      label: "仕事に困っていそう",
+      label: "仕事が少なくて困っていそう",
       value: formatCount(workShortageCount),
-      hint: "作業量不足の可能性がある事業所",
+      hint: "作業量・受注先の確認を先にしたい事業所",
       action: "work-shortage",
       tone: "alert",
       cta: "一覧を見る",
@@ -2926,6 +2935,22 @@ function fixScore(record) {
   );
 }
 
+function workShortageScore(record) {
+  const wageRatio = record.wage_ratio_to_overall_mean ?? 1;
+  const municipalityRatio = record.wage_ratio_to_municipality_mean ?? wageRatio;
+  const utilization = record.daily_user_capacity_ratio ?? 0.7;
+  const staffingHeavy =
+    record.wam_staffing_efficiency_quadrant === "低工賃 × 厚い人員" ||
+    record.wam_staffing_outlier_flag === "high";
+
+  return (
+    Math.max(0.95 - wageRatio, 0) * 80 +
+    Math.max(0.95 - municipalityRatio, 0) * 60 +
+    Math.max(0.7 - utilization, 0) * 70 +
+    (staffingHeavy ? 18 : 0)
+  );
+}
+
 function highHighScore(record) {
   return (
     (record.wage_ratio_to_municipality_mean ?? record.wage_ratio_to_overall_mean ?? 0) * 70 +
@@ -2944,6 +2969,18 @@ function buildFixReason(record) {
   return `市町村平均との差 ${formatRatio(record.wage_ratio_to_municipality_mean)} / 利用率 ${formatPercent(
     record.daily_user_capacity_ratio
   )} / 人員配置 ${labelForSelect(record.wam_staffing_efficiency_quadrant ?? "-")}${workShortageNote}`;
+}
+
+function buildWorkShortageReason(record) {
+  const parts = [
+    `全道平均との差 ${formatRatio(record.wage_ratio_to_overall_mean)}`,
+    `市町村平均との差 ${formatRatio(record.wage_ratio_to_municipality_mean)}`,
+    `利用率 ${formatPercent(record.daily_user_capacity_ratio)}`,
+  ];
+  if (record.wam_staffing_efficiency_quadrant) {
+    parts.push(`人員配置 ${labelForSelect(record.wam_staffing_efficiency_quadrant)}`);
+  }
+  return `${parts.join(" / ")}。作業量・受注先・施設外就労の確認候補。`;
 }
 
 function buildHighHighReason(record) {
