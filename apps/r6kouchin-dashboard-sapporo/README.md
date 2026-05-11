@@ -47,6 +47,15 @@ python3 -m http.server 4173
 
 ブラウザで `http://localhost:4173` を開く。
 
+## 認証
+
+本番では Vercel Routing Middleware で全パスをパスワード保護する。
+
+必要な環境変数:
+
+- `DASHBOARD_PASSWORD`: ログイン用パスワード
+- `DASHBOARD_SESSION_SECRET`: 署名付きセッション Cookie 用のランダム文字列
+
 ## Vercel 配備
 
 ```bash
