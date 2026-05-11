@@ -104,6 +104,21 @@ const HOKKAIDO_B_TYPE_HISTORY = {
   ],
 };
 
+const POLICY_REFERENCE_DATE = "2026年5月11日確認";
+const SAPPORO_B_TYPE_PAUSE_URL = "https://www.city.sapporo.jp/shogaifukushi/siteisidou/syuuroubteishi.html";
+const SAPPORO_B_TYPE_RENEWAL_URL = "https://www.city.sapporo.jp/shogaifukushi/siteisidou/syuuroubyouken.html";
+const MHLW_R8_REWARD_REVISION_URL = "https://www.mhlw.go.jp/stf/seisakunitsuite/bunya/0000202214_00013.html";
+const MHLW_R8_REWARD_REVISION_PDF_URL = "https://www.mhlw.go.jp/content/001680064.pdf";
+const HOKKAIDO_DESIGNATION_GUIDE_URL = "https://www.pref.hokkaido.lg.jp/hf/shf/shiteitebiki.html";
+const HOKKAIDO_AUDIT_GUIDELINE_URL =
+  "https://www.pref.hokkaido.lg.jp/fs/1/2/2/8/8/5/5/3/_/1-1%20%E6%8C%87%E5%AE%9A%E9%9A%9C%E3%81%8C%E3%81%84%E7%A6%8F%E7%A5%89%E3%82%B5%E3%83%BC%E3%83%93%E3%82%B9%E4%BA%8B%E6%A5%AD%E8%80%85%E7%AD%89%E6%8C%87%E5%B0%8E%E7%9B%A3%E6%9F%BB%E8%A6%81%E7%B6%B1.pdf";
+const HOKKAIDO_INSPECTION_POLICY_URL =
+  "https://www.pref.hokkaido.lg.jp/fs/1/2/2/8/8/5/5/5/_/2-2%20%E5%8C%97%E6%B5%B7%E9%81%93%E6%8C%87%E5%AE%9A%E9%9A%9C%E5%AE%B3%E7%A6%8F%E7%A5%89%E3%82%B5%E3%83%BC%E3%83%93%E3%82%B9%E4%BA%8B%E6%A5%AD%E8%80%85%E7%AD%89%E6%8C%87%E5%B0%8E%E6%96%B9%E9%87%9D.pdf";
+const HOKKAIDO_WORK_CHOICE_SUPPORT_URL = "https://www.pref.hokkaido.lg.jp/hf/shf/shuurousentaku.html";
+const HOKKAIDO_WORK_SUPPORT_CORP_URL = "https://www.pref.hokkaido.lg.jp/hf/shf/shiteihoujin.html";
+const SAPPORO_MIN_MONTHLY_WAGE_YEN = 3000;
+const R8_REWARD_BOUNDARIES_YEN = [48000, 45000, 38000, 35000, 33000, 28000, 25000, 23000, 18000, 15000, 10000];
+
 const HOS_CORPORATION_NAME = "合同会社 HOS";
 const HOS_PRIMARY_OFFICE_NO = "518";
 const HOS_OFFICIAL_SITE_URL = "https://hos-hokkaido.com/";
@@ -784,6 +799,7 @@ async function init() {
   state.records = await loadDashboardRecords(dashboard);
   renderMeta(dashboard);
   renderHosManagement();
+  renderPolicyReview(dashboard, state.records);
   renderHistoricalTrend(dashboard);
   renderQuality(dashboard, state.records);
   populateFilterOptions(state.records);
@@ -1446,6 +1462,10 @@ function applyStatsAction(action) {
     document.getElementById("historyHeading")?.scrollIntoView({ behavior: "smooth", block: "start" });
     return;
   }
+  if (action === "policy") {
+    document.getElementById("policyHeading")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    return;
+  }
   if (action === "hos-corporation") {
     openCorporationDialog(HOS_CORPORATION_NAME);
     return;
@@ -1736,6 +1756,9 @@ function renderLoadingState() {
   document.getElementById("hosBenchmarkList").innerHTML = loadingCard;
   document.getElementById("hosAuditList").innerHTML = loadingCard;
   document.getElementById("hosSummary").textContent = "HOS向け要点を読み込み中...";
+  document.getElementById("policyGrid").innerHTML = loadingCard;
+  document.getElementById("policyActionList").innerHTML = loadingCard;
+  document.getElementById("policySummary").textContent = "制度・条例の確認ポイントを読み込み中...";
   document.getElementById("historyTrendGrid").innerHTML = loadingCard;
   document.getElementById("historyTrendFoot").innerHTML = "";
   document.getElementById("historyTrendSummary").textContent = "年度推移を読み込み中...";
@@ -2177,6 +2200,247 @@ function renderHosManagement() {
   renderHosAuditList("hosAuditList", auditRows);
 }
 
+function getR8RewardBoundaryInfo(value) {
+  if (!isNumber(value)) return null;
+  const sortedBoundaries = [...R8_REWARD_BOUNDARIES_YEN].sort((left, right) => left - right);
+  const currentBoundary = sortedBoundaries.filter((boundary) => value >= boundary).pop() ?? null;
+  const nextBoundary = sortedBoundaries.find((boundary) => value < boundary) ?? null;
+  return {
+    currentBoundary,
+    nextBoundary,
+    gapYen: nextBoundary != null ? nextBoundary - value : null,
+  };
+}
+
+function formatOfficeNameList(records, limit = 4) {
+  const names = records.map((record) => record.office_name).filter(Boolean);
+  if (!names.length) return "該当なし";
+  return `${names.slice(0, limit).join("、")}${names.length > limit ? ` ほか${formatCount(names.length - limit)}件` : ""}`;
+}
+
+function renderPolicyCard(card) {
+  const sourceUrl = safeExternalUrl(card.sourceUrl);
+  return `
+    <article class="policy-card policy-card-${escapeAttribute(card.tone ?? "info")}">
+      <div>
+        <p class="section-kicker">${escapeHtml(card.kicker)}</p>
+        <h3>${escapeHtml(card.title)}</h3>
+      </div>
+      <strong>${escapeHtml(card.value)}</strong>
+      <p>${escapeHtml(card.body)}</p>
+      <div class="policy-chip-row">
+        ${(card.chips ?? []).map((chip) => `<span class="metric-chip">${escapeHtml(chip)}</span>`).join("")}
+      </div>
+      ${sourceUrl ? `<a class="policy-link" href="${escapeAttribute(sourceUrl)}" target="_blank" rel="noreferrer">公式確認</a>` : ""}
+    </article>
+  `;
+}
+
+function renderPolicyActionItem(item) {
+  const sourceUrl = safeExternalUrl(item.sourceUrl);
+  return `
+    <article class="policy-action-item policy-action-${escapeAttribute(item.tone ?? "info")}">
+      <div>
+        <p class="strategy-kicker">${escapeHtml(item.kicker)}</p>
+        <strong>${escapeHtml(item.title)}</strong>
+      </div>
+      <p>${escapeHtml(item.body)}</p>
+      <div class="corporation-office-meta">
+        ${(item.chips ?? []).map((chip) => `<span class="metric-chip">${escapeHtml(chip)}</span>`).join("")}
+      </div>
+      <div class="policy-action-controls">
+        ${item.action ? `<button class="table-link" data-stat-action="${escapeAttribute(item.action)}" type="button">${escapeHtml(item.actionLabel ?? "一覧を見る")}</button>` : ""}
+        ${sourceUrl ? `<a class="table-link" href="${escapeAttribute(sourceUrl)}" target="_blank" rel="noreferrer">根拠を見る</a>` : ""}
+      </div>
+    </article>
+  `;
+}
+
+function renderPolicyReview(dashboard, records = state.records) {
+  const summary = document.getElementById("policySummary");
+  const grid = document.getElementById("policyGrid");
+  const actionsRoot = document.getElementById("policyActionList");
+  if (!summary || !grid || !actionsRoot) return;
+
+  const hosRecords = getHosRecords(records);
+  const hosMean = meanFor(hosRecords, "average_wage_yen");
+  const hosBoundary = getR8RewardBoundaryInfo(hosMean);
+  const sapporoRecords = records.filter((record) => record.municipality === "札幌市");
+  const sapporoHosRecords = hosRecords.filter((record) => record.municipality === "札幌市");
+  const sapporoBelowMin = sapporoRecords.filter(
+    (record) => isNumber(record.average_wage_yen) && record.average_wage_yen < SAPPORO_MIN_MONTHLY_WAGE_YEN
+  );
+  const hosBelowMin = sapporoHosRecords.filter(
+    (record) => isNumber(record.average_wage_yen) && record.average_wage_yen < SAPPORO_MIN_MONTHLY_WAGE_YEN
+  );
+  const hosUnderR8LowBoundary = hosRecords.filter(
+    (record) => isNumber(record.average_wage_yen) && record.average_wage_yen < 23000
+  );
+  const hosNearR8Boundary = hosRecords.filter((record) => {
+    const boundary = getR8RewardBoundaryInfo(record.average_wage_yen);
+    return boundary?.gapYen != null && boundary.gapYen > 0 && boundary.gapYen <= 3000;
+  });
+  const hosMatchedCount = hosRecords.filter((record) => record.wam_match_status === "matched").length;
+  const hosInvalidStaffing = hosRecords.filter(
+    (record) => record.wam_match_status === "matched" && !hasValidStaffingValues(record)
+  );
+  const hosHakodateRecords = hosRecords.filter((record) => record.municipality === "函館市");
+  const hosOtaruRecords = hosRecords.filter((record) => record.municipality === "小樽市");
+  const latestHistory = getHistoricalTrendSummary(dashboard)?.latest ?? null;
+
+  summary.textContent = [
+    POLICY_REFERENCE_DATE,
+    "厚労省R8報酬改定",
+    "札幌市B型指定・更新ルール",
+    "北海道指定更新・指導方針",
+  ].join(" / ");
+
+  const cards = [
+    {
+      kicker: "札幌市",
+      title: "B型の新規指定",
+      value: "原則停止",
+      body:
+        "札幌市は2026年1月1日からB型新規事業者指定を原則一時停止。停止期間中は定員増や従たる事業所設置も慎重に扱われるため、札幌では既存拠点の稼働・単価改善が先になる。",
+      chips: ["2026年1月1日開始", "定員増も要注意"],
+      tone: "alert",
+      sourceUrl: SAPPORO_B_TYPE_PAUSE_URL,
+    },
+    {
+      kicker: "札幌市条例",
+      title: "指定更新の最低確認線",
+      value: `${formatCount(SAPPORO_MIN_MONTHLY_WAGE_YEN)}円`,
+      body: `2027年4月以降、平均工賃月額3,000円未満、給付費の工賃充当、生産活動収支の不整合は指定更新や返還の重大リスク。表示中の札幌市内3,000円未満は${formatCount(sapporoBelowMin.length)}件、HOS札幌拠点は${formatCount(hosBelowMin.length)}件。`,
+      chips: ["2027年4月施行", `札幌市内${formatCount(sapporoRecords.length)}件`],
+      tone: sapporoBelowMin.length ? "alert" : "good",
+      sourceUrl: SAPPORO_B_TYPE_RENEWAL_URL,
+    },
+    {
+      kicker: "厚労省",
+      title: "令和8年度報酬改定",
+      value: "工賃境界再編",
+      body: `B型基本報酬は平均工賃月額の境界が48,000円、45,000円、38,000円、35,000円、33,000円、28,000円、25,000円、23,000円等に再編。HOS平均は${formatMaybeYen(hosMean)}、次境界${formatMaybeYen(hosBoundary?.nextBoundary)}まで${formatMaybeYen(hosBoundary?.gapYen)}。`,
+      chips: ["48,000円以上", "45,000円以上", "23,000円未満に注意"],
+      tone: "info",
+      sourceUrl: MHLW_R8_REWARD_REVISION_PDF_URL,
+    },
+    {
+      kicker: "HOS",
+      title: "R8境界で下振れが目立つ拠点",
+      value: formatCount(hosUnderR8LowBoundary.length),
+      body: hosUnderR8LowBoundary.length
+        ? `HOS内で23,000円未満は ${formatOfficeNameList(hosUnderR8LowBoundary)}。作業単価、稼働日数、受注の安定性を先に確認したい。`
+        : "HOS内に23,000円未満の拠点はない。次は45,000円・48,000円境界への引き上げ余地を見る。",
+      chips: [`次境界3,000円以内 ${formatCount(hosNearR8Boundary.length)}件`, `HOS B型${formatCount(hosRecords.length)}件`],
+      tone: hosUnderR8LowBoundary.length ? "alert" : "good",
+      sourceUrl: MHLW_R8_REWARD_REVISION_URL,
+    },
+    {
+      kicker: "北海道",
+      title: "条例・指定更新・体制届",
+      value: "基準条例",
+      body:
+        "北海道は人員・設備・運営基準条例と施行規則を指導の根拠にしている。北海道所管地域は知事、札幌市・函館市・旭川市は各市長への指定申請・更新申請として、所管ごとの変更届・体制届を確認する。",
+      chips: ["北海道条例第100号", "札幌市は市所管", "函館市も市所管"],
+      tone: "info",
+      sourceUrl: HOKKAIDO_AUDIT_GUIDELINE_URL,
+    },
+    {
+      kicker: "北海道",
+      title: "指導方針で見る運営リスク",
+      value: "自己点検",
+      body:
+        "北海道の指導方針は法令遵守、虐待防止、意思決定支援、労働条件、非常災害・感染症BCPなどを重点化。工賃ダッシュボードだけでは判定できないため、勤務表、会計、支援記録、研修記録で確認する。",
+      chips: ["虐待防止", "BCP", "労働条件"],
+      tone: "info",
+      sourceUrl: HOKKAIDO_INSPECTION_POLICY_URL,
+    },
+    {
+      kicker: "制度改正",
+      title: "就労選択支援の入口影響",
+      value: "2025年10月開始",
+      body:
+        "北海道は就労選択支援を新しい障害福祉サービスとして案内。B型の新規利用意向者は原則利用の対象があり、相談導線、アセスメント連携、支援方針の説明力が利用者獲得に効いてくる。",
+      chips: ["B型新規利用", "アセスメント", "入口導線"],
+      tone: "info",
+      sourceUrl: HOKKAIDO_WORK_CHOICE_SUPPORT_URL,
+    },
+    {
+      kicker: "北海道障がい者条例",
+      title: "販路拡大支援の接続",
+      value: "共同受注",
+      body:
+        "北海道障がい者条例に基づく指定法人は、障がい福祉サービス事業所の製品等の販路確保・拡大に関する業務を担う。仕事不足候補は営業先開拓だけでなく、共同受注・行政調達・地域連携の相談先も確認する。",
+      chips: ["販路確保", "共同受注", "行政調達"],
+      tone: "info",
+      sourceUrl: HOKKAIDO_WORK_SUPPORT_CORP_URL,
+    },
+    {
+      kicker: "公表情報",
+      title: "WAMNET・元気さーち",
+      value: `${formatCount(hosMatchedCount)}件照合`,
+      body: `札幌市は平均工賃月額など利用者選択に重要な情報の正確な公表を求めている。HOSのWAM一致${formatCount(hosMatchedCount)}件のうち、人員値0または欠損の要確認は${formatCount(hosInvalidStaffing.length)}件。`,
+      chips: ["平均工賃の公表", "情報更新", "人員値確認"],
+      tone: hosInvalidStaffing.length ? "alert" : "good",
+      sourceUrl: SAPPORO_B_TYPE_RENEWAL_URL,
+    },
+  ];
+
+  const actions = [
+    {
+      kicker: "最優先",
+      title: "札幌市内HOS拠点は更新資料を先に整える",
+      body: `対象は${formatOfficeNameList(sapporoHosRecords, 8)}。生産活動収支報告書、工賃3,000円以上、給付費を工賃に充てていないこと、WAMNET・元気さーちの掲載内容を同時に確認する。`,
+      chips: [`札幌HOS ${formatCount(sapporoHosRecords.length)}件`, `3,000円未満 ${formatCount(hosBelowMin.length)}件`],
+      tone: hosBelowMin.length ? "alert" : "good",
+      sourceUrl: SAPPORO_B_TYPE_RENEWAL_URL,
+      action: "hos-corporation",
+      actionLabel: "HOS一覧",
+    },
+    {
+      kicker: "報酬改定",
+      title: "R8境界に近い拠点は少額改善の費用対効果を見る",
+      body: hosNearR8Boundary.length
+        ? `次の境界まで3,000円以内: ${formatOfficeNameList(hosNearR8Boundary)}。単価交渉、受注構成、稼働日数の改善で区分改善余地を確認する。`
+        : "次のR8境界まで3,000円以内のHOS拠点はない。下位境界の底上げを優先する。",
+      chips: [`近接 ${formatCount(hosNearR8Boundary.length)}件`, `R6全道平均 ${formatMaybeYen(latestHistory?.average_wage_monthly_yen)}`],
+      tone: hosNearR8Boundary.length ? "info" : "good",
+      sourceUrl: MHLW_R8_REWARD_REVISION_PDF_URL,
+    },
+    {
+      kicker: "仕事量",
+      title: "仕事不足シグナルは制度リスクとも接続して見る",
+      body:
+        "工賃が低い拠点は、札幌市条例の工賃向上努力義務、R8報酬境界、利用率低下が同時に効く。受注先、作業メニュー、単価、利用者の状態像に合った訓練記録をセットで確認する。",
+      chips: ["作業量", "単価", "訓練記録"],
+      tone: "alert",
+      sourceUrl: SAPPORO_B_TYPE_RENEWAL_URL,
+      action: "hos-work-shortage",
+      actionLabel: "仕事不足候補",
+    },
+    {
+      kicker: "所管確認",
+      title: "HOSは札幌・函館・小樽で提出先が分かれる",
+      body: `HOSのB型は札幌市${formatCount(sapporoHosRecords.length)}件、函館市${formatCount(hosHakodateRecords.length)}件、小樽市${formatCount(hosOtaruRecords.length)}件。札幌・函館は各市、小樽は北海道所管として、指定更新、変更届、体制届の提出先を分けて管理する。`,
+      chips: ["札幌市所管", "函館市所管", "小樽は北海道所管"],
+      tone: "info",
+      sourceUrl: HOKKAIDO_DESIGNATION_GUIDE_URL,
+    },
+    {
+      kicker: "手元資料",
+      title: "ダッシュボードだけで判定できないもの",
+      body:
+        "給付費を工賃に充てていないか、生産活動収支が市場価格から乖離していないか、虐待防止・BCP・感染症対策・労務が整っているかは、会計、契約書、勤務表、研修記録、支援記録で確認する。",
+      chips: ["会計", "契約書", "勤務表", "支援記録"],
+      tone: "info",
+      sourceUrl: HOKKAIDO_INSPECTION_POLICY_URL,
+    },
+  ];
+
+  grid.innerHTML = cards.map(renderPolicyCard).join("");
+  actionsRoot.innerHTML = actions.map(renderPolicyActionItem).join("");
+}
+
 function renderHistoricalTrend(dashboard) {
   const root = document.getElementById("historyTrendGrid");
   const foot = document.getElementById("historyTrendFoot");
@@ -2579,6 +2843,10 @@ function renderStats(records) {
     ? `人員詳細ありの ${formatPercent(staffingCritical / matched.length)} / 10:1目安に近く欠員に注意`
     : "人員詳細ありの事業所で判定";
   const historicalTrend = getHistoricalTrendSummary();
+  const sapporoVisibleRecords = records.filter((record) => record.municipality === "札幌市");
+  const sapporoBelowMinCount = sapporoVisibleRecords.filter(
+    (record) => isNumber(record.average_wage_yen) && record.average_wage_yen < SAPPORO_MIN_MONTHLY_WAGE_YEN
+  ).length;
 
   const cards = [
     { label: "表示件数", value: formatCount(records.length), hint: `全 ${formatCount(state.records.length)} 件中` },
@@ -2593,6 +2861,16 @@ function renderStats(records) {
           cta: "3年推移を見る",
         }
       : null,
+    {
+      label: "制度・指定更新確認",
+      value: sapporoVisibleRecords.length ? `札幌 ${formatCount(sapporoVisibleRecords.length)}件` : "要確認",
+      hint: sapporoVisibleRecords.length
+        ? `札幌市3,000円未満 ${formatCount(sapporoBelowMinCount)}件 / R8報酬境界も確認`
+        : "札幌市・北海道の最新ルールを別枠で確認",
+      action: "policy",
+      tone: sapporoBelowMinCount > 0 ? "alert" : "history",
+      cta: "制度を見る",
+    },
     { label: "中央の利用率", value: formatPercent(utilizationStats.median), hint: "定員に対する平均利用人数の真ん中" },
     { label: "1.5万円ライン超え", value: formatPercent(targetRate), hint: `月額 ${formatCount(REFERENCE_WAGE_LINE_YEN)} 円以上。報酬区分4以上の入口` },
     { label: "次の区分が近い", value: formatCount(nearRankUp), hint: "あと3,000円以内で報酬区分アップ" },
