@@ -15,7 +15,7 @@ export const config = {
 export default async function middleware(request) {
   const url = new URL(request.url);
 
-  if (url.pathname === "/logout") {
+  if (url.pathname === "/logout" || url.pathname === "/logout/") {
     return redirectWithCookie("/", clearSessionCookie());
   }
 
