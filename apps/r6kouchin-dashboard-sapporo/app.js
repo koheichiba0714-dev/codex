@@ -52,17 +52,15 @@ const WAGE_TIER_TABLE = [
   { min: 45000, max: Infinity,   label: "区分9", tierNo: 9, unitYen: 764 },
 ];
 
-/* 法定人員配置基準（令和6年度改定）
-   職業指導員＋生活支援員の合計 ÷ 利用者数
-   6:1  → サービス費(Ⅰ)/(Ⅳ) — R6新設・最も手厚い
-   7.5:1 → サービス費(Ⅱ)/(Ⅴ) — 標準
-   10:1  → 最低基準 */
+/* 公開情報から見た定員ベースの配置目安。
+   職業指導員＋生活支援員の常勤換算 ÷ 定員で概算する。
+   実際の請求区分や法定充足は勤務表・平均利用者数・届出で別確認が必要。 */
 const STAFFING_TIERS = [
   { ratio: 6,   label: "6:1（手厚い）", serviceFee: "Ⅰ/Ⅳ" },
   { ratio: 7.5, label: "7.5:1（標準）", serviceFee: "Ⅱ/Ⅴ" },
-  { ratio: 10,  label: "10:1（最低基準）", serviceFee: "-" },
+  { ratio: 10,  label: "10:1（要確認）", serviceFee: "-" },
 ];
-const LEGAL_STAFFING_RATIO_MIN = 10;   // 最低基準
+const LEGAL_STAFFING_RATIO_MIN = 10;   // 定員ベースの要確認ライン
 const LEGAL_STAFFING_RATIO_STD = 7.5;  // 標準
 const LEGAL_STAFFING_RATIO_HIGH = 6;   // R6新設・手厚い
 
@@ -204,8 +202,8 @@ const HOS_OFFICIAL_WORKPLACES = [
     isDashboardTarget: false,
     officialCity: "函館市",
     sourceUrl: "https://hos-hokkaido.com/place/daijoubu.html",
-    auditTone: "neutral",
-    auditNote: "相談支援事業所のため、B型工賃実績ダッシュボードの集計対象外。",
+    auditTone: "alert",
+    auditNote: "相談支援事業所のためB型集計対象外。公式トップは杉並町22-11、詳細ページは杉並町4-15 3Fで住所表記に差分あり。",
   },
 ];
 
@@ -523,15 +521,15 @@ function getStaffingComplianceLevel(record) {
     advice = `標準の7.5:1はクリア。あと常勤換算 ${ratioFormatter.format(Math.max(gap, 0))} 人で、最も手厚い6:1水準に届く。`;
   } else if (staffFte >= requiredMin) {
     level = "tier_10_1";
-    label = "最低ラインで運営";
-    qualifiedTier = "最低基準はクリア（10:1）";
+    label = "10:1目安に近い";
+    qualifiedTier = "定員ベースでは10:1目安を上回る";
     const gap = requiredStd - staffFte;
-    advice = `法定の最低基準は満たしているが余裕は薄い。あと常勤換算 ${ratioFormatter.format(Math.max(gap, 0))} 人で、標準の7.5:1に届く。`;
+    advice = `公開情報の定員ベースでは余裕が薄い。あと常勤換算 ${ratioFormatter.format(Math.max(gap, 0))} 人で、標準の7.5:1目安に届く。`;
   } else {
     level = "critical";
-    label = "最低基準を下回る恐れ";
+    label = "10:1目安を下回る恐れ";
     qualifiedTier = "至急確認";
-    advice = "法定の10:1を下回る可能性がある。配置表と請求区分を至急確認し、人員補充を検討したい。";
+    advice = "公開情報の定員ベースでは10:1目安を下回る可能性がある。勤務表・平均利用者数・請求区分を確認したい。";
   }
   return { ratioToMin, requiredMin, requiredStd, requiredHigh, staffFte, level, label, qualifiedTier, advice };
 }
@@ -1044,10 +1042,27 @@ function getHosOfficialNonDashboardTargets() {
   return HOS_OFFICIAL_WORKPLACES.filter((office) => !office.isDashboardTarget);
 }
 
+function hasValidStaffingValues(record) {
+  return (
+    record.wam_match_status === "matched" &&
+    record.wam_fetch_status === "ok" &&
+    isNumber(record.wam_welfare_staff_fte_total) &&
+    record.wam_welfare_staff_fte_total > 0 &&
+    isNumber(record.wam_key_staff_fte_per_capacity) &&
+    record.wam_key_staff_fte_per_capacity > 0
+  );
+}
+
 function getHosOfficialWorkplace(record) {
   const normalizedOfficeName = normalizeOfficeName(record?.office_name);
   if (!normalizedOfficeName) return null;
   return HOS_OFFICIAL_WORKPLACES.find((office) => normalizeOfficeName(office.name) === normalizedOfficeName) ?? null;
+}
+
+function latestOfficialBTypeWageMean() {
+  const years = HOKKAIDO_B_TYPE_HISTORY.years ?? [];
+  const latest = years[years.length - 1] ?? null;
+  return isNumber(latest?.average_wage_monthly_yen) ? latest.average_wage_monthly_yen : null;
 }
 
 function getHosPrimaryOffice(records = state.records) {
@@ -1133,7 +1148,7 @@ function openCorporationDialog(corporationName) {
                 <h3>${escapeHtml(record.office_name ?? "-")}</h3>
                 <p class="detail-subtitle">${escapeHtml(composeAddress(record))}</p>
               </div>
-              <button class="table-link" data-open-office-detail="${escapeAttribute(record.office_no ?? "")}" type="button">詳細</button>
+              <button class="table-link" data-open-office-detail="${escapeAttribute(record.office_no ?? "")}" type="button" aria-label="${escapeAttribute(`${record.office_name ?? "事業所"}の詳細を開く`)}">詳細</button>
             </div>
             <div class="corporation-office-meta">
               <span class="metric-chip">${escapeHtml(`平均工賃 ${formatWageText(record.average_wage_yen)}`)}</span>
@@ -1443,9 +1458,18 @@ function applyStatsAction(action) {
     document.getElementById("hosAuditList")?.scrollIntoView({ behavior: "smooth", block: "center" });
     return;
   }
+  if (action === "hos-benchmark") {
+    document.getElementById("hosBenchmarkList")?.scrollIntoView({ behavior: "smooth", block: "center" });
+    return;
+  }
 
   const nextFilters = cloneFilters(state.filters);
-  if (action === "work-shortage") {
+  if (action === "hos-work-shortage") {
+    Object.assign(nextFilters, createDefaultFilters(), {
+      search: "HOS",
+      workShortageRisk: "likely",
+    });
+  } else if (action === "work-shortage") {
     nextFilters.workShortageRisk = "likely";
     nextFilters.quadrant = "all";
   } else if (action === "benchmark") {
@@ -1786,12 +1810,10 @@ function buildHosAttentionCandidates(hosRecords, allRecords = state.records) {
   const overallWageMean = meanFor(allRecords, "average_wage_yen");
   const overallUtilizationMean = meanFor(allRecords, "daily_user_capacity_ratio");
   return hosRecords
-    .slice()
-    .sort(
-      (left, right) =>
-        hosAttentionScore(right, overallWageMean, overallUtilizationMean) -
-        hosAttentionScore(left, overallWageMean, overallUtilizationMean)
-    )
+    .map((record) => ({ record, score: hosAttentionScore(record, overallWageMean, overallUtilizationMean) }))
+    .filter((item) => item.score > 0.1)
+    .sort((left, right) => right.score - left.score)
+    .map((item) => item.record)
     .slice(0, 4);
 }
 
@@ -1806,11 +1828,18 @@ function buildHosOfficialAuditRows(hosRecords) {
   const rows = [
     {
       tone: missingTargets.length ? "alert" : "good",
-      title: `公式掲載 ${formatCount(officialListedCount)}拠点 / B型実績対象 ${formatCount(matchedTargetCount)} / ${formatCount(officialTargets.length)}`,
+      title: `公式トップ掲載 ${formatCount(officialListedCount)}拠点`,
+      body: `トップの作業所紹介は12件。B型以外のサービスも含むため、工賃実績対象とは分けて見る。`,
+      chips: ["公式トップ", `掲載${formatCount(officialListedCount)}件`],
+      sourceUrl: HOS_OFFICIAL_SITE_URL,
+    },
+    {
+      tone: missingTargets.length ? "alert" : "good",
+      title: `B型実績対象 ${formatCount(matchedTargetCount)} / ${formatCount(officialTargets.length)}収録`,
       body: missingTargets.length
         ? `未収録: ${missingTargets.map((office) => office.name).join("、")}`
-        : "トップの作業所紹介は12件。工賃実績ダッシュボードではB型10拠点を対象としてすべて収録。",
-      chips: ["公式照合", `公式掲載${formatCount(officialListedCount)}件`, `B型${formatCount(officialTargets.length)}件`],
+        : "会社概要で確認できる定員付きのB型10拠点を、工賃実績データとしてすべて収録。",
+      chips: ["会社概要", `B型${formatCount(officialTargets.length)}件`],
       sourceUrl: HOS_OFFICIAL_COMPANY_URL,
     },
   ];
@@ -1834,8 +1863,8 @@ function buildHosOfficialAuditRows(hosRecords) {
     });
   }
 
-  officialTargets
-    .filter((office) => office.auditNote)
+  HOS_OFFICIAL_WORKPLACES
+    .filter((office) => office.auditNote && (office.isDashboardTarget || office.auditTone === "alert"))
     .forEach((office) => {
       rows.push({
         tone: office.auditTone ?? "info",
@@ -1953,7 +1982,7 @@ function renderHosWatchList(rootId, records, emptyLabel, buildReason) {
           </div>
           <p>${escapeHtml(buildReason(record))}</p>
           <div class="hos-watch-actions">
-            <button class="table-link" data-open-office-detail="${escapeAttribute(record.office_no ?? "")}" type="button">詳細</button>
+            <button class="table-link" data-open-office-detail="${escapeAttribute(record.office_no ?? "")}" type="button" aria-label="${escapeAttribute(`${record.office_name ?? "事業所"}の詳細を開く`)}">詳細</button>
           </div>
         </article>
       `
@@ -2011,9 +2040,12 @@ function renderHosManagement() {
   const allRank = rankOfficeByWage(hosOffice.office_no, state.records);
   const overallMean = meanFor(state.records, "average_wage_yen");
   const overallUtilizationMean = meanFor(state.records, "daily_user_capacity_ratio");
+  const officialMean = latestOfficialBTypeWageMean();
   const hosMean = meanFor(hosRecords, "average_wage_yen");
   const hosUtilizationMean = meanFor(hosRecords, "daily_user_capacity_ratio");
   const hosMatchedCount = hosRecords.filter((record) => record.wam_match_status === "matched").length;
+  const hosValidStaffingCount = hosRecords.filter((record) => hasValidStaffingValues(record)).length;
+  const hosInvalidStaffingCount = hosMatchedCount - hosValidStaffingCount;
   const hosHighHighCount = hosRecords.filter((record) => record.market_position_quadrant === "高工賃 × 高稼働").length;
   const hosWorkShortageCount = hosRecords.filter((record) => hasWorkShortageRisk(record)).length;
   const hosLowUtilCount = hosRecords.filter(
@@ -2050,9 +2082,9 @@ function renderHosManagement() {
 
   const cards = [
     {
-      label: "公式掲載拠点",
-      value: `${formatCount(officialListedCount)}拠点`,
-      hint: `B型実績対象は${formatCount(officialTargets.length)}拠点で全収録。B型外${formatCount(officialNonTargets.length)}件は別枠。`,
+      label: "収録B型拠点",
+      value: `${formatCount(officialMatchedCount)} / ${formatCount(officialTargets.length)}`,
+      hint: `公式トップは${formatCount(officialListedCount)}件掲載。B型外${formatCount(officialNonTargets.length)}件は照合リストで確認。`,
       action: "hos-corporation",
       tone: "history",
       cta: "B型一覧を見る",
@@ -2062,7 +2094,9 @@ function renderHosManagement() {
       value: formatMaybeYen(hosMean),
       hint:
         overallMean != null && hosMean != null
-          ? `収録全体平均との差 ${formatSignedYen(hosMean - overallMean)}`
+          ? `収録${formatCount(state.records.length)}件平均との差 ${formatSignedYen(hosMean - overallMean)}${
+              officialMean != null ? ` / 北海道公式R6平均との差 ${formatSignedYen(hosMean - officialMean)}` : ""
+            }`
           : "平均工賃を計算できない",
     },
     {
@@ -2074,12 +2108,17 @@ function renderHosManagement() {
           : "利用率を計算できない",
     },
     {
-      label: "横展開したい主力",
+      label: "HOS内の主力拠点",
       value: formatCount(hosHighHighCount),
-      hint: `${formatPercent(hosRecords.length ? hosHighHighCount / hosRecords.length : null)} / 横展開したい主力拠点`,
-      action: "benchmark",
+      hint: `${formatPercent(hosRecords.length ? hosHighHighCount / hosRecords.length : null)} / 高工賃・高利用率で維持したい拠点`,
+    },
+    {
+      label: "外部好事例候補",
+      value: formatCount(benchmarkCandidates.length),
+      hint: "HOS展開エリアで横展開の参考にしたい外部事業所",
+      action: "hos-benchmark",
       tone: "good",
-      cta: "好事例一覧",
+      cta: "候補を見る",
     },
     {
       label: "仕事が少ない候補",
@@ -2088,9 +2127,9 @@ function renderHosManagement() {
         hosWorkShortageCount > 0
           ? `HOS内で仕事量・受注先を先に見る候補。利用率70%未満は${formatCount(hosLowUtilCount)}件。`
           : `強い不足シグナルなし。利用率70%未満は${formatCount(hosLowUtilCount)}件。`,
-      action: "work-shortage",
+      action: "hos-work-shortage",
       tone: hosWorkShortageCount > 0 ? "alert" : "good",
-      cta: "一覧を見る",
+      cta: "HOSだけ見る",
     },
     {
       label: "公式表記の要確認",
@@ -2101,12 +2140,12 @@ function renderHosManagement() {
       cta: "照合を見る",
     },
     {
-      label: "人員詳細一致",
-      value: `${formatCount(hosMatchedCount)} / ${formatCount(hosRecords.length)}`,
+      label: "人員値が有効",
+      value: `${formatCount(hosValidStaffingCount)} / ${formatCount(hosRecords.length)}`,
       hint:
-        hosMatchedCount < hosRecords.length
-          ? "一部拠点でWAM人員詳細が未一致"
-          : "HOS拠点はすべて人員詳細まで見える",
+        hosInvalidStaffingCount > 0
+          ? `WAM一致${formatCount(hosMatchedCount)}件のうち、0または欠損の人員値が${formatCount(hosInvalidStaffingCount)}件。`
+          : "WAM一致済みで、人員値もすべて有効",
     },
     {
       label: "代表拠点の詳細",
@@ -2237,6 +2276,8 @@ function renderQuality(dashboard, records = state.records) {
   const wamMatchSummary = dashboard.analytics?.wam_match_summary ?? {};
   const focusLabel = wamMatchSummary.focus_label ?? "札幌市・小樽市";
   const focusRecordCount = wamMatchSummary.focus_record_count ?? 0;
+  const hosMatchedCount = getHosRecords(records).filter((record) => record.wam_match_status === "matched").length;
+  const extraMatchedCount = Math.max((wamMatchSummary.matched_record_count ?? 0) - (wamMatchSummary.matched_wam_count ?? 0), 0);
 
   const summaryCards = [
     `<article class="note-card"><strong>表示対象</strong><p>工賃データは北海道全域 ${formatCount(
@@ -2244,7 +2285,12 @@ function renderQuality(dashboard, records = state.records) {
     )} 件を表示している。札幌市・小樽市以外は参考比較で見られる。</p></article>`,
     `<article class="note-card"><strong>人員詳細あり とは</strong><p>福祉医療機構の公開情報と結び付いた事業所で、${escapeHtml(focusLabel)}レコード ${formatCount(
       wamMatchSummary.matched_record_count ?? 0
-    )} / ${formatCount(focusRecordCount)} 件が対象である。</p></article>`,
+    )} / ${formatCount(focusRecordCount)} 件が対象である。WAM側の一致件数 ${formatCount(
+      wamMatchSummary.matched_wam_count ?? 0
+    )} 件とは粒度が異なり、HOS函館など追加照合分 ${formatCount(extraMatchedCount)} 件を含む。</p></article>`,
+    `<article class="note-card"><strong>HOS照合の扱い</strong><p>HOSは公式トップ掲載12拠点、B型実績対象10拠点として整理している。現在のデータではHOSのB型 ${formatCount(
+      hosMatchedCount
+    )} 拠点がWAM公開情報と一致しているが、人員値が0または欠損の拠点は別途要確認として扱う。</p></article>`,
     `<article class="note-card"><strong>差が大きい事業所の見つけ方</strong><p>表示中データの真ん中あたりの工賃は ${formatMaybeYen(
       wageStats.median
     )}。そこから大きく離れた工賃を確認候補として表示している。</p></article>`,
@@ -2475,7 +2521,7 @@ function renderStrategyList(id, records, emptyLabel, buildReason) {
           <span>${renderCorporationTrigger(record.corporation_name)}</span>
           <p>${escapeHtml(buildReason(record))}</p>
           <div class="strategy-actions">
-            <button class="table-link" data-select-office="${escapeAttribute(record.office_no ?? "")}" type="button">詳細</button>
+            <button class="table-link" data-select-office="${escapeAttribute(record.office_no ?? "")}" type="button" aria-label="${escapeAttribute(`${record.office_name ?? "事業所"}の詳細を開く`)}">詳細</button>
           </div>
         </article>
       `
@@ -2509,6 +2555,8 @@ function renderStats(records) {
   const focusRecords = focusMunicipalities.size
     ? records.filter((record) => focusMunicipalities.has(String(record.municipality ?? "")))
     : [];
+  const matchedWamCount = wamMatchSummary.matched_wam_count ?? matched.length;
+  const extraMatchedCount = Math.max(matched.length - matchedWamCount, 0);
 
   // 人員配置基準（R6年度 3段階）
   const staffingCritical = matched.filter((r) => {
@@ -2520,13 +2568,15 @@ function renderStats(records) {
     return c && c.level === "tier_6_1";
   }).length;
   const matchedCoverageHint = focusRecords.length
-    ? `${focusLabel}の ${formatCount(focusRecords.length)} 件中 ${formatPercent(matched.length / focusRecords.length)}`
+    ? `${focusLabel}の ${formatCount(focusRecords.length)} 件中 ${formatPercent(matched.length / focusRecords.length)}${
+        extraMatchedCount > 0 ? ` / 追加照合 ${formatCount(extraMatchedCount)}件含む` : ""
+      }`
     : `${focusLabel}は現在の表示条件に含まれていない`;
   const staffing6Hint = matched.length
     ? `人員詳細ありの ${formatPercent(staffing6to1 / matched.length)} / 6:1の最上位水準`
     : "人員詳細ありの事業所で判定";
   const staffingCriticalHint = matched.length
-    ? `人員詳細ありの ${formatPercent(staffingCritical / matched.length)} / 10:1に近く欠員に注意`
+    ? `人員詳細ありの ${formatPercent(staffingCritical / matched.length)} / 10:1目安に近く欠員に注意`
     : "人員詳細ありの事業所で判定";
   const historicalTrend = getHistoricalTrendSummary();
 
@@ -2549,7 +2599,7 @@ function renderStats(records) {
     { label: "利用率70%未満", value: formatCount(lowUtilCount), hint: "集客・定着の立て直し候補" },
     { label: "職員配置まで見える", value: formatCount(matched.length), hint: matchedCoverageHint },
     { label: "最上位の配置", value: formatCount(staffing6to1), hint: staffing6Hint },
-    { label: "最低ライン運営", value: formatCount(staffingCritical), hint: staffingCriticalHint },
+    { label: "10:1目安に近い", value: formatCount(staffingCritical), hint: staffingCriticalHint },
     { label: "稼働改善で伸びる", value: formatCount(growthOpportunityCount), hint: "高工賃だが利用率が低い" },
     { label: "立て直し優先", value: formatCount(fixPriorityCount), hint: "低工賃・低利用率・人員厚め" },
     {
@@ -2759,7 +2809,7 @@ function renderAnomalies(records) {
           <p>平均との差 ${escapeHtml(formatRatio(record.wage_ratio_to_overall_mean))} / 定員に対する支援職員 ${escapeHtml(formatPercent(record.wam_key_staff_fte_per_capacity))}</p>
           <p>${escapeHtml(labelForSelect(record.wam_staffing_efficiency_quadrant ?? "人員配置の分類なし"))} / ${escapeHtml(record.wam_primary_activity_type ?? "活動不明")}</p>
           <div class="anomaly-actions">
-            <button class="table-link" data-select-office="${escapeAttribute(record.office_no ?? "")}" type="button">詳細</button>
+            <button class="table-link" data-select-office="${escapeAttribute(record.office_no ?? "")}" type="button" aria-label="${escapeAttribute(`${record.office_name ?? "事業所"}の詳細を開く`)}">詳細</button>
           </div>
         </article>
       `
@@ -2770,6 +2820,7 @@ function renderAnomalies(records) {
 function renderDetail(record) {
   const summaryRoot = document.getElementById("detailContent");
   const dialogRoot = document.getElementById("detailDialogContent");
+  const dialogHeading = document.getElementById("detailDialogHeading");
   const openButton = document.getElementById("openSelectedDetailButton");
   const focusButton = document.getElementById("focusSelectedButton");
 
@@ -2790,6 +2841,9 @@ function renderDetail(record) {
 
   if (openButton) openButton.disabled = false;
   if (focusButton) focusButton.disabled = false;
+  if (dialogHeading) {
+    dialogHeading.textContent = `${record.office_name ?? "事業所"}の詳細`;
+  }
 
   if (summaryRoot) {
     summaryRoot.innerHTML = `
@@ -2977,7 +3031,7 @@ function renderTable(records) {
           <td class="numeric">${formatPercent(record.wam_key_staff_fte_per_capacity)}</td>
           <td>${escapeHtml(record.wam_primary_activity_type ?? "-")}</td>
           <td><div class="attention-cell">${attentionBadges(record)}</div></td>
-          <td><button class="table-link" data-select-office="${escapeHtml(record.office_no)}" type="button">詳細</button></td>
+          <td><button class="table-link" data-select-office="${escapeHtml(record.office_no)}" type="button" aria-label="${escapeAttribute(`${record.office_name ?? "事業所"}の詳細を開く`)}">詳細</button></td>
         </tr>
       `
     )
@@ -2994,7 +3048,7 @@ function renderTable(records) {
                 <h3>${escapeHtml(record.office_name ?? "-")}</h3>
                 ${renderCorporationSubtitle(record, false)}
               </div>
-              <button class="table-link" data-select-office="${escapeHtml(record.office_no)}" type="button">詳細</button>
+              <button class="table-link" data-select-office="${escapeHtml(record.office_no)}" type="button" aria-label="${escapeAttribute(`${record.office_name ?? "事業所"}の詳細を開く`)}">詳細</button>
             </div>
             <div class="record-card-metrics">
               <span class="metric-chip">${escapeHtml(`工賃 ${formatWageText(record.average_wage_yen)}`)}</span>
@@ -3574,14 +3628,14 @@ function renderDetailMajorStatItems(record, comparisonContext) {
       staffing?.level === "tier_6_1" ? "good" : "neutral"
     ),
     detailMajorStatCard(
-      "最低ライン運営",
+      "10:1目安に近い",
       staffing?.level === "tier_10_1" ? "該当" : staffing?.level === "critical" ? "要確認" : staffing ? "非該当" : "未確認",
       staffing?.level === "tier_10_1"
         ? staffing.qualifiedTier
         : staffing?.level === "critical"
           ? staffing.advice
           : staffing
-            ? "最低ラインより余裕あり"
+            ? "10:1目安より余裕あり"
             : "人員詳細なし",
       staffing?.level === "tier_10_1" || staffing?.level === "critical" ? "alert" : "neutral"
     ),
