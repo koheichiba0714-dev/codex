@@ -1,0 +1,304 @@
+{
+  "meta": {
+    "generated_at": "2026-03-17T08:39:14+09:00",
+    "record_count": 885,
+    "wam_generated_at": "2026-03-17T08:39:14+09:00",
+    "wam_directory_count": 783,
+    "wam_matched_record_count": 763,
+    "representative_name_count": 184,
+    "app_record_field_count": 62,
+    "app_record_chunk_size": 250,
+    "total_records": 885,
+    "scope": "大阪市",
+    "osaka_city_ward_generated_at": "2026-03-24T17:58:39+09:00",
+    "osaka_city_ward_coverage_count": 885,
+    "osaka_city_ward_unknown_count": 0
+  },
+  "summary": {
+    "record_count": 885,
+    "note_row_count": 2,
+    "response_breakdown": {
+      "answered": 677,
+      "annotated": 5,
+      "unanswered": 203
+    },
+    "answered_average_wage_yen_mean": 20738.767,
+    "answered_average_wage_yen_median": 16516.658,
+    "municipality_count": 1,
+    "new_office_count": 137,
+    "formula_error_rows": 209,
+    "high_outlier_count": 55,
+    "low_outlier_count": 2,
+    "duplicate_office_no_count": 0,
+    "service_counts": {
+      "noufuku_active": 8,
+      "suifuku_active": 2,
+      "rinfuku_active": 2,
+      "home_use_active": 462
+    },
+    "corporation_type_breakdown": {
+      "社会福祉法人（社会福祉協議会以外）": 55,
+      "株式・合名・合資・合同会社": 466,
+      "特定非営利活動法人（NPO）": 77,
+      "その他（社団・財団・農協・生協等": 56,
+      "社会福祉協議会": 25,
+      "医療法人": 3,
+      "unknown": 203
+    },
+    "missing_counts": {
+      "prefecture": 0,
+      "office_no": 0,
+      "municipality": 0,
+      "corporation_type_code": 203,
+      "corporation_type_label": 203,
+      "corporation_number": 204,
+      "corporation_name": 0,
+      "office_name": 0,
+      "capacity": 208,
+      "wage_payment_total_yen": 203,
+      "user_days_total": 203,
+      "annual_open_days": 203,
+      "average_daily_users": 209,
+      "average_daily_users_error": 676,
+      "annual_open_months": 203,
+      "average_wage_yen": 209,
+      "average_wage_error": 676,
+      "is_new_office": 0,
+      "remarks": 677,
+      "noufuku_active": 0,
+      "noufuku_new": 0,
+      "noufuku_income_ratio_decimal": 877,
+      "noufuku_income_ratio_pct": 877,
+      "suifuku_active": 0,
+      "suifuku_new": 0,
+      "suifuku_income_ratio_decimal": 883,
+      "suifuku_income_ratio_pct": 883,
+      "rinfuku_active": 0,
+      "rinfuku_new": 0,
+      "rinfuku_income_ratio_decimal": 883,
+      "rinfuku_income_ratio_pct": 883,
+      "home_use_active": 0,
+      "home_use_user_ratio_decimal": 423,
+      "home_use_user_ratio_pct": 423,
+      "daily_user_capacity_ratio": 215,
+      "wage_payment_per_user_day_yen": 211,
+      "annual_payment_per_capacity_yen": 210,
+      "capacity_band_label": 208,
+      "utilization_band_label": 215,
+      "wage_deviation_from_overall_mean_yen": 209,
+      "wage_ratio_to_overall_mean": 209,
+      "wage_z_score": 209,
+      "wage_percentile": 209,
+      "wage_band_label": 209,
+      "wage_outlier_flag": 828,
+      "wage_outlier_severity": 828,
+      "municipality_average_wage_yen": 209,
+      "wage_ratio_to_municipality_mean": 209,
+      "corporation_type_average_wage_yen": 209,
+      "wage_ratio_to_corporation_type_mean": 209,
+      "capacity_band_average_wage_yen": 214,
+      "wage_ratio_to_capacity_band_mean": 214,
+      "market_position_quadrant": 215
+    },
+    "overall_wage_stats": {
+      "count": 676,
+      "mean": 20738.767,
+      "median": 16516.658,
+      "q1": 13833.112,
+      "q3": 23731.124,
+      "p90": 36099.572,
+      "iqr": 9898.012,
+      "lower_fence": 0,
+      "upper_fence": 38578.142,
+      "extreme_lower_fence": 0,
+      "extreme_upper_fence": 53425.161
+    },
+    "overall_utilization_stats": {
+      "count": 670,
+      "mean": 0.809,
+      "median": 0.77,
+      "q1": 0.49,
+      "q3": 1.05,
+      "p90": 1.332,
+      "iqr": 0.56,
+      "lower_fence": 0,
+      "upper_fence": 1.889,
+      "extreme_lower_fence": 0,
+      "extreme_upper_fence": 2.729
+    },
+    "wam_match_summary": {
+      "wam_directory_count": 783,
+      "focus_record_count": 885,
+      "focus_label": "大阪市",
+      "focus_municipalities": [
+        "大阪市"
+      ],
+      "workbook_osaka_record_count": 885,
+      "matched_record_count": 763,
+      "unmatched_record_count": 122,
+      "matched_wam_count": 763,
+      "unmatched_wam_count": 20,
+      "confidence_breakdown": {
+        "high": 742,
+        "medium": 21
+      },
+      "method_breakdown": {
+        "corp_exact_name_strict": 576,
+        "corp_name_exact_name_strict": 166,
+        "corp_name_exact_name_relaxed": 1,
+        "unique_name_strict": 5,
+        "corp_exact_suffix_match": 6,
+        "corp_exact_name_relaxed": 5,
+        "corp_exact_name_fuzzy": 2,
+        "corp_name_exact_suffix_match": 2
+      },
+      "manual_override_count": 0
+    },
+    "wam_staffing_summary": {
+      "matched_record_count": 763,
+      "staffing_stats": {
+        "count": 539,
+        "mean": 0.127,
+        "median": 0.025,
+        "q1": 0.0,
+        "q3": 0.237,
+        "p90": 0.326,
+        "iqr": 0.237,
+        "lower_fence": 0,
+        "upper_fence": 0.591,
+        "extreme_lower_fence": 0,
+        "extreme_upper_fence": 0.946
+      },
+      "feature_summary": [
+        {
+          "feature_label": "送迎あり",
+          "true_count": 295,
+          "false_count": 327,
+          "true_average_wage_yen": 18461.42,
+          "false_average_wage_yen": 22667.346,
+          "true_average_key_staff_fte_per_capacity": 0.163
+        },
+        {
+          "feature_label": "食事提供体制加算あり",
+          "true_count": 301,
+          "false_count": 321,
+          "true_average_wage_yen": 21373.714,
+          "false_average_wage_yen": 20087.423,
+          "true_average_key_staff_fte_per_capacity": 0.166
+        },
+        {
+          "feature_label": "地域協働加算あり",
+          "true_count": 5,
+          "false_count": 617,
+          "true_average_wage_yen": 17048.01,
+          "false_average_wage_yen": 20764.363,
+          "true_average_key_staff_fte_per_capacity": 0.062
+        },
+        {
+          "feature_label": "管理者兼務あり",
+          "true_count": 398,
+          "false_count": 224,
+          "true_average_wage_yen": 20976.803,
+          "false_average_wage_yen": 20269.505,
+          "true_average_key_staff_fte_per_capacity": 0.164
+        }
+      ]
+    }
+  },
+  "issues": [
+    {
+      "sheet": "平均工賃（時間額）",
+      "kind": "excel_error_cells",
+      "count": 5
+    },
+    {
+      "sheet": "就労B型",
+      "kind": "excel_error_cells",
+      "count": 524
+    },
+    {
+      "sheet": "平均工賃（時間額）",
+      "kind": "broken_reference",
+      "detail": "5 行目が #REF! で構成され、分析値としては利用不可。"
+    },
+    {
+      "sheet": "WAM 大阪市B型統合",
+      "kind": "wam_match_coverage",
+      "detail": "大阪市レコード 763 / 885 件を WAM 詳細へ一致させた。"
+    }
+  ],
+  "notes": [
+    {
+      "source_row": 1981,
+      "note_text": "未回答：期日までに未回答の事業所。または、回答内容の欠損値、異常値等の確認に対し、期日までに修正未回答の事業所。"
+    },
+    {
+      "source_row": 1982,
+      "note_text": "※No.1665を公表後、追加。"
+    }
+  ],
+  "analytics": {
+    "overall_wage_stats": {
+      "count": 676,
+      "mean": 20738.767,
+      "median": 16516.658,
+      "q1": 13833.112,
+      "q3": 23731.124,
+      "p90": 36099.572,
+      "iqr": 9898.012,
+      "lower_fence": 0,
+      "upper_fence": 38578.142,
+      "extreme_lower_fence": 0,
+      "extreme_upper_fence": 53425.161
+    },
+    "overall_utilization_stats": {
+      "count": 670,
+      "mean": 0.809,
+      "median": 0.77,
+      "q1": 0.49,
+      "q3": 1.05,
+      "p90": 1.332,
+      "iqr": 0.56,
+      "lower_fence": 0,
+      "upper_fence": 1.889,
+      "extreme_lower_fence": 0,
+      "extreme_upper_fence": 2.729
+    },
+    "wam_match_summary": {
+      "wam_directory_count": 783,
+      "focus_record_count": 885,
+      "focus_label": "大阪市",
+      "focus_municipalities": [
+        "大阪市"
+      ],
+      "workbook_osaka_record_count": 885,
+      "matched_record_count": 763,
+      "unmatched_record_count": 122,
+      "matched_wam_count": 763,
+      "unmatched_wam_count": 20,
+      "confidence_breakdown": {
+        "high": 742,
+        "medium": 21
+      },
+      "method_breakdown": {
+        "corp_exact_name_strict": 576,
+        "corp_name_exact_name_strict": 166,
+        "corp_name_exact_name_relaxed": 1,
+        "unique_name_strict": 5,
+        "corp_exact_suffix_match": 6,
+        "corp_exact_name_relaxed": 5,
+        "corp_exact_name_fuzzy": 2,
+        "corp_name_exact_suffix_match": 2
+      },
+      "manual_override_count": 0
+    }
+  },
+  "records": [],
+  "data_files": {
+    "record_chunks": [
+      "data/records/osaka-city-records-001.json",
+      "data/records/osaka-city-records-002.json"
+    ],
+    "record_count": 885
+  }
+}
